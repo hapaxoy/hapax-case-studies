@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The churn a usage model can’t see – a Hapax case study</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Geist+Mono:wght@400;500&display=swap" />
+<style>
+  :root {
+    --hpx-bg:        #FBFAF5;
+    --hpx-ink:       #1A1410;
+    --hpx-oxblood:   #7A2018;
+    --hpx-navy:      #1F2A52;
+    --hpx-wine:      #A8352A;   /* chart mark: churned / risk */
+    --hpx-indigo:    #41529E;   /* chart mark: secondary series */
+    --hpx-gold:      #B68A2C;   /* chart mark: accent */
+    --hpx-grey:      #665E58;   /* chart mark: context / retained */
+    --hpx-beige:     #EFE5CE;   /* chart mark: fills */
+    --hpx-mute:      rgba(26,20,16,.62);
+    --hpx-mute2:     rgba(26,20,16,.42);
+    --hpx-mute3:     rgba(26,20,16,.22);
+    --hpx-rule:      rgba(26,20,16,.16);
+    --hpx-rule-soft: rgba(26,20,16,.08);
+    --hpx-serif:     "Cormorant Garamond", Georgia, serif;
+    --hpx-mono:      "Geist Mono", ui-monospace, Menlo, monospace;
+  }
+
+  .hpx-page, .hpx-page *, .hpx-page *::before, .hpx-page *::after { box-sizing: border-box; }
+  .hpx-page {
+    background: var(--hpx-bg);
+    color: var(--hpx-ink);
+    font-family: var(--hpx-serif);
+    font-size: 18px;
+    line-height: 1.55;
+    margin: 0;
+  }
+  .hpx-wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px; }
+  .hpx-page a { color: var(--hpx-oxblood); }
+  .hpx-mono {
+    font-family: var(--hpx-mono); font-size: 11.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--hpx-mute);
+  }
+  .hpx-page h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 500; line-height: 1.12; margin: 14px 0 16px; max-width: 20ch; }
+  .hpx-page h2 { font-size: clamp(21px, 3vw, 27px); font-weight: 500; margin: 0 0 10px; }
+  .hpx-page h3 { font-size: 18.5px; font-weight: 600; margin: 0 0 6px; }
+  .hpx-page p { margin: 0 0 14px; max-width: 68ch; }
+  .hpx-page p:last-child { margin-bottom: 0; }
+
+  .hpx-head { padding: 42px 0 26px; }
+  .hpx-lede { font-size: 19.5px; color: var(--hpx-mute); max-width: 62ch; font-style: italic; }
+  .hpx-honesty {
+    border: 1px solid var(--hpx-rule); background: var(--hpx-beige);
+    padding: 14px 18px; margin: 20px 0 0; font-size: 16px; max-width: none;
+  }
+  .hpx-honesty strong { color: var(--hpx-oxblood); }
+
+  .hpx-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px; background: var(--hpx-rule); border: 1px solid var(--hpx-rule); margin: 26px 0 0;
+  }
+  .hpx-stat { background: var(--hpx-bg); padding: 14px 16px; }
+  .hpx-stat b { display: block; font-size: 25px; font-weight: 600; line-height: 1.1; }
+  .hpx-stat span { font-family: var(--hpx-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--hpx-mute); }
+
+  .hpx-sec { padding: 40px 0; border-top: 1px solid var(--hpx-rule-soft); }
+  .hpx-sec > .hpx-wrap > p.hpx-intro { color: var(--hpx-mute); font-size: 17px; }
+  .hpx-try {
+    border-left: 2px solid var(--hpx-gold); background: var(--hpx-bg);
+    padding: 8px 14px; font-size: 16px; color: var(--hpx-mute); max-width: 68ch;
+  }
+  .hpx-try strong { font-family: var(--hpx-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--hpx-gold); font-weight: 500; }
+  .hpx-table--finding { min-width: 0; max-width: 480px; }
+
+  /* ---- reveal bar ---- */
+  .hpx-reveal-bar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    border: 1px solid var(--hpx-rule); background: var(--hpx-bg);
+    padding: 12px 16px; margin: 22px 0 0;
+  }
+  .hpx-switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+  .hpx-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .hpx-switch__track {
+    width: 40px; height: 22px; border: 1px solid var(--hpx-ink); border-radius: 11px;
+    position: relative; background: var(--hpx-bg); transition: background 160ms ease;
+    flex: 0 0 auto;
+  }
+  .hpx-switch__thumb {
+    position: absolute; top: 1px; left: 1px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--hpx-ink); transition: transform 160ms ease;
+  }
+  .hpx-switch input:checked + .hpx-switch__track { background: var(--hpx-oxblood); border-color: var(--hpx-oxblood); }
+  .hpx-switch input:checked + .hpx-switch__track .hpx-switch__thumb { transform: translateX(18px); background: var(--hpx-bg); }
+  .hpx-switch__label { font-family: var(--hpx-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  .hpx-reveal-note { font-size: 14.5px; color: var(--hpx-mute); margin: 0; }
+
+  /* ---- controls ---- */
+  .hpx-controls-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 22px; }
+  .hpx-btn {
+    font-family: var(--hpx-mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    border: 1px solid var(--hpx-ink); background: none; color: var(--hpx-ink);
+    padding: 9px 16px; cursor: pointer; border-radius: 1px; transition: background 140ms ease, color 140ms ease;
+  }
+  .hpx-btn:hover { background: var(--hpx-ink); color: var(--hpx-bg); }
+  .hpx-btn.is-active { background: var(--hpx-oxblood); border-color: var(--hpx-oxblood); color: var(--hpx-bg); }
+
+  .hpx-sliders { display: grid; gap: 18px 32px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin: 18px 0; }
+  .hpx-slider-row label { display: block; font-family: var(--hpx-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--hpx-mute); margin-bottom: 8px; }
+  .hpx-slider-row .hpx-slider-val { color: var(--hpx-ink); font-weight: 600; }
+  .hpx-range { width: 100%; accent-color: var(--hpx-oxblood); height: 3px; }
+  .hpx-recipe { font-family: var(--hpx-mono); font-size: 12.5px; color: var(--hpx-mute); margin: 4px 0 20px; }
+
+  /* ---- leaderboard ---- */
+  .hpx-table-wrap { overflow-x: auto; }
+  .hpx-table { width: 100%; border-collapse: collapse; font-size: 15.5px; min-width: 560px; }
+  .hpx-table th {
+    font-family: var(--hpx-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--hpx-mute); text-align: left; font-weight: 500; padding: 7px 10px; border-bottom: 1px solid var(--hpx-rule);
+    white-space: nowrap;
+  }
+  .hpx-table td { padding: 8px 10px; border-bottom: 1px solid var(--hpx-rule-soft); vertical-align: middle; }
+  .hpx-table tbody tr { cursor: pointer; transition: background 120ms ease; }
+  .hpx-table tbody tr:hover, .hpx-table tbody tr:focus-visible { background: var(--hpx-beige); outline: none; }
+  .hpx-table tbody tr.is-selected { background: var(--hpx-beige); }
+  .hpx-num { font-family: var(--hpx-mono); font-size: 13px; white-space: nowrap; }
+  .hpx-bar-cell { min-width: 84px; }
+  .hpx-bar { height: 8px; background: var(--hpx-rule-soft); position: relative; border-radius: 1px; overflow: hidden; }
+  .hpx-bar i { position: absolute; left: 0; top: 0; bottom: 0; display: block; }
+  .hpx-bar--ml i { background: var(--hpx-indigo); }
+  .hpx-bar--text i { background: var(--hpx-gold); }
+  .hpx-bar--blend i { background: var(--hpx-oxblood); }
+  .hpx-chip {
+    display: inline-block; font-family: var(--hpx-mono); font-size: 10px; letter-spacing: .05em;
+    padding: 2px 7px; border: 1px solid var(--hpx-rule); border-radius: 2px; color: var(--hpx-mute);
+    white-space: nowrap;
+  }
+  .hpx-chip--churn { border-color: var(--hpx-wine); color: var(--hpx-wine); }
+  .hpx-chip--retain { color: var(--hpx-grey); }
+  .hpx-chip--nodetail { opacity: .5; }
+  .hpx-name-cell { max-width: 220px; }
+  .hpx-company { font-weight: 600; }
+  .hpx-industry { display: block; font-size: 12.5px; color: var(--hpx-mute2); }
+
+  /* ---- cards (a4/a7/a5 callouts) ---- */
+  .hpx-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 8px 0 4px; }
+  .hpx-card { border: 1px solid var(--hpx-rule); padding: 16px 18px; background: var(--hpx-bg); }
+  .hpx-card .hpx-big { font-size: 28px; font-weight: 600; line-height: 1; display: block; margin: 2px 0 6px; }
+  .hpx-card p { font-size: 15.5px; margin-bottom: 0; }
+
+  /* ---- budget counters ---- */
+  .hpx-budget-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 6px 0 20px; }
+  .hpx-budget-row .hpx-range { max-width: 380px; }
+  .hpx-budget-n { font-family: var(--hpx-mono); font-size: 15px; min-width: 8ch; }
+  .hpx-counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--hpx-rule); border: 1px solid var(--hpx-rule); }
+  .hpx-counter { background: var(--hpx-bg); padding: 14px 16px; }
+  .hpx-counter b { display: block; font-size: 26px; font-weight: 600; line-height: 1.1; }
+  .hpx-counter span { font-family: var(--hpx-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--hpx-mute); }
+  .hpx-counter.hpx-locked b { color: var(--hpx-mute2); }
+
+  /* ---- 2x2 figure ---- */
+  .hpx-fig { margin: 18px 0 6px; }
+  .hpx-fig svg { display: block; width: 100%; height: auto; }
+  .hpx-fig-wrap { position: relative; max-width: 560px; margin: 0 auto; }
+  .hpx-dot { fill: var(--hpx-mute3); stroke: var(--hpx-bg); stroke-width: .6; cursor: pointer; transition: fill 160ms ease; }
+  .hpx-dot:hover { stroke: var(--hpx-ink); stroke-width: 1.2; }
+  .hpx-page.hpx-revealed .hpx-dot[data-churned="true"] { fill: var(--hpx-wine); }
+  .hpx-page.hpx-revealed .hpx-dot[data-churned="false"] { fill: var(--hpx-grey); fill-opacity: .55; }
+  .hpx-qlabel { font-family: var(--hpx-mono); font-size: 11px; fill: var(--hpx-mute); }
+  .hpx-qlabel b { font-weight: 600; }
+  .hpx-axislabel { font-family: var(--hpx-mono); font-size: 10.5px; fill: var(--hpx-mute2); }
+  .hpx-tooltip {
+    position: absolute; pointer-events: none; background: var(--hpx-ink); color: var(--hpx-bg);
+    font-family: var(--hpx-mono); font-size: 12px; padding: 6px 10px; border-radius: 2px;
+    transform: translate(-50%, -120%); white-space: nowrap; opacity: 0; transition: opacity 100ms ease; z-index: 5;
+  }
+  .hpx-tooltip.is-visible { opacity: 1; }
+  .hpx-legend { font-family: var(--hpx-mono); font-size: 11.5px; color: var(--hpx-mute); margin: 10px 0 0; text-align: center; }
+  .hpx-legend i { display: inline-block; width: 10px; height: 10px; margin: 0 5px 0 16px; vertical-align: baseline; border-radius: 50%; }
+  .hpx-legend i:first-child { margin-left: 0; }
+
+  /* ---- drill-down ---- */
+  .hpx-drill-empty { border: 1px dashed var(--hpx-rule); padding: 26px; text-align: center; color: var(--hpx-mute); font-size: 16px; }
+  .hpx-drill { border: 1px solid var(--hpx-rule); padding: 22px 24px; }
+  .hpx-drill-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .hpx-drill-head h3 { font-size: 24px; }
+  .hpx-drill-meta { font-family: var(--hpx-mono); font-size: 12px; color: var(--hpx-mute); }
+  .hpx-drill-scores { display: flex; gap: 18px; flex-wrap: wrap; margin: 6px 0 18px; }
+  .hpx-scorebadge { border: 1px solid var(--hpx-rule); padding: 6px 12px; font-size: 14px; }
+  .hpx-scorebadge b { font-family: var(--hpx-mono); font-size: 15px; }
+  .hpx-narrative {
+    border-left: 2px solid var(--hpx-oxblood); background: var(--hpx-beige); padding: 12px 16px;
+    font-size: 16px; margin: 0 0 22px;
+  }
+  .hpx-narrative .hpx-mono { display: block; margin-bottom: 6px; }
+  .hpx-sparklines { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 0 0 24px; }
+  .hpx-spark { border: 1px solid var(--hpx-rule-soft); padding: 8px 10px; }
+  .hpx-spark .hpx-mono { font-size: 10px; margin-bottom: 4px; }
+  .hpx-spark svg { display: block; width: 100%; height: 44px; }
+  .hpx-tickets { display: flex; flex-direction: column; gap: 10px; }
+  .hpx-ticket { border: 1px solid var(--hpx-rule-soft); padding: 12px 14px; }
+  .hpx-ticket-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .hpx-ticket-subject { font-weight: 600; font-size: 16.5px; }
+  .hpx-ticket-body { font-size: 15.5px; color: var(--hpx-mute); }
+  .hpx-ticket-meta { font-family: var(--hpx-mono); font-size: 11px; color: var(--hpx-mute2); white-space: nowrap; }
+  .hpx-nodetail { border: 1px dashed var(--hpx-rule); padding: 18px; color: var(--hpx-mute); font-size: 15.5px; }
+
+  .hpx-foot { padding: 30px 0 46px; border-top: 1px solid var(--hpx-rule); font-size: 15px; color: var(--hpx-mute); }
+  .hpx-foot a { border-bottom: 1px solid var(--hpx-rule); }
+
+  @media (max-width: 560px) {
+    .hpx-page { font-size: 16.5px; }
+    .hpx-stat b, .hpx-counter b { font-size: 21px; }
+    .hpx-drill-head h3 { font-size: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hpx-page * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="hpx-page" id="hpx-root">
+
+<header class="hpx-head hpx-wrap">
+  <div class="hpx-mono">Hapax · Case study</div>
+  <h1>The churn a usage model can’t see</h1>
+  <p>Kataja Analytics is a Helsinki-based B2B software company – dashboards and reporting, roughly 500 mid-market accounts across the Nordics and Europe. Its customer success team runs a standard churn model on usage levels, trends and seat utilisation. It works. It catches the accounts whose logins taper off, whose report volume visibly declines before the cancellation email arrives.</p>
+  <p>It did not catch <a href="#hpx-drilldown-sec" id="hpx-hedbrunn-link">Hedbrunn Systems AB</a>. Hedbrunn – 31 seats, €12,426 a year – used the product normally right up until it left. What moved was the tone of four support tickets over nine months, the last closing with “no need to treat this as urgent”. Two colleagues quietly went back to doing the board pack in Excel. Nobody escalated, nobody used a harsh word, and the account cancelled anyway.</p>
+  <p>This page demonstrates a second detector built for that shape of churn: an agent that reads each account’s ticket history in order and scores the relationship, combined with the usage model through one small, explainable layer. The question that matters commercially is whether the combination catches more than either detector alone, and what the difference is worth. You can check that claim yourself below – Hedbrunn’s full file, tickets included, is open for inspection.</p>
+  <div class="hpx-honesty"><strong>This is a demonstration on data we engineered.</strong> Kataja Analytics, Hedbrunn and every other company here are fictional – 500 accounts and 3,777 support tickets, with the churn patterns planted and an answer key held out of every model. Every claim on this page is marked against ground truth rather than asserted. That is the method we sell: knowing what a technique actually catches before you rely on it.</div>
+  <div class="hpx-stats" id="hpx-stat-strip"></div>
+</header>
+
+<section class="hpx-sec" id="hpx-mixer-sec">
+  <div class="hpx-wrap">
+    <h2>The risk mixer</h2>
+    <p class="hpx-intro">Every account gets two opinions: the usage model’s, from the numbers, and the ticket agent’s, from what customers actually wrote. The sliders blend those opinions into one live ranking – each dial runs from 0 (that channel off) to 100 (its full weight in the fitted model), and the leaderboard re-sorts as you drag. The presets jump to each detector on its own, or to the combination as fitted.</p>
+    <p class="hpx-try"><strong>Try this</strong> – drag the ticket-sentiment weight to zero and watch which companies drop off the list. Those are the quiet leavers a usage-only model never shows you.</p>
+    <div class="hpx-controls-row">
+      <button class="hpx-btn" id="hpx-preset-usage">Usage only</button>
+      <button class="hpx-btn" id="hpx-preset-tickets">Tickets only</button>
+      <button class="hpx-btn" id="hpx-preset-fitted">Combined (fitted)</button>
+    </div>
+    <div class="hpx-sliders">
+      <div class="hpx-slider-row">
+        <label for="hpx-w-usage">Usage-model weight – <span class="hpx-slider-val" id="hpx-w-usage-val">0</span>%</label>
+        <input class="hpx-range" type="range" id="hpx-w-usage" min="0" max="100" value="0" aria-label="Usage-model weight">
+      </div>
+      <div class="hpx-slider-row">
+        <label for="hpx-w-sentiment">Ticket-sentiment weight – <span class="hpx-slider-val" id="hpx-w-sentiment-val">0</span>%</label>
+        <input class="hpx-range" type="range" id="hpx-w-sentiment" min="0" max="100" value="0" aria-label="Ticket-sentiment weight">
+      </div>
+      <div class="hpx-slider-row">
+        <label for="hpx-w-competitor">Competitor-mention weight – <span class="hpx-slider-val" id="hpx-w-competitor-val">0</span>%</label>
+        <input class="hpx-range" type="range" id="hpx-w-competitor" min="0" max="100" value="0" aria-label="Competitor-mention weight">
+      </div>
+    </div>
+    <p class="hpx-recipe" id="hpx-recipe-note"></p>
+
+    <div class="hpx-reveal-bar">
+      <label class="hpx-switch">
+        <input type="checkbox" id="hpx-reveal-toggle">
+        <span class="hpx-switch__track"><span class="hpx-switch__thumb"></span></span>
+        <span class="hpx-switch__label">Reveal outcomes</span>
+      </label>
+      <p class="hpx-reveal-note">Off by default – the page shows what each method predicts before showing what happened. Switch on to see which flagged accounts actually churned.</p>
+    </div>
+
+    <h3 style="margin-top:26px">Top-flagged leaderboard</h3>
+    <div class="hpx-table-wrap">
+      <table class="hpx-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Account</th><th>ARR</th><th>ML</th><th>Tickets</th><th>Blended</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="hpx-leaderboard-body"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="hpx-sec">
+  <div class="hpx-wrap">
+    <h2>The review budget</h2>
+    <p class="hpx-intro">A ranking is only useful up to the point where the review effort runs out. A customer-success team that can work through a hundred accounts a cycle needs to know what a list of that length actually catches – and what falls just below the line. The slider sets the budget; the counters follow the mixer’s current blend.</p>
+    <p class="hpx-try"><strong>Try this</strong> – tighten the budget to 50 and watch how much ARR drops out of reach; then switch on “Reveal outcomes” above to see how many of the flagged accounts really left.</p>
+    <div class="hpx-budget-row">
+      <input class="hpx-range" type="range" id="hpx-budget-n" min="20" max="150" step="5" value="100" aria-label="Review budget, number of accounts">
+      <span class="hpx-budget-n">Top <b id="hpx-budget-n-val">100</b> accounts</span>
+    </div>
+    <div class="hpx-counters" id="hpx-counters"></div>
+    <p class="hpx-intro" style="margin-top:14px;font-size:15px" id="hpx-budget-ref"></p>
+  </div>
+</section>
+
+<section class="hpx-sec">
+  <div class="hpx-wrap">
+    <h2>Who each layer flags</h2>
+    <p class="hpx-intro">Every account, plotted by where each detector ranks it. The dashed lines mark each layer’s own top-100 watch-list, independent of the mixer above. Top-left, both flag the account – and where they agree they are right almost every time. Bottom-left, only the usage model sees trouble: the visible faders. Top-right, only the tickets do: Hedbrunn’s kind, healthy on every dashboard while the relationship sours in writing. Bottom-right, neither – most of those accounts are genuinely fine, but some churn is invisible to both layers, and we count that honestly rather than leave it off the chart.</p>
+    <p class="hpx-try"><strong>Try this</strong> – click any dot to open that account’s file below; the top-right quadrant is where the interesting reading is.</p>
+    <div class="hpx-fig-wrap">
+      <div class="hpx-fig" id="hpx-quadrant-fig"></div>
+      <div class="hpx-tooltip" id="hpx-tooltip"></div>
+    </div>
+    <div class="hpx-legend" id="hpx-quadrant-legend"></div>
+  </div>
+</section>
+
+<section class="hpx-sec" id="hpx-drilldown-sec">
+  <div class="hpx-wrap">
+    <h2>Read what the model couldn’t</h2>
+    <p class="hpx-intro">Click any account in the leaderboard or the figure above and read the tickets yourself – this is the evidence the usage model cannot see. Each file shows the account’s usage curves, its full ticket history in order, and the agent’s verdict.</p>
+    <div id="hpx-drilldown"><div class="hpx-drill-empty">No account selected yet.</div></div>
+  </div>
+</section>
+
+<section class="hpx-sec">
+  <div class="hpx-wrap">
+    <h2>The finding</h2>
+    <p>Marked against the answer key, the combination catches more of the accounts that matter and misses fewer euros. The money segment is the quietly unhappy – Hedbrunn’s type, 46 accounts engineered to look healthy on every usage metric while the relationship erodes in the ticket queue:</p>
+    <div class="hpx-table-wrap">
+      <table class="hpx-table hpx-table--finding">
+        <thead><tr><th>Method</th><th>Quietly-unhappy accounts caught, of 46</th></tr></thead>
+        <tbody id="hpx-finding-body"></tbody>
+      </table>
+    </div>
+    <p>Attach revenue. €6.53M of ARR sat inside accounts that actually churned. The text layer surfaces <strong>€1.14M of churned ARR the usage model alone does not</strong> – accounts that looked healthy on every dashboard metric until the invoice stopped renewing. Usage returns the favour in the other direction, worth €716K in accounts the text layer under-weighted. Neither layer subsumes the other; that is why the finding is the combination, not a winner.</p>
+    <div class="hpx-cards" id="hpx-callout-cards"></div>
+    <p style="margin-top:14px">And thirty accounts here churn for reasons invisible in the product – an acquisition, a budget cut, a champion leaving. Two of the thirty survive into the combined top-100, roughly what chance would produce, because there is no signal for either method to find. Ask any vendor claiming to catch everything what their number looks like on that row.</p>
+  </div>
+</section>
+
+<section class="hpx-sec">
+  <div class="hpx-wrap">
+    <h2>What this would look like on your data</h2>
+    <p>Your ticket system already holds this signal; it costs nothing extra to collect. The method transfers to any account base with a support history: a classical model where the numbers are strong, a reading layer where they are silent, and one small, explainable model combining the two. The write-up documents every miss as carefully as every catch – the misses are the part worth paying for.</p>
+    <p>The long-form case study is on hapax.fi; the code and dataset are in this repository.</p>
+  </div>
+</section>
+
+<footer class="hpx-foot">
+  <div class="hpx-wrap">
+    <p>Method notes – the usage model is a gradient-boosted classifier on deseasonalised usage features, with every feature window closing two months before each account’s outcome so nothing leaks from the future; the text agent reads each account’s full ticket history and never sees usage data or the churn label; the fusion layer is a five-feature logistic regression, scored out-of-fold. This page is a single self-contained file – all data embedded below, no server, no build step.</p>
+  </div>
+</footer>
+
+</div>
+
+<script type="application/json" id="hpx-data">/*__HPX_DATA_JSON__*/</script>
+<script>
+(function(){
+  "use strict";
+
+  var HPX = JSON.parse(document.getElementById("hpx-data").textContent);
+  var root = document.getElementById("hpx-root");
+  var accounts = HPX.accounts;
+  var detail = HPX.detail;
+  var coefs = HPX.fusion_coefficients;
+  var raw = coefs.raw_coefficients;
+  var intercept = coefs.raw_intercept;
+  var fittedPct = HPX.fitted_preset_pct;
+
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs, parent) {
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) { e.setAttribute(k, attrs[k]); }
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function el(tag, cls, parent, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function fmtEUR(n) {
+    return "€" + Math.round(n).toLocaleString("en-GB");
+  }
+  function fmtPct(f) { return Math.round(f * 100) + "%"; }
+  function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+
+  // ---------------------------------------------------------------------
+  // Mixer math -- must stay identical to build_data.py's mixer_score().
+  // ---------------------------------------------------------------------
+  function mixerScore(a, wUsage, wSentiment, wCompetitor) {
+    var logit = intercept
+      + wUsage * raw.ml_risk_score * a.ml
+      + wSentiment * (
+          raw.text_risk_score * a.text
+          + raw.trajectory_ordinal * a.traj_ord
+          + raw.escalation_pattern * (a.escalation ? 1 : 0)
+        )
+      + wCompetitor * raw.n_serious_competitor_mentions * a.n_comp_serious;
+    return 1 / (1 + Math.exp(-logit));
+  }
+
+  // ---------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------
+  var state = {
+    wUsage: fittedPct.usage / 100,
+    wSentiment: fittedPct.sentiment / 100,
+    wCompetitor: fittedPct.competitor / 100,
+    budgetN: 100,
+    revealed: false,
+    selectedId: null,
+    activePreset: "fitted"
+  };
+
+  function recomputeBlended() {
+    for (var i = 0; i < accounts.length; i++) {
+      accounts[i].blended = mixerScore(accounts[i], state.wUsage, state.wSentiment, state.wCompetitor);
+    }
+  }
+
+  // Ranking rule (same as the pipeline, code/ranking.py): blended score descending, then
+  // most recent ticket date descending, then account id ascending. Never row order. As in the
+  // pipeline's usage arm, recency is skipped when the ticket channels are switched off
+  // (usage-only blend), so a usage ranking never reads a ticket field.
+  function sortedByBlended() {
+    var useRecency = state.wSentiment > 0 || state.wCompetitor > 0;
+    return accounts.slice().sort(function(a, b) {
+      if (b.blended !== a.blended) return b.blended - a.blended;
+      if (useRecency && a.last_ticket !== b.last_ticket) return a.last_ticket < b.last_ticket ? 1 : -1;
+      return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Header stat strip
+  // ---------------------------------------------------------------------
+  function renderStatStrip() {
+    var wrap = document.getElementById("hpx-stat-strip");
+    var stats = [
+      [HPX.meta.n_accounts, "accounts, 24 months"],
+      [HPX.meta.n_tickets.toLocaleString("en-GB"), "support tickets read"],
+      [HPX.meta.n_churned, "churners in the answer key"],
+      ["€" + (HPX.meta.total_churned_arr / 1e6).toFixed(2) + "M", "ARR inside churned accounts"],
+      [HPX.a4_table.n_a4_total, "quiet leavers – the money segment"]
+    ];
+    stats.forEach(function(s) {
+      var d = el("div", "hpx-stat", wrap);
+      el("b", null, d, String(s[0]));
+      el("span", null, d, s[1]);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // The finding: quietly-unhappy table + two supporting cards
+  // ---------------------------------------------------------------------
+  function renderFindingTable() {
+    var body = document.getElementById("hpx-finding-body");
+    var a4 = HPX.a4_table;
+    var rows = [
+      ["Usage model", a4.n_in_ml_top100],
+      ["Ticket-text agent", a4.n_in_text_top100],
+      ["Combined", a4.n_in_combined_top100]
+    ];
+    rows.forEach(function(r) {
+      var tr = el("tr", null, body);
+      el("td", null, tr, r[0]);
+      el("td", "hpx-num", tr, r[1] + " (" + Math.round(100 * r[1] / a4.n_a4_total) + "%)");
+    });
+  }
+
+  function renderCalloutCards() {
+    var wrap = document.getElementById("hpx-callout-cards");
+    var h2h = HPX.head_to_head, a7 = HPX.a7_verdict;
+
+    var extraChurners = Math.round((h2h.combined.recall_at_100 - h2h.ml_only.recall_at_100) * HPX.meta.n_churned);
+    var c1 = el("div", "hpx-card", wrap);
+    el("h3", null, c1, "Same effort, more catches");
+    el("b", "hpx-big", c1, "+" + extraChurners);
+    el("p", null, c1, "genuine churners in a top-100 review list once the tickets are read alongside the numbers – " + fmtPct(h2h.combined.recall_at_100) + " of all churn caught, against " + fmtPct(h2h.ml_only.recall_at_100) + " for usage alone.");
+
+    var c2 = el("div", "hpx-card", wrap);
+    el("h3", null, c2, "The credibility check");
+    el("b", "hpx-big", c2, a7.n_rescued_out_of_combined_top100 + " of " + a7.n_a7_in_text_top100);
+    el("p", null, c2, "loud-but-loyal accounts – frequent complainers that renew every time – wrongly flagged by the text layer on tone alone, then rescued by fusion. An agent that just counts angry words loses the room; this one reads resolution, not tone.");
+  }
+
+  // ---------------------------------------------------------------------
+  // Leaderboard
+  // ---------------------------------------------------------------------
+  function renderLeaderboard() {
+    var body = document.getElementById("hpx-leaderboard-body");
+    body.innerHTML = "";
+    var top = sortedByBlended().slice(0, 20);
+    top.forEach(function(a, idx) {
+      var tr = el("tr", null, body);
+      tr.tabIndex = 0;
+      if (a.id === state.selectedId) tr.classList.add("is-selected");
+      tr.addEventListener("click", function() { selectAccount(a.id); });
+      tr.addEventListener("keydown", function(ev) { if (ev.key === "Enter") selectAccount(a.id); });
+
+      el("td", "hpx-num", tr, String(idx + 1));
+
+      var nameTd = el("td", "hpx-name-cell", tr);
+      el("span", "hpx-company", nameTd, a.name);
+      el("span", "hpx-industry", nameTd, a.industry);
+
+      el("td", "hpx-num", tr, fmtEUR(a.arr));
+
+      var mlTd = el("td", "hpx-bar-cell", tr);
+      var mlBar = el("div", "hpx-bar hpx-bar--ml", mlTd);
+      el("i", null, mlBar).style.width = fmtPct(a.ml);
+
+      var textTd = el("td", "hpx-bar-cell", tr);
+      var textBar = el("div", "hpx-bar hpx-bar--text", textTd);
+      el("i", null, textBar).style.width = fmtPct(a.text);
+
+      var blendTd = el("td", "hpx-bar-cell", tr);
+      var blendBar = el("div", "hpx-bar hpx-bar--blend", blendTd);
+      el("i", null, blendBar).style.width = fmtPct(a.blended);
+
+      var flagTd = el("td", null, tr);
+      if (state.revealed) {
+        el("span", "hpx-chip " + (a.churned ? "hpx-chip--churn" : "hpx-chip--retain"), flagTd, a.churned ? "Churned" : "Retained");
+      } else if (!a.curated) {
+        el("span", "hpx-chip hpx-chip--nodetail", flagTd, "score only");
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Review-budget counters
+  // ---------------------------------------------------------------------
+  function renderCounters() {
+    var wrap = document.getElementById("hpx-counters");
+    wrap.innerHTML = "";
+    var ranked = sortedByBlended();
+    var flagged = ranked.slice(0, state.budgetN);
+    var totalArr = flagged.reduce(function(s, a) { return s + a.arr; }, 0);
+
+    function counter(big, label, locked) {
+      var d = el("div", "hpx-counter" + (locked ? " hpx-locked" : ""), wrap);
+      el("b", null, d, big);
+      el("span", null, d, label);
+    }
+
+    counter(String(flagged.length), "accounts flagged");
+    counter(fmtEUR(totalArr), "ARR represented");
+
+    if (state.revealed) {
+      var churnersCaught = flagged.filter(function(a) { return a.churned; }).length;
+      var healthyFlagged = flagged.length - churnersCaught;
+      var arrCaught = flagged.filter(function(a) { return a.churned; }).reduce(function(s, a) { return s + a.arr; }, 0);
+      counter(String(churnersCaught), "churners caught");
+      counter(String(healthyFlagged), "healthy accounts flagged");
+      counter(fmtEUR(arrCaught), "churned ARR caught");
+    } else {
+      counter("?", "churners caught – reveal to see", true);
+    }
+  }
+
+  function renderBudgetRef() {
+    var t = HPX.arr_business_translation;
+    document.getElementById("hpx-budget-ref").textContent =
+      "For reference, at the case study’s fixed top-100 evaluation budget: combined catches " +
+      fmtEUR(t.arr_caught_top100.combined) + " of " + fmtEUR(t.total_churned_arr) +
+      " total churned ARR, vs " + fmtEUR(t.arr_caught_top100.ml_only) + " for usage alone.";
+  }
+
+  // ---------------------------------------------------------------------
+  // 2x2 quadrant figure (static ranks -- independent of the mixer)
+  // ---------------------------------------------------------------------
+  var quadrantBuilt = false;
+  function buildQuadrant() {
+    if (quadrantBuilt) return;
+    quadrantBuilt = true;
+
+    // Ranks come precomputed from the pipeline (code/ranking.py): the ticket agent's score has
+    // only 33 distinct values, so re-sorting here would let row order decide the top-100 cut.
+    accounts.forEach(function(a) { a.mlRank = a.ml_rank; a.textRank = a.text_rank; });
+
+    var n = accounts.length;
+    var W = 560, H = 560, M = 34;
+    var plotW = W - 2 * M, plotH = H - 2 * M;
+
+    var wrap = document.getElementById("hpx-quadrant-fig");
+    var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Accounts by ML risk rank and ticket-agent risk rank" }, wrap);
+
+    var boundaryFrac = 100 / n;
+    var bx = M + boundaryFrac * plotW;
+    var by = M + boundaryFrac * plotH;
+
+    // plot border
+    svgEl("rect", { x: M, y: M, width: plotW, height: plotH, fill: "none", stroke: "var(--hpx-rule)" }, svg);
+    // top-100 divider lines
+    svgEl("line", { x1: bx, x2: bx, y1: M, y2: M + plotH, stroke: "var(--hpx-mute3)", "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+    svgEl("line", { x1: M, x2: M + plotW, y1: by, y2: by, stroke: "var(--hpx-mute3)", "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+
+    // dots
+    var tt = document.getElementById("hpx-tooltip");
+    accounts.forEach(function(a) {
+      var x = M + ((a.mlRank - 0.5) / n) * plotW;
+      var y = M + ((a.textRank - 0.5) / n) * plotH;
+      var c = svgEl("circle", {
+        cx: x.toFixed(1), cy: y.toFixed(1), r: 2.6, class: "hpx-dot",
+        "data-churned": a.churned ? "true" : "false", "data-id": a.id
+      }, svg);
+      c.addEventListener("mouseenter", function() { showTooltip(a, x, y); });
+      c.addEventListener("mousemove", function() { showTooltip(a, x, y); });
+      c.addEventListener("mouseleave", hideTooltip);
+      c.addEventListener("click", function() { selectAccount(a.id); });
+    });
+
+    function showTooltip(a, x, y) {
+      tt.textContent = a.name + " · ML " + a.ml.toFixed(2) + " · text " + a.text.toFixed(2);
+      var pct = { left: (x / W * 100) + "%", top: (y / H * 100) + "%" };
+      tt.style.left = pct.left;
+      tt.style.top = pct.top;
+      tt.classList.add("is-visible");
+    }
+    function hideTooltip() { tt.classList.remove("is-visible"); }
+
+    // axis labels
+    svgEl("text", { x: M, y: H - 10, class: "hpx-axislabel" }, svg).textContent = "← higher ML risk";
+    svgEl("text", { x: M + plotW, y: H - 10, class: "hpx-axislabel", "text-anchor": "end" }, svg).textContent = "lower ML risk →";
+    var vLabel1 = svgEl("text", { x: 10, y: M + 4, class: "hpx-axislabel" }, svg);
+    vLabel1.textContent = "higher";
+    var vLabel2 = svgEl("text", { x: 10, y: M + 16, class: "hpx-axislabel" }, svg);
+    vLabel2.textContent = "text risk";
+    var vLabel3 = svgEl("text", { x: 10, y: M + plotH - 4, class: "hpx-axislabel" }, svg);
+    vLabel3.textContent = "lower";
+
+    // quadrant counts (computed live, matches results_summary's two_by_two)
+    var both = accounts.filter(function(a) { return a.mlRank <= 100 && a.textRank <= 100; }).length;
+    var mlOnly = accounts.filter(function(a) { return a.mlRank <= 100 && a.textRank > 100; }).length;
+    var textOnly = accounts.filter(function(a) { return a.mlRank > 100 && a.textRank <= 100; }).length;
+    var neither = n - both - mlOnly - textOnly;
+
+    function qlabel(x, y, anchor, n1, n2) {
+      var t1 = svgEl("text", { x: x, y: y, class: "hpx-qlabel", "text-anchor": anchor }, svg);
+      t1.textContent = n1;
+      var t2 = svgEl("text", { x: x, y: y + 13, class: "hpx-qlabel", "text-anchor": anchor }, svg);
+      t2.textContent = n2;
+    }
+    qlabel(M + 8, M + 24, "start", "BOTH FLAG", both + " accounts");
+    qlabel(M + plotW - 8, M + 24, "end", "TICKETS ONLY", textOnly + " accounts");
+    qlabel(M + 8, M + plotH - 24, "start", "USAGE ONLY", mlOnly + " accounts");
+    qlabel(M + plotW - 8, M + plotH - 24, "end", "NEITHER", neither + " accounts");
+  }
+
+  function renderQuadrantLegend() {
+    var wrap = document.getElementById("hpx-quadrant-legend");
+    wrap.innerHTML = "";
+    if (state.revealed) {
+      wrap.innerHTML =
+        "<i style='background:var(--hpx-wine)'></i>churned" +
+        "<i style='background:var(--hpx-grey);opacity:.55'></i>retained";
+    } else {
+      wrap.textContent = "Switch on “Reveal outcomes” above to colour these dots by what actually happened.";
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Drill-down
+  // ---------------------------------------------------------------------
+  var USAGE_METRIC_LABELS = {
+    active_users: "Active users", dashboard_views: "Dashboard views",
+    reports_created: "Reports created", connector_syncs: "Connector syncs",
+    alerts_configured: "Alerts configured", api_calls: "API calls",
+    exports_run: "Exports run", logins: "Logins"
+  };
+
+  function buildSparkline(values) {
+    var W = 150, H = 40, pad = 3;
+    var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+    if (min === max) { min -= 1; max += 1; }
+    var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H });
+    var pts = values.map(function(v, i) {
+      var x = pad + (i / (values.length - 1)) * (W - 2 * pad);
+      var y = H - pad - ((v - min) / (max - min)) * (H - 2 * pad);
+      return x.toFixed(1) + "," + y.toFixed(1);
+    });
+    var areaPts = "0," + H + " " + pts.join(" ") + " " + W + "," + H;
+    svgEl("polygon", { points: areaPts, fill: "var(--hpx-beige)" }, svg);
+    svgEl("polyline", { points: pts.join(" "), fill: "none", stroke: "var(--hpx-indigo)", "stroke-width": 1.6 }, svg);
+    return svg;
+  }
+
+  function renderDrilldown(id) {
+    var host = document.getElementById("hpx-drilldown");
+    host.innerHTML = "";
+    var a = accounts.filter(function(x) { return x.id === id; })[0];
+    if (!a) { host.innerHTML = "<div class='hpx-drill-empty'>No account selected yet.</div>"; return; }
+
+    var d = el("div", "hpx-drill", host);
+    var head = el("div", "hpx-drill-head", d);
+    var titleWrap = el("div", null, head);
+    el("h3", null, titleWrap, a.name);
+    var meta = a.industry + " · " + a.country + " · " + a.plan + " · " + a.seats + " seats · " + fmtEUR(a.arr) + " ARR";
+    el("div", "hpx-drill-meta", titleWrap, meta);
+
+    if (state.revealed) {
+      var outcome = el("div", null, head);
+      el("span", "hpx-chip " + (a.churned ? "hpx-chip--churn" : "hpx-chip--retain"), outcome,
+        a.churned ? ("Churned " + (a.churn_date || "")) : "Retained");
+      el("div", "hpx-drill-meta", outcome, HPX.meta.archetype_labels[a.archetype] ? (a.archetype + " – " + HPX.meta.archetype_labels[a.archetype]) : "");
+    }
+
+    var scores = el("div", "hpx-drill-scores", d);
+    [["ML risk", a.ml], ["Text risk", a.text], ["Blended", a.blended]].forEach(function(pair) {
+      var b = el("div", "hpx-scorebadge", scores);
+      b.appendChild(document.createTextNode(pair[0] + " "));
+      el("b", null, b, pair[1].toFixed(2));
+    });
+
+    var det = detail[id];
+    if (!det) {
+      el("div", "hpx-nodetail", d,
+        "Full ticket text and usage history are not included on this page for this account (it sits outside the " +
+        HPX.meta.n_curated + "-account curated drill-down set kept to hold the page’s size down). " +
+        "Its scores above are the real, published values – see the published dataset for its full record.");
+      return;
+    }
+
+    if (det.narrative) {
+      var narr = el("div", "hpx-narrative", d);
+      el("span", "hpx-mono", narr, "Agent verdict · " + a.traj + (a.escalation ? " · escalated" : ""));
+      narr.appendChild(document.createTextNode(det.narrative));
+    }
+
+    el("h3", null, d, "Usage, month by month");
+    var sparkWrap = el("div", "hpx-sparklines", d);
+    Object.keys(USAGE_METRIC_LABELS).forEach(function(metric) {
+      var s = el("div", "hpx-spark", sparkWrap);
+      el("div", "hpx-mono", s, USAGE_METRIC_LABELS[metric]);
+      s.appendChild(buildSparkline(det.usage[metric]));
+    });
+
+    el("h3", null, d, "Ticket history, in order (" + det.tickets.length + ")");
+    var tWrap = el("div", "hpx-tickets", d);
+    det.tickets.forEach(function(t) {
+      var card = el("div", "hpx-ticket", tWrap);
+      var th = el("div", "hpx-ticket-head", card);
+      el("div", "hpx-ticket-subject", th, t.subject);
+      var metaBits = [t.date, t.module, t.channel, (t.resolved ? "resolved" : "unresolved")];
+      if (t.res_days !== null) metaBits.push(t.res_days + "d");
+      if (t.csat !== null) metaBits.push("csat " + t.csat);
+      el("div", "hpx-ticket-meta", th, metaBits.join(" · "));
+      el("div", "hpx-ticket-body", card, t.body);
+    });
+  }
+
+  function selectAccount(id) {
+    state.selectedId = id;
+    renderLeaderboard();
+    renderDrilldown(id);
+    var sec = document.getElementById("hpx-drilldown-sec");
+    if (sec && typeof sec.scrollIntoView === "function") {
+      try { sec.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Wiring
+  // ---------------------------------------------------------------------
+  function renderRecipeNote() {
+    document.getElementById("hpx-recipe-note").textContent =
+      "Current recipe – usage " + Math.round(state.wUsage * 100) + "% · sentiment " +
+      Math.round(state.wSentiment * 100) + "% · competitor " + Math.round(state.wCompetitor * 100) + "%.";
+  }
+
+  function setSliders(wUsage, wSentiment, wCompetitor, presetName) {
+    state.wUsage = wUsage; state.wSentiment = wSentiment; state.wCompetitor = wCompetitor;
+    state.activePreset = presetName || null;
+    document.getElementById("hpx-w-usage").value = Math.round(wUsage * 100);
+    document.getElementById("hpx-w-sentiment").value = Math.round(wSentiment * 100);
+    document.getElementById("hpx-w-competitor").value = Math.round(wCompetitor * 100);
+    updateFromState();
+  }
+
+  function updateFromState() {
+    document.getElementById("hpx-w-usage-val").textContent = Math.round(state.wUsage * 100);
+    document.getElementById("hpx-w-sentiment-val").textContent = Math.round(state.wSentiment * 100);
+    document.getElementById("hpx-w-competitor-val").textContent = Math.round(state.wCompetitor * 100);
+    renderRecipeNote();
+    ["hpx-preset-usage", "hpx-preset-tickets", "hpx-preset-fitted"].forEach(function(btnId) {
+      document.getElementById(btnId).classList.remove("is-active");
+    });
+    if (state.activePreset === "usage") document.getElementById("hpx-preset-usage").classList.add("is-active");
+    if (state.activePreset === "tickets") document.getElementById("hpx-preset-tickets").classList.add("is-active");
+    if (state.activePreset === "fitted") document.getElementById("hpx-preset-fitted").classList.add("is-active");
+
+    recomputeBlended();
+    renderLeaderboard();
+    renderCounters();
+    if (state.selectedId) renderDrilldown(state.selectedId);
+  }
+
+  document.getElementById("hpx-w-usage").addEventListener("input", function(e) {
+    state.wUsage = (+e.target.value) / 100; state.activePreset = null; updateFromState();
+  });
+  document.getElementById("hpx-w-sentiment").addEventListener("input", function(e) {
+    state.wSentiment = (+e.target.value) / 100; state.activePreset = null; updateFromState();
+  });
+  document.getElementById("hpx-w-competitor").addEventListener("input", function(e) {
+    state.wCompetitor = (+e.target.value) / 100; state.activePreset = null; updateFromState();
+  });
+
+  document.getElementById("hpx-preset-usage").addEventListener("click", function() { setSliders(1, 0, 0, "usage"); });
+  document.getElementById("hpx-preset-tickets").addEventListener("click", function() { setSliders(0, 1, 0, "tickets"); });
+  document.getElementById("hpx-preset-fitted").addEventListener("click", function() {
+    setSliders(fittedPct.usage / 100, fittedPct.sentiment / 100, fittedPct.competitor / 100, "fitted");
+  });
+
+  document.getElementById("hpx-budget-n").addEventListener("input", function(e) {
+    state.budgetN = +e.target.value;
+    document.getElementById("hpx-budget-n-val").textContent = state.budgetN;
+    renderCounters();
+  });
+
+  document.getElementById("hpx-reveal-toggle").addEventListener("change", function(e) {
+    state.revealed = e.target.checked;
+    root.classList.toggle("hpx-revealed", state.revealed);
+    renderLeaderboard();
+    renderCounters();
+    renderQuadrantLegend();
+    if (state.selectedId) renderDrilldown(state.selectedId);
+  });
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+  renderStatStrip();
+  renderFindingTable();
+  renderCalloutCards();
+  renderBudgetRef();
+  buildQuadrant();
+  renderQuadrantLegend();
+  document.getElementById("hpx-budget-n-val").textContent = state.budgetN;
+  setSliders(state.wUsage, state.wSentiment, state.wCompetitor, "fitted");
+
+  // The Hedbrunn link in the opening story opens that account's file directly
+  // (looked up by name so the wiring survives a data regeneration).
+  (function() {
+    var link = document.getElementById("hpx-hedbrunn-link");
+    if (!link) return;
+    var hedbrunn = accounts.filter(function(a) { return a.name.indexOf("Hedbrunn Systems") === 0; })[0];
+    if (!hedbrunn) return;
+    link.addEventListener("click", function(ev) {
+      ev.preventDefault();
+      selectAccount(hedbrunn.id);
+    });
+  })();
+
+  // ---------------------------------------------------------------------
+  // Optional iframe autosize (postMessage height reporting)
+  // ---------------------------------------------------------------------
+  function reportHeight() {
+    try { parent.postMessage({ type: "hpx-height", height: document.documentElement.scrollHeight }, "*"); } catch (e) {}
+  }
+  window.addEventListener("load", reportHeight);
+  window.addEventListener("resize", reportHeight);
+})();
+</script>
+</body>
+</html>

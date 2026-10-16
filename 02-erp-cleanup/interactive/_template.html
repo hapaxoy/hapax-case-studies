@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The parser that retires itself — Hapax</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  .hpx-root{
+    --hpx-bg:#FBFAF5; --hpx-bg-soft:#F4F1E8; --hpx-ink:#1A1410;
+    --hpx-oxblood:#7A2018; --hpx-navy:#1F2A52; --hpx-gold:#B68A2C;
+    --hpx-wine:#A8352A; --hpx-indigo:#41529E; --hpx-beige:#EFE5CE;
+    --hpx-mute:rgba(26,20,16,.60); --hpx-mute2:rgba(26,20,16,.42);
+    --hpx-rule:rgba(26,20,16,.14); --hpx-rule-soft:rgba(26,20,16,.07);
+    --hpx-c-det:var(--hpx-indigo); --hpx-c-llm:var(--hpx-wine); --hpx-c-fb:var(--hpx-gold);
+    --hpx-serif:"Cormorant Garamond",Georgia,serif;
+    --hpx-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+    background:var(--hpx-bg); color:var(--hpx-ink); font-family:var(--hpx-serif);
+    font-size:19px; line-height:1.55; margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .hpx-root *{box-sizing:border-box; margin:0; padding:0;}
+  .hpx-root a{color:var(--hpx-oxblood);}
+  .hpx-wrap{max-width:960px; margin:0 auto; padding:0 22px;}
+  .hpx-section{padding:56px 0 8px;}
+  .hpx-rule{height:1px; background:var(--hpx-rule); border:0; margin:44px 0 0;}
+  .hpx-mono{font-family:var(--hpx-mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--hpx-mute2);}
+  .hpx-mono--gold{color:var(--hpx-gold);}
+  .hpx-kicker{display:flex; align-items:baseline; gap:12px; margin-bottom:16px;}
+  .hpx-kicker .hpx-num{font-style:italic; font-size:20px; color:var(--hpx-mute2);}
+  .hpx-h1{font-weight:500; font-size:clamp(34px,5.4vw,54px); line-height:1.08; letter-spacing:-.01em; margin:14px 0 18px;}
+  .hpx-h1 em{font-style:italic; color:var(--hpx-oxblood);}
+  .hpx-h2{font-weight:500; font-size:clamp(24px,3vw,31px); line-height:1.15; margin-bottom:14px;}
+  .hpx-lede{font-size:clamp(19px,1.8vw,21.5px); color:var(--hpx-mute); max-width:62ch;}
+  .hpx-p{max-width:66ch; margin:0 0 14px; color:var(--hpx-ink);}
+  .hpx-p--mute{color:var(--hpx-mute);}
+  .hpx-header{padding:64px 0 10px; border-bottom:1px solid var(--hpx-rule);}
+  .hpx-note{font-size:16.5px; color:var(--hpx-mute); max-width:66ch; font-style:italic;}
+  .hpx-honesty{border:1px solid var(--hpx-rule); background:var(--hpx-beige); padding:14px 18px; margin:22px 0 0; font-size:16px; max-width:66ch;}
+  .hpx-honesty strong{color:var(--hpx-oxblood);}
+  .hpx-try{border-left:2px solid var(--hpx-gold); background:var(--hpx-bg); padding:8px 14px; margin:14px 0 18px; font-size:16px; color:var(--hpx-mute); max-width:66ch;}
+  .hpx-try strong{font-family:var(--hpx-mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--hpx-gold); font-weight:500;}
+
+  /* horror viewer */
+  .hpx-spool{background:var(--hpx-bg-soft); border:1px solid var(--hpx-rule); border-radius:2px;
+    font-family:var(--hpx-mono); font-size:11px; line-height:1.5; letter-spacing:0;
+    color:var(--hpx-ink); padding:18px 20px; overflow-x:auto; white-space:pre; max-height:340px; overflow-y:auto;}
+  .hpx-spool::-webkit-scrollbar{height:8px; width:8px;}
+  .hpx-spool::-webkit-scrollbar-thumb{background:var(--hpx-rule); border-radius:4px;}
+  .hpx-caption{font-family:var(--hpx-mono); font-size:11px; letter-spacing:.08em; color:var(--hpx-mute2); margin-top:10px; text-transform:none;}
+
+  /* stat tiles */
+  .hpx-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1px; background:var(--hpx-rule); border:1px solid var(--hpx-rule); margin:26px 0 8px;}
+  .hpx-tile{background:var(--hpx-bg); padding:20px 22px 18px;}
+  .hpx-tile .hpx-tile-v{font-size:clamp(30px,3.4vw,40px); font-weight:500; line-height:1.05; letter-spacing:-.01em;}
+  .hpx-tile .hpx-tile-l{margin-top:6px;}
+
+  /* charts */
+  .hpx-fig{margin:28px 0 6px; position:relative;}
+  .hpx-fig svg{display:block; width:100%; height:auto;}
+  .hpx-legend{display:flex; flex-wrap:wrap; gap:18px; margin:10px 0 0;}
+  .hpx-legend span{display:inline-flex; align-items:center; gap:7px; font-family:var(--hpx-mono); font-size:11px; letter-spacing:.06em; color:var(--hpx-mute);}
+  .hpx-sw{width:14px; height:3px; border-radius:2px; display:inline-block;}
+  .hpx-sw--tick{width:3px; height:12px;}
+  .hpx-tip{position:absolute; pointer-events:none; background:var(--hpx-ink); color:var(--hpx-bg);
+    font-family:var(--hpx-mono); font-size:11px; line-height:1.55; padding:8px 10px; border-radius:2px;
+    opacity:0; transform:translate(-50%,-110%); white-space:nowrap; transition:opacity 90ms; z-index:5;}
+  .hpx-tip b{color:#D4A848; font-weight:500;}
+
+  /* controls */
+  .hpx-controls{display:flex; align-items:center; gap:16px; margin:18px 0 2px; flex-wrap:wrap;}
+  .hpx-btn{font-family:var(--hpx-mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+    border:1px solid var(--hpx-ink); background:none; color:var(--hpx-ink); padding:9px 18px; cursor:pointer; border-radius:1px;}
+  .hpx-btn:hover{background:var(--hpx-ink); color:var(--hpx-bg);}
+  .hpx-range{flex:1; min-width:140px; accent-color:var(--hpx-oxblood); height:2px;}
+  .hpx-month{font-family:var(--hpx-mono); font-size:11.5px; color:var(--hpx-mute); min-width:7ch;}
+
+  /* drill panel */
+  .hpx-drill{border:1px solid var(--hpx-rule); background:var(--hpx-bg-soft); padding:18px 20px; margin-top:18px;
+    font-family:var(--hpx-mono); font-size:12px; line-height:1.8; min-height:76px; color:var(--hpx-ink);}
+  .hpx-drill em{font-style:normal; color:var(--hpx-mute2);}
+  .hpx-drill .hpx-flag{color:var(--hpx-oxblood);}
+
+  /* scorecard table */
+  .hpx-table{width:100%; border-collapse:collapse; margin:22px 0 4px; font-size:16.5px;}
+  .hpx-table th{font-family:var(--hpx-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--hpx-mute2); font-weight:500; text-align:left; padding:0 14px 10px 0; border-bottom:1px solid var(--hpx-rule);}
+  .hpx-table td{padding:10px 14px 10px 0; border-bottom:1px solid var(--hpx-rule-soft); vertical-align:top;}
+  .hpx-table td:first-child{font-family:var(--hpx-mono); font-size:12px; white-space:nowrap;}
+  .hpx-dev{color:var(--hpx-oxblood); font-style:italic;}
+
+  /* parser exhibit */
+  .hpx-code{display:none;}
+  .hpx-code.hpx-open{display:block;}
+  .hpx-foot{padding:34px 0 60px; color:var(--hpx-mute); font-size:16px;}
+  .hpx-foot .hpx-mono{display:block; margin-bottom:10px;}
+  @media (max-width:520px){ .hpx-section{padding:40px 0 6px;} .hpx-legend{gap:12px;} }
+  @media (prefers-reduced-motion: reduce){ .hpx-tip{transition:none;} }
+</style>
+</head>
+<body>
+<div class="hpx-root">
+  <header class="hpx-header">
+    <div class="hpx-wrap">
+      <p class="hpx-mono">Hapax · working demonstration · <span class="hpx-mono--gold">synthetic corpus, answer key published</span></p>
+      <h1 class="hpx-h1">The parser that <em>retires itself</em></h1>
+      <p class="hpx-lede">A language model reads a legacy ERP&rsquo;s spool files; an overseer watches it work, writes ordinary deterministic parsers for the routine formats, and keeps the model only for exceptions. Below, the whole demonstration &ndash; run on an engineered corpus with a known answer key, so every number is marked rather than asserted.</p>
+      <div class="hpx-honesty"><strong>This is a demonstration on data we engineered.</strong> Jalavakoski Konepaja Oy does not exist &ndash; 240 synthetic SAP-style month-end exports, generated deterministically with an answer key held out of the whole pipeline, planted traps included. Every number on this page is marked against that key rather than asserted; that is the method we sell.</div>
+    </div>
+  </header>
+
+  <section class="hpx-section">
+    <div class="hpx-wrap">
+      <div class="hpx-kicker"><span class="hpx-num">I</span><span class="hpx-mono">The document</span></div>
+      <h2 class="hpx-h2">What the finance team receives</h2>
+      <p class="hpx-p hpx-p--mute">Fixed-width text from a 2003-era installation. Status icons arrive as <span style="font-family:var(--hpx-mono);font-size:14px;">@0A@</span>, credits carry a trailing minus, one vendor per page, and the totals are labelled in German. One person knew every layout by heart; she retires this year.</p>
+      <div class="hpx-spool" id="hpx-spool"></div>
+      <p class="hpx-caption" id="hpx-spool-cap"></p>
+      <hr class="hpx-rule">
+    </div>
+  </section>
+
+  <section class="hpx-section">
+    <div class="hpx-wrap">
+      <div class="hpx-kicker"><span class="hpx-num">II</span><span class="hpx-mono">The stream</span></div>
+      <h2 class="hpx-h2">Twelve months, 240 documents</h2>
+      <p class="hpx-p hpx-p--mute">Press play. For two months the model parses everything &ndash; expensive, slow, correct. After eight consistent documents of a type, the overseer writes that type&rsquo;s parser; from month three the routine stream is handled by plain code at no marginal cost, and the model is called only when a parser refuses.</p>
+      <p class="hpx-try"><strong>Try this</strong> &ndash; press play, or drag the slider yourself. Watch the tick colour turn from wine (the model, reading the document from scratch) to indigo (the parser it wrote) around month three, and watch the cost line below go flat while the all-model counterfactual keeps climbing.</p>
+      <div class="hpx-controls">
+        <button class="hpx-btn" id="hpx-play">Play</button>
+        <input class="hpx-range" id="hpx-scrub" type="range" min="0" max="239" value="239" aria-label="stream position">
+        <span class="hpx-month" id="hpx-monthlbl"></span>
+      </div>
+      <div class="hpx-fig" id="hpx-timeline-fig">
+        <svg id="hpx-timeline" viewBox="0 0 960 96" role="img" aria-label="stream timeline, one tick per document, coloured by processing path"></svg>
+        <div class="hpx-tip" id="hpx-tl-tip"></div>
+      </div>
+      <div class="hpx-legend">
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-c-llm)"></i>model, discovery</span>
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-c-det)"></i>deterministic parser</span>
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-c-fb)"></i>model, fallback</span>
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-bg); outline:2px solid var(--hpx-ink)"></i>the silent error</span>
+      </div>
+      <div class="hpx-fig" id="hpx-cost-fig">
+        <svg id="hpx-cost" viewBox="0 0 960 320" role="img" aria-label="cumulative cost, hybrid pipeline against an all-model counterfactual"></svg>
+        <div class="hpx-tip" id="hpx-cost-tip"></div>
+      </div>
+      <div class="hpx-legend">
+        <span><i class="hpx-sw" style="background:var(--hpx-c-llm)"></i>all-model counterfactual (estimate)</span>
+        <span><i class="hpx-sw" style="background:var(--hpx-c-det)"></i>hybrid pipeline (estimate)</span>
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-c-fb)"></i>parser generated</span>
+      </div>
+      <p class="hpx-caption">Cost figures are estimates: published per-token list prices applied to measured subagent token totals (a band, not a point &ndash; the central line assumes an 85/15 input/output split). Accuracy figures are exact.</p>
+      <p class="hpx-try"><strong>Try this</strong> &ndash; click any tick to see what happened to that document: which path handled it, what it cost, whether the answer key found anything wrong. Click a gold marker on the cost chart to open the actual parser the overseer wrote at that moment.</p>
+      <div class="hpx-drill" id="hpx-drill"><em>Click any tick in the stream &ndash; or a gold marker &ndash; to inspect it.</em></div>
+      <div class="hpx-code" id="hpx-parser-exhibit">
+        <p class="hpx-caption" style="margin:16px 0 8px" id="hpx-parser-cap"></p>
+        <div class="hpx-spool" id="hpx-parser-code" style="max-height:420px"></div>
+      </div>
+      <hr class="hpx-rule">
+    </div>
+  </section>
+
+  <section class="hpx-section">
+    <div class="hpx-wrap">
+      <div class="hpx-kicker"><span class="hpx-num">III</span><span class="hpx-mono">Marked against the key</span></div>
+      <h2 class="hpx-h2">What the answer key says</h2>
+      <div class="hpx-tiles" id="hpx-tiles"></div>
+      <p class="hpx-caption">Field accuracy is exact, scored against the corpus answer key. The deterministic figure is shown excluding the one document we corrupted on purpose; including it, <span id="hpx-det-incl"></span>.</p>
+      <table class="hpx-table" id="hpx-scorecard">
+        <thead><tr><th>class</th><th>designed outcome</th><th>what happened</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="hpx-p hpx-p--mute" style="margin-top:16px">Two of our planted failures were defeated by the system itself: the generated FBL1N parser handled the currency trap we set for it, and an earlier version of the silent error had to be redesigned twice because the parsers kept reading it correctly. Pre-registering the outcomes is what makes that checkable &ndash; the deviations are reported, not retouched. The one error that survived everything was caught by nothing except the answer key; in production that argument is called sampled reconciliation, and a line-level price&thinsp;&times;&thinsp;quantity check would have caught this particular one.</p>
+      <hr class="hpx-rule">
+    </div>
+  </section>
+
+  <section class="hpx-section">
+    <div class="hpx-wrap">
+      <h2 class="hpx-h2">What this would look like on your ERP</h2>
+      <p class="hpx-p hpx-p--mute">None of this is particular to Jalavakoski Konepaja Oy&rsquo;s five report types. An agent does the manual parsing to start with, at the model&rsquo;s usual cost per document, while an overseer watches what it produces. Once a report type turns out consistent enough, the overseer writes an ordinary deterministic parser for it, and the model stops being called for anything routine; it stays only for the genuine variants. That pattern transfers to any legacy ERP output old enough that one person still reads it from memory. The cost story, not the specific formats, is the argument.</p>
+      <p class="hpx-p">The long-form case study is on hapax.fi; the code and dataset are in this repository.</p>
+      <hr class="hpx-rule">
+    </div>
+  </section>
+
+  <footer class="hpx-foot">
+    <div class="hpx-wrap">
+      <span class="hpx-mono">Method</span>
+      <p class="hpx-p hpx-p--mute">The corpus is synthetic by design: 240 SAP-style documents for an invented Finnish manufacturer, generated deterministically with every true value recorded in an answer key the pipeline never sees. The generation code, the corpus, the generated parsers, and the evaluation are published; every number on this page reproduces from two scripts. Jalavakoski Konepaja Oy does not exist &ndash; which is precisely why its results can be marked honestly.</p>
+    </div>
+  </footer>
+</div>
+
+<script>
+const HPX = /*__DATA__*/null;
+
+(function(){
+  "use strict";
+  if (!HPX) return;
+  const $ = id => document.getElementById(id);
+  const PCOL = {d:"var(--hpx-c-det)", l:"var(--hpx-c-llm)", f:"var(--hpx-c-fb)"};
+  const PNAME = {d:"deterministic parser", l:"model (discovery)", f:"model (fallback)"};
+  const CNAME = {R:"routine", V:"variant", F:"planted failure", S:"silent error"};
+  const NS = "http://www.w3.org/2000/svg";
+  const fmt$ = v => "$" + v.toFixed(2);
+
+  /* ---- the horror ---- */
+  $("hpx-spool").textContent = HPX.horror.text;
+  $("hpx-spool-cap").textContent = HPX.horror.caption;
+
+  /* ---- stat tiles ---- */
+  const tiles = [
+    [HPX.summary.det_share_pct, "of the stream ends up on plain code"],
+    [HPX.summary.det_acc_excl_pct, "deterministic field accuracy, exact"],
+    [HPX.summary.llm_acc_pct, "model-path field accuracy, exact"],
+    ["≈" + HPX.summary.saving_pct, "estimated saving vs all-model · 240 docs"],
+  ];
+  $("hpx-tiles").innerHTML = tiles.map(t =>
+    `<div class="hpx-tile"><div class="hpx-tile-v">${t[0]}</div><div class="hpx-tile-l hpx-mono">${t[1]}</div></div>`).join("");
+  $("hpx-det-incl").textContent = HPX.summary.det_acc_incl_pct + " – the difference is that document";
+
+  /* ---- scorecard ---- */
+  $("hpx-scorecard").querySelector("tbody").innerHTML = HPX.scorecard.map(r =>
+    `<tr><td>${r.cls} · ${r.n}</td><td>${r.designed}</td><td>${r.dev ? `<span class="hpx-dev">${r.actual}</span>` : r.actual}</td></tr>`).join("");
+
+  /* ---- geometry helpers ---- */
+  function el(name, attrs, parent){
+    const e = document.createElementNS(NS, name);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  /* ---- timeline ---- */
+  const TL = {w:960, h:96, top:18, bh:52};
+  const tsvg = $("hpx-timeline");
+  const step = TL.w / HPX.docs.length;
+  const ticks = [];
+  HPX.docs.forEach((d,i) => {
+    const t = el("rect", {x:(i*step+0.6).toFixed(2), y:TL.top, width:Math.max(step-1.2,1.6).toFixed(2), height:TL.bh,
+      fill:PCOL[d.p], "data-i":i, rx:1}, tsvg);
+    if (d.c === "S"){ t.setAttribute("stroke","var(--hpx-ink)"); t.setAttribute("stroke-width","2"); }
+    ticks.push(t);
+  });
+  // month labels along the base
+  for (let m=1; m<=12; m+=1){
+    const first = HPX.docs.findIndex(d => d.m === m);
+    if (first < 0) continue;
+    el("line", {x1:first*step, x2:first*step, y1:TL.top+TL.bh, y2:TL.top+TL.bh+6, stroke:"var(--hpx-rule)"}, tsvg);
+    const tx = el("text", {x:first*step+3, y:TL.top+TL.bh+20, "font-family":"Geist Mono,monospace","font-size":"10","fill":"var(--hpx-mute2)"}, tsvg);
+    tx.textContent = "M" + m;
+  }
+
+  /* ---- cost chart ---- */
+  const C = {w:960, h:320, l:56, r:150, t:16, b:34};
+  const csvg = $("hpx-cost");
+  const maxY = HPX.docs[HPX.docs.length-1].cf * 1.06;
+  const X = i => C.l + (i/(HPX.docs.length-1)) * (C.w - C.l - C.r);
+  const Y = v => C.t + (1 - v/maxY) * (C.h - C.t - C.b);
+  // recessive y grid + labels
+  for (let g=0; g<=4; g+=1){
+    const v = maxY * g/4;
+    el("line", {x1:C.l, x2:C.w-C.r, y1:Y(v), y2:Y(v), stroke:"var(--hpx-rule-soft)"}, csvg);
+    const t = el("text", {x:C.l-8, y:Y(v)+4, "text-anchor":"end","font-family":"Geist Mono,monospace","font-size":"10",fill:"var(--hpx-mute2)"}, csvg);
+    t.textContent = "$" + Math.round(v);
+  }
+  const xt = el("text", {x:C.l, y:C.h-8, "font-family":"Geist Mono,monospace","font-size":"10",fill:"var(--hpx-mute2)"}, csvg);
+  xt.textContent = "documents, stream order →";
+  // activation markers
+  HPX.activations.forEach(a => {
+    el("line", {x1:X(a.i), x2:X(a.i), y1:Y(0)-4, y2:Y(0)-26, stroke:"var(--hpx-c-fb)","stroke-width":"2","data-act":a.type, "class":"hpx-act"}, csvg);
+  });
+  const pathFrom = key => HPX.docs.map((d,i) => (i? "L":"M") + X(i).toFixed(1) + " " + Y(d[key]).toFixed(1)).join(" ");
+  const cfPath = el("path", {d:pathFrom("cf"), fill:"none", stroke:"var(--hpx-c-llm)","stroke-width":"2"}, csvg);
+  const hyPath = el("path", {d:pathFrom("ch"), fill:"none", stroke:"var(--hpx-c-det)","stroke-width":"2"}, csvg);
+  // direct labels at line ends
+  const lastD = HPX.docs[HPX.docs.length-1];
+  [["all-model", lastD.cf, "var(--hpx-c-llm)"], ["hybrid", lastD.ch, "var(--hpx-c-det)"]].forEach(L => {
+    const t = el("text", {x:C.w-C.r+8, y:Y(L[1])+4, "font-family":"Geist Mono,monospace","font-size":"11", fill:L[2]}, csvg);
+    t.textContent = L[0] + " " + fmt$(L[1]) + "*";
+  });
+  const cross = el("line", {x1:-9, x2:-9, y1:C.t, y2:C.h-C.b, stroke:"var(--hpx-mute2)","stroke-width":"1","stroke-dasharray":"3 3"}, csvg);
+
+  /* ---- play / scrub ---- */
+  const clip = el("clipPath", {id:"hpx-clip"}, csvg);
+  const clipRect = el("rect", {x:0, y:0, width:C.w, height:C.h}, clip);
+  cfPath.setAttribute("clip-path","url(#hpx-clip)");
+  hyPath.setAttribute("clip-path","url(#hpx-clip)");
+  const scrub = $("hpx-scrub"), monthlbl = $("hpx-monthlbl");
+  function setPos(i){
+    i = Math.max(0, Math.min(239, i|0));
+    clipRect.setAttribute("width", X(i)+1);
+    ticks.forEach((t,k) => t.setAttribute("opacity", k<=i ? "1" : "0.16"));
+    monthlbl.textContent = "2025-" + String(HPX.docs[i].m).padStart(2,"0");
+    scrub.value = i;
+  }
+  setPos(239);
+  scrub.addEventListener("input", () => setPos(+scrub.value));
+  let timer = null;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  $("hpx-play").addEventListener("click", () => {
+    if (timer){ clearInterval(timer); timer=null; $("hpx-play").textContent="Play"; return; }
+    if (reduced){ setPos(239); return; }
+    let i = 0; setPos(0); $("hpx-play").textContent="Stop";
+    timer = setInterval(() => { i += 2; setPos(i);
+      if (i >= 239){ clearInterval(timer); timer=null; $("hpx-play").textContent="Play"; } }, 40);
+  });
+
+  /* ---- tooltips + drill ---- */
+  const tlTip = $("hpx-tl-tip"), costTip = $("hpx-cost-tip"), drill = $("hpx-drill");
+  function docLine(d){
+    return `<b>${d.id}</b><br>${PNAME[d.p]} · class ${d.c} (${CNAME[d.c]})<br>` +
+      (d.p==="d" ? `marginal cost ≈ $0` : `est. cost ${fmt$(d.cost)}`) +
+      (d.w ? `<br><b>${d.w}</b> field${d.w>1?"s":""} wrong vs answer key` : `<br>0 fields wrong`);
+  }
+  function place(tip, fig, clientX, clientY, html){
+    const r = fig.getBoundingClientRect();
+    tip.innerHTML = html;
+    tip.style.left = (clientX - r.left) + "px";
+    tip.style.top  = Math.max(clientY - r.top, 30) + "px";
+    tip.style.opacity = "1";
+  }
+  tsvg.addEventListener("mousemove", e => {
+    const i = e.target.getAttribute && e.target.getAttribute("data-i");
+    if (i === null || i === undefined){ tlTip.style.opacity="0"; return; }
+    place(tlTip, $("hpx-timeline-fig"), e.clientX, e.clientY, docLine(HPX.docs[+i]));
+  });
+  tsvg.addEventListener("mouseleave", () => tlTip.style.opacity="0");
+  tsvg.addEventListener("click", e => {
+    const i = e.target.getAttribute && e.target.getAttribute("data-i");
+    if (i === null || i === undefined) return;
+    const d = HPX.docs[+i];
+    drill.innerHTML = docLine(d).replaceAll("<br>", " · ") +
+      (d.c==="S" ? ` <span class="hpx-flag">← every automated check passed; only the answer key disagrees</span>` : "") +
+      (d.c==="F" && d.p==="f" ? ` <em>(the parser refused it – by design)</em>` : "") +
+      (d.c==="F" && d.p==="d" ? ` <span class="hpx-flag">← designed to fail, parsed correctly – the deviation we report</span>` : "");
+    $("hpx-parser-exhibit").classList.remove("hpx-open");
+  });
+  csvg.addEventListener("mousemove", e => {
+    const r = csvg.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (C.w / r.width);
+    const i = Math.round((px - C.l) / (C.w - C.l - C.r) * (HPX.docs.length-1));
+    if (i < 0 || i > 239){ costTip.style.opacity="0"; cross.setAttribute("x1",-9); cross.setAttribute("x2",-9); return; }
+    const d = HPX.docs[i];
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i));
+    place(costTip, $("hpx-cost-fig"), e.clientX, e.clientY,
+      `doc ${i+1} · 2025-${String(d.m).padStart(2,"0")}<br>hybrid <b>${fmt$(d.ch)}</b> · all-model <b>${fmt$(d.cf)}</b>`);
+  });
+  csvg.addEventListener("mouseleave", () => { costTip.style.opacity="0"; cross.setAttribute("x1",-9); cross.setAttribute("x2",-9); });
+  csvg.addEventListener("click", e => {
+    const act = e.target.getAttribute && e.target.getAttribute("data-act");
+    if (!act) return;
+    drill.innerHTML = `<b>parser generated · ${act}</b> · written by the overseer from the first eight accepted parses · activated only after reproducing them exactly · one-time cost, then ≈ $0 per document`;
+    $("hpx-parser-cap").textContent = HPX.parser.caption;
+    $("hpx-parser-code").textContent = HPX.parser.code;
+    $("hpx-parser-exhibit").classList.add("hpx-open");
+  });
+
+  /* ---- iframe height reporting (progressive enhancement) ---- */
+  function postHeight(){ try{ parent.postMessage({hpx:"height", value:document.documentElement.scrollHeight}, "*"); }catch(_e){} }
+  addEventListener("load", postHeight); addEventListener("resize", postHeight);
+})();
+</script>
+</body>
+</html>

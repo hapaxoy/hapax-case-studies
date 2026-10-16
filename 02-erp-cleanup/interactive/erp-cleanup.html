@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The parser that retires itself — Hapax</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  .hpx-root{
+    --hpx-bg:#FBFAF5; --hpx-bg-soft:#F4F1E8; --hpx-ink:#1A1410;
+    --hpx-oxblood:#7A2018; --hpx-navy:#1F2A52; --hpx-gold:#B68A2C;
+    --hpx-wine:#A8352A; --hpx-indigo:#41529E; --hpx-beige:#EFE5CE;
+    --hpx-mute:rgba(26,20,16,.60); --hpx-mute2:rgba(26,20,16,.42);
+    --hpx-rule:rgba(26,20,16,.14); --hpx-rule-soft:rgba(26,20,16,.07);
+    --hpx-c-det:var(--hpx-indigo); --hpx-c-llm:var(--hpx-wine); --hpx-c-fb:var(--hpx-gold);
+    --hpx-serif:"Cormorant Garamond",Georgia,serif;
+    --hpx-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+    background:var(--hpx-bg); color:var(--hpx-ink); font-family:var(--hpx-serif);
+    font-size:19px; line-height:1.55; margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .hpx-root *{box-sizing:border-box; margin:0; padding:0;}
+  .hpx-root a{color:var(--hpx-oxblood);}
+  .hpx-wrap{max-width:960px; margin:0 auto; padding:0 22px;}
+  .hpx-section{padding:56px 0 8px;}
+  .hpx-rule{height:1px; background:var(--hpx-rule); border:0; margin:44px 0 0;}
+  .hpx-mono{font-family:var(--hpx-mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--hpx-mute2);}
+  .hpx-mono--gold{color:var(--hpx-gold);}
+  .hpx-kicker{display:flex; align-items:baseline; gap:12px; margin-bottom:16px;}
+  .hpx-kicker .hpx-num{font-style:italic; font-size:20px; color:var(--hpx-mute2);}
+  .hpx-h1{font-weight:500; font-size:clamp(34px,5.4vw,54px); line-height:1.08; letter-spacing:-.01em; margin:14px 0 18px;}
+  .hpx-h1 em{font-style:italic; color:var(--hpx-oxblood);}
+  .hpx-h2{font-weight:500; font-size:clamp(24px,3vw,31px); line-height:1.15; margin-bottom:14px;}
+  .hpx-lede{font-size:clamp(19px,1.8vw,21.5px); color:var(--hpx-mute); max-width: none;}
+  .hpx-p{max-width: none; margin:0 0 14px; color:var(--hpx-ink);}
+  .hpx-p--mute{color:var(--hpx-mute);}
+  .hpx-header{padding:64px 0 10px; border-bottom:1px solid var(--hpx-rule);}
+  .hpx-note{font-size:16.5px; color:var(--hpx-mute); max-width: none; font-style:italic;}
+  .hpx-honesty{border:1px solid var(--hpx-rule); background:var(--hpx-beige); padding:14px 18px; margin:22px 0 0; font-size:16px; max-width: none;}
+  .hpx-honesty strong{color:var(--hpx-oxblood);}
+  .hpx-try{border-left:2px solid var(--hpx-gold); background:var(--hpx-bg); padding:8px 14px; margin:14px 0 18px; font-size:16px; color:var(--hpx-mute); max-width: none;}
+  .hpx-try strong{font-family:var(--hpx-mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--hpx-gold); font-weight:500;}
+
+  /* horror viewer */
+  .hpx-spool{background:var(--hpx-bg-soft); border:1px solid var(--hpx-rule); border-radius:2px;
+    font-family:var(--hpx-mono); font-size:11px; line-height:1.5; letter-spacing:0;
+    color:var(--hpx-ink); padding:18px 20px; overflow-x:auto; white-space:pre; max-height:340px; overflow-y:auto;}
+  .hpx-spool::-webkit-scrollbar{height:8px; width:8px;}
+  .hpx-spool::-webkit-scrollbar-thumb{background:var(--hpx-rule); border-radius:4px;}
+  .hpx-caption{font-family:var(--hpx-mono); font-size:11px; letter-spacing:.08em; color:var(--hpx-mute2); margin-top:10px; text-transform:none;}
+
+  /* stat tiles */
+  .hpx-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1px; background:var(--hpx-rule); border:1px solid var(--hpx-rule); margin:26px 0 8px;}
+  .hpx-tile{background:var(--hpx-bg); padding:20px 22px 18px;}
+  .hpx-tile .hpx-tile-v{font-size:clamp(30px,3.4vw,40px); font-weight:500; line-height:1.05; letter-spacing:-.01em;}
+  .hpx-tile .hpx-tile-l{margin-top:6px;}
+
+  /* charts */
+  .hpx-fig{margin:28px 0 6px; position:relative;}
+  .hpx-fig svg{display:block; width:100%; height:auto;}
+  .hpx-legend{display:flex; flex-wrap:wrap; gap:18px; margin:10px 0 0;}
+  .hpx-legend span{display:inline-flex; align-items:center; gap:7px; font-family:var(--hpx-mono); font-size:11px; letter-spacing:.06em; color:var(--hpx-mute);}
+  .hpx-sw{width:14px; height:3px; border-radius:2px; display:inline-block;}
+  .hpx-sw--tick{width:3px; height:12px;}
+  .hpx-tip{position:absolute; pointer-events:none; background:var(--hpx-ink); color:var(--hpx-bg);
+    font-family:var(--hpx-mono); font-size:11px; line-height:1.55; padding:8px 10px; border-radius:2px;
+    opacity:0; transform:translate(-50%,-110%); white-space:nowrap; transition:opacity 90ms; z-index:5;}
+  .hpx-tip b{color:#D4A848; font-weight:500;}
+
+  /* controls */
+  .hpx-controls{display:flex; align-items:center; gap:16px; margin:18px 0 2px; flex-wrap:wrap;}
+  .hpx-btn{font-family:var(--hpx-mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+    border:1px solid var(--hpx-ink); background:none; color:var(--hpx-ink); padding:9px 18px; cursor:pointer; border-radius:1px;}
+  .hpx-btn:hover{background:var(--hpx-ink); color:var(--hpx-bg);}
+  .hpx-range{flex:1; min-width:140px; accent-color:var(--hpx-oxblood); height:2px;}
+  .hpx-month{font-family:var(--hpx-mono); font-size:11.5px; color:var(--hpx-mute); min-width:7ch;}
+
+  /* drill panel */
+  .hpx-drill{border:1px solid var(--hpx-rule); background:var(--hpx-bg-soft); padding:18px 20px; margin-top:18px;
+    font-family:var(--hpx-mono); font-size:12px; line-height:1.8; min-height:76px; color:var(--hpx-ink);}
+  .hpx-drill em{font-style:normal; color:var(--hpx-mute2);}
+  .hpx-drill .hpx-flag{color:var(--hpx-oxblood);}
+
+  /* scorecard table */
+  .hpx-table{width:100%; border-collapse:collapse; margin:22px 0 4px; font-size:16.5px;}
+  .hpx-table th{font-family:var(--hpx-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--hpx-mute2); font-weight:500; text-align:left; padding:0 14px 10px 0; border-bottom:1px solid var(--hpx-rule);}
+  .hpx-table td{padding:10px 14px 10px 0; border-bottom:1px solid var(--hpx-rule-soft); vertical-align:top;}
+  .hpx-table td:first-child{font-family:var(--hpx-mono); font-size:12px; white-space:nowrap;}
+  .hpx-dev{color:var(--hpx-oxblood); font-style:italic;}
+
+  /* parser exhibit */
+  .hpx-code{display:none;}
+  .hpx-code.hpx-open{display:block;}
+  .hpx-foot{padding:34px 0 60px; color:var(--hpx-mute); font-size:16px;}
+  .hpx-foot .hpx-mono{display:block; margin-bottom:10px;}
+  @media (max-width:520px){ .hpx-section{padding:40px 0 6px;} .hpx-legend{gap:12px;} }
+  @media (prefers-reduced-motion: reduce){ .hpx-tip{transition:none;} }
+</style>
+</head>
+<body>
+<div class="hpx-root">
+  <header class="hpx-header">
+    <div class="hpx-wrap">
+      <p class="hpx-mono">Hapax · working demonstration · <span class="hpx-mono--gold">synthetic corpus, answer key published</span></p>
+      <h1 class="hpx-h1">The parser that <em>retires itself</em></h1>
+      <p class="hpx-lede">A language model reads a legacy ERP&rsquo;s spool files; an overseer watches it work, writes ordinary deterministic parsers for the routine formats, and keeps the model only for exceptions. Below, the whole demonstration &ndash; run on an engineered corpus with a known answer key, so every number is marked against a known correct answer.</p>
+      <div class="hpx-honesty"><strong>This is a demonstration on data we engineered.</strong> Jalavakoski Konepaja Oy does not exist &ndash; 240 synthetic SAP-style month-end exports, generated deterministically with an answer key held out of the whole pipeline, planted traps included. Every number on this page is marked against that key. That is what this page demonstrates.</div>
+    </div>
+  </header>
+
+  <section class="hpx-section">
+    <div class="hpx-wrap">
+      <div class="hpx-kicker"><span class="hpx-num">I</span><span class="hpx-mono">The document</span></div>
+      <h2 class="hpx-h2">What the finance team receives</h2>
+      <p class="hpx-p hpx-p--mute">Fixed-width text from a 2003-era installation. Status icons arrive as <span style="font-family:var(--hpx-mono);font-size:14px;">@0A@</span>, credits carry a trailing minus, one vendor per page, and the totals are labelled in German. One person knew every layout by heart; she retires this year.</p>
+      <div class="hpx-spool" id="hpx-spool"></div>
+      <p class="hpx-caption" id="hpx-spool-cap"></p>
+      <hr class="hpx-rule">
+    </div>
+  </section>
+
+  <section class="hpx-section">
+    <div class="hpx-wrap">
+      <div class="hpx-kicker"><span class="hpx-num">II</span><span class="hpx-mono">The stream</span></div>
+      <h2 class="hpx-h2">Twelve months, 240 documents</h2>
+      <p class="hpx-p hpx-p--mute">Press play. For two months the model parses everything &ndash; expensive, slow, correct. After eight consistent documents of a type, the overseer writes that type&rsquo;s parser; from month three the routine stream is handled by plain code at no marginal cost, and the model is called only when a parser refuses.</p>
+      <p class="hpx-try"><strong>Try this</strong> &ndash; press play, or drag the slider yourself. Watch the tick colour turn from wine (the model, reading the document from scratch) to indigo (the parser it wrote) around month three, and watch the cost line below go flat while the all-model counterfactual keeps climbing.</p>
+      <div class="hpx-controls">
+        <button class="hpx-btn" id="hpx-play">Play</button>
+        <input class="hpx-range" id="hpx-scrub" type="range" min="0" max="239" value="239" aria-label="stream position">
+        <span class="hpx-month" id="hpx-monthlbl"></span>
+      </div>
+      <div class="hpx-fig" id="hpx-timeline-fig">
+        <svg id="hpx-timeline" viewBox="0 0 960 96" role="img" aria-label="stream timeline, one tick per document, coloured by processing path"></svg>
+        <div class="hpx-tip" id="hpx-tl-tip"></div>
+      </div>
+      <div class="hpx-legend">
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-c-llm)"></i>model, discovery</span>
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-c-det)"></i>deterministic parser</span>
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-c-fb)"></i>model, fallback</span>
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-bg); outline:2px solid var(--hpx-ink)"></i>the silent error</span>
+      </div>
+      <div class="hpx-fig" id="hpx-cost-fig">
+        <svg id="hpx-cost" viewBox="0 0 960 320" role="img" aria-label="cumulative cost, hybrid pipeline against an all-model counterfactual"></svg>
+        <div class="hpx-tip" id="hpx-cost-tip"></div>
+      </div>
+      <div class="hpx-legend">
+        <span><i class="hpx-sw" style="background:var(--hpx-c-llm)"></i>all-model counterfactual (estimate)</span>
+        <span><i class="hpx-sw" style="background:var(--hpx-c-det)"></i>hybrid pipeline (estimate)</span>
+        <span><i class="hpx-sw hpx-sw--tick" style="background:var(--hpx-c-fb)"></i>parser generated</span>
+      </div>
+      <p class="hpx-caption">Cost figures are estimates: published per-token list prices applied to measured subagent token totals (a band, not a point &ndash; the central line assumes an 85/15 input/output split). Accuracy figures are exact.</p>
+      <p class="hpx-try"><strong>Try this</strong> &ndash; click any tick to see what happened to that document: which path handled it, what it cost, whether the answer key found anything wrong. Click a gold marker on the cost chart to open the actual parser the overseer wrote at that moment.</p>
+      <div class="hpx-drill" id="hpx-drill"><em>Click any tick in the stream &ndash; or a gold marker &ndash; to inspect it.</em></div>
+      <div class="hpx-code" id="hpx-parser-exhibit">
+        <p class="hpx-caption" style="margin:16px 0 8px" id="hpx-parser-cap"></p>
+        <div class="hpx-spool" id="hpx-parser-code" style="max-height:420px"></div>
+      </div>
+      <hr class="hpx-rule">
+    </div>
+  </section>
+
+  <section class="hpx-section">
+    <div class="hpx-wrap">
+      <div class="hpx-kicker"><span class="hpx-num">III</span><span class="hpx-mono">Marked against the key</span></div>
+      <h2 class="hpx-h2">What the answer key says</h2>
+      <div class="hpx-tiles" id="hpx-tiles"></div>
+      <p class="hpx-caption">Field accuracy is exact, scored against the corpus answer key. The deterministic figure is shown excluding the one document we corrupted on purpose; including it, <span id="hpx-det-incl"></span>.</p>
+      <table class="hpx-table" id="hpx-scorecard">
+        <thead><tr><th>class</th><th>designed outcome</th><th>what happened</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="hpx-p hpx-p--mute" style="margin-top:16px">Two of our planted failures were defeated by the system itself: the generated FBL1N parser handled the currency trap we set for it, and an earlier version of the silent error had to be redesigned twice because the parsers kept reading it correctly. Pre-registering the outcomes is what makes that checkable &ndash; the deviations are reported as they ran. The one error that survived everything was caught by nothing except the answer key; in production that argument is called sampled reconciliation, and a line-level price&thinsp;&times;&thinsp;quantity check would have caught this particular one.</p>
+      <hr class="hpx-rule">
+    </div>
+  </section>
+
+  <section class="hpx-section">
+    <div class="hpx-wrap">
+      <h2 class="hpx-h2">What this would look like on your ERP</h2>
+      <p class="hpx-p hpx-p--mute">None of this is particular to Jalavakoski Konepaja Oy&rsquo;s five report types. An agent does the manual parsing to start with, at the model&rsquo;s usual cost per document, while an overseer watches what it produces. Once a report type turns out consistent enough, the overseer writes an ordinary deterministic parser for it, and the model stops being called for anything routine; it stays only for the genuine variants. That pattern transfers to any legacy ERP output old enough that one person still reads it from memory. The cost story is the argument.</p>
+      <p class="hpx-p">The long-form case study is on hapax.fi; the code and dataset are in this repository.</p>
+      <hr class="hpx-rule">
+    </div>
+  </section>
+
+  <footer class="hpx-foot">
+    <div class="hpx-wrap">
+      <span class="hpx-mono">Method</span>
+      <p class="hpx-p hpx-p--mute">The corpus is synthetic by design: 240 SAP-style documents for an invented Finnish manufacturer, generated deterministically with every true value recorded in an answer key the pipeline never sees. The generation code, the corpus, the generated parsers, and the evaluation are published; every number on this page reproduces from two scripts. Jalavakoski Konepaja Oy does not exist &ndash; so its results can be marked against the answer key.</p>
+    </div>
+  </footer>
+</div>
+
+<script>
+const HPX = {"docs":[{"id":"2025-01_FBL1N_01","m":1,"t":3,"c":"R","p":"l","ch":0.1,"cf":0.1,"cost":0.1,"w":0},{"id":"2025-01_FBL1N_02","m":1,"t":3,"c":"R","p":"l","ch":0.19,"cf":0.19,"cost":0.1,"w":0},{"id":"2025-01_FBL1N_03","m":1,"t":3,"c":"R","p":"l","ch":0.29,"cf":0.29,"cost":0.1,"w":0},{"id":"2025-01_FBL1N_04","m":1,"t":3,"c":"R","p":"l","ch":0.38,"cf":0.38,"cost":0.1,"w":0},{"id":"2025-01_FBL3N_01","m":1,"t":0,"c":"R","p":"l","ch":0.5,"cf":0.5,"cost":0.12,"w":0},{"id":"2025-01_FBL3N_02","m":1,"t":0,"c":"R","p":"l","ch":0.62,"cf":0.62,"cost":0.12,"w":0},{"id":"2025-01_FBL3N_03","m":1,"t":0,"c":"R","p":"l","ch":0.74,"cf":0.74,"cost":0.12,"w":0},{"id":"2025-01_FBL3N_04","m":1,"t":0,"c":"R","p":"l","ch":0.86,"cf":0.86,"cost":0.12,"w":0},{"id":"2025-01_MB52_01","m":1,"t":4,"c":"R","p":"l","ch":0.94,"cf":0.94,"cost":0.08,"w":0},{"id":"2025-01_MB52_02","m":1,"t":4,"c":"R","p":"l","ch":1.02,"cf":1.02,"cost":0.08,"w":0},{"id":"2025-01_MB52_03","m":1,"t":4,"c":"R","p":"l","ch":1.1,"cf":1.1,"cost":0.08,"w":0},{"id":"2025-01_MB52_04","m":1,"t":4,"c":"R","p":"l","ch":1.18,"cf":1.18,"cost":0.08,"w":0},{"id":"2025-01_ME2M_01","m":1,"t":1,"c":"R","p":"l","ch":1.28,"cf":1.28,"cost":0.1,"w":0},{"id":"2025-01_ME2M_02","m":1,"t":1,"c":"R","p":"l","ch":1.38,"cf":1.38,"cost":0.1,"w":0},{"id":"2025-01_ME2M_03","m":1,"t":1,"c":"R","p":"l","ch":1.48,"cf":1.48,"cost":0.1,"w":0},{"id":"2025-01_ME2M_04","m":1,"t":1,"c":"R","p":"l","ch":1.58,"cf":1.58,"cost":0.1,"w":0},{"id":"2025-01_VA05_01","m":1,"t":2,"c":"R","p":"l","ch":1.64,"cf":1.64,"cost":0.06,"w":0},{"id":"2025-01_VA05_02","m":1,"t":2,"c":"R","p":"l","ch":1.7,"cf":1.7,"cost":0.06,"w":0},{"id":"2025-01_VA05_03","m":1,"t":2,"c":"R","p":"l","ch":1.77,"cf":1.77,"cost":0.06,"w":0},{"id":"2025-01_VA05_04","m":1,"t":2,"c":"R","p":"l","ch":1.83,"cf":1.83,"cost":0.06,"w":0},{"id":"2025-02_FBL1N_01","m":2,"t":3,"c":"R","p":"l","ch":1.9,"cf":1.9,"cost":0.07,"w":0},{"id":"2025-02_FBL1N_02","m":2,"t":3,"c":"R","p":"l","ch":1.97,"cf":1.97,"cost":0.07,"w":0},{"id":"2025-02_FBL1N_03","m":2,"t":3,"c":"R","p":"l","ch":2.03,"cf":2.03,"cost":0.07,"w":0},{"id":"2025-02_FBL1N_04","m":2,"t":3,"c":"R","p":"l","ch":2.1,"cf":2.1,"cost":0.07,"w":0},{"id":"2025-02_FBL3N_01","m":2,"t":0,"c":"R","p":"l","ch":2.85,"cf":2.2,"cost":0.1,"w":0},{"id":"2025-02_FBL3N_02","m":2,"t":0,"c":"R","p":"l","ch":2.95,"cf":2.3,"cost":0.1,"w":0},{"id":"2025-02_FBL3N_03","m":2,"t":0,"c":"R","p":"l","ch":3.04,"cf":2.4,"cost":0.1,"w":0},{"id":"2025-02_FBL3N_04","m":2,"t":0,"c":"R","p":"l","ch":3.14,"cf":2.49,"cost":0.1,"w":0},{"id":"2025-02_MB52_01","m":2,"t":4,"c":"R","p":"l","ch":4.0,"cf":2.58,"cost":0.09,"w":0},{"id":"2025-02_MB52_02","m":2,"t":4,"c":"R","p":"l","ch":4.09,"cf":2.67,"cost":0.09,"w":0},{"id":"2025-02_MB52_03","m":2,"t":4,"c":"R","p":"l","ch":4.17,"cf":2.76,"cost":0.09,"w":0},{"id":"2025-02_MB52_04","m":2,"t":4,"c":"R","p":"l","ch":4.26,"cf":2.84,"cost":0.09,"w":0},{"id":"2025-02_ME2M_01","m":2,"t":1,"c":"R","p":"l","ch":5.12,"cf":3.0,"cost":0.15,"w":0},{"id":"2025-02_ME2M_02","m":2,"t":1,"c":"R","p":"l","ch":5.27,"cf":3.15,"cost":0.15,"w":0},{"id":"2025-02_ME2M_03","m":2,"t":1,"c":"R","p":"l","ch":5.43,"cf":3.31,"cost":0.15,"w":0},{"id":"2025-02_ME2M_04","m":2,"t":1,"c":"R","p":"l","ch":5.58,"cf":3.46,"cost":0.15,"w":0},{"id":"2025-02_VA05_01","m":2,"t":2,"c":"R","p":"l","ch":6.4,"cf":3.53,"cost":0.07,"w":0},{"id":"2025-02_VA05_02","m":2,"t":2,"c":"R","p":"l","ch":6.46,"cf":3.59,"cost":0.07,"w":0},{"id":"2025-02_VA05_03","m":2,"t":2,"c":"R","p":"l","ch":6.53,"cf":3.66,"cost":0.07,"w":0},{"id":"2025-02_VA05_04","m":2,"t":2,"c":"R","p":"l","ch":6.59,"cf":3.73,"cost":0.07,"w":0},{"id":"2025-03_FBL1N_01","m":3,"t":3,"c":"R","p":"d","ch":7.23,"cf":3.81,"cost":0.0,"w":0},{"id":"2025-03_FBL1N_02","m":3,"t":3,"c":"R","p":"d","ch":7.23,"cf":3.89,"cost":0.0,"w":0},{"id":"2025-03_FBL1N_03","m":3,"t":3,"c":"R","p":"d","ch":7.23,"cf":3.97,"cost":0.0,"w":0},{"id":"2025-03_FBL1N_04","m":3,"t":3,"c":"R","p":"d","ch":7.23,"cf":4.05,"cost":0.0,"w":0},{"id":"2025-03_FBL3N_01","m":3,"t":0,"c":"R","p":"d","ch":7.23,"cf":4.18,"cost":0.0,"w":0},{"id":"2025-03_FBL3N_02","m":3,"t":0,"c":"R","p":"d","ch":7.23,"cf":4.3,"cost":0.0,"w":0},{"id":"2025-03_FBL3N_03","m":3,"t":0,"c":"R","p":"d","ch":7.23,"cf":4.42,"cost":0.0,"w":0},{"id":"2025-03_FBL3N_04","m":3,"t":0,"c":"R","p":"d","ch":7.23,"cf":4.54,"cost":0.0,"w":0},{"id":"2025-03_MB52_01","m":3,"t":4,"c":"R","p":"d","ch":7.23,"cf":4.63,"cost":0.0,"w":0},{"id":"2025-03_MB52_02","m":3,"t":4,"c":"R","p":"d","ch":7.23,"cf":4.71,"cost":0.0,"w":0},{"id":"2025-03_MB52_03","m":3,"t":4,"c":"R","p":"d","ch":7.23,"cf":4.79,"cost":0.0,"w":0},{"id":"2025-03_MB52_04","m":3,"t":4,"c":"R","p":"d","ch":7.23,"cf":4.88,"cost":0.0,"w":0},{"id":"2025-03_ME2M_01","m":3,"t":1,"c":"R","p":"d","ch":7.23,"cf":4.99,"cost":0.0,"w":0},{"id":"2025-03_ME2M_02","m":3,"t":1,"c":"R","p":"d","ch":7.23,"cf":5.09,"cost":0.0,"w":0},{"id":"2025-03_ME2M_03","m":3,"t":1,"c":"R","p":"d","ch":7.23,"cf":5.2,"cost":0.0,"w":0},{"id":"2025-03_ME2M_04","m":3,"t":1,"c":"R","p":"d","ch":7.23,"cf":5.31,"cost":0.0,"w":0},{"id":"2025-03_VA05_01","m":3,"t":2,"c":"R","p":"d","ch":7.23,"cf":5.37,"cost":0.0,"w":0},{"id":"2025-03_VA05_02","m":3,"t":2,"c":"R","p":"d","ch":7.23,"cf":5.43,"cost":0.0,"w":0},{"id":"2025-03_VA05_03","m":3,"t":2,"c":"R","p":"d","ch":7.23,"cf":5.49,"cost":0.0,"w":0},{"id":"2025-03_VA05_04","m":3,"t":2,"c":"R","p":"d","ch":7.23,"cf":5.54,"cost":0.0,"w":0},{"id":"2025-04_FBL1N_01","m":4,"t":3,"c":"R","p":"d","ch":7.23,"cf":5.63,"cost":0.0,"w":0},{"id":"2025-04_FBL1N_02","m":4,"t":3,"c":"R","p":"d","ch":7.23,"cf":5.71,"cost":0.0,"w":0},{"id":"2025-04_FBL1N_03","m":4,"t":3,"c":"R","p":"d","ch":7.23,"cf":5.79,"cost":0.0,"w":0},{"id":"2025-04_FBL1N_04","m":4,"t":3,"c":"R","p":"d","ch":7.23,"cf":5.87,"cost":0.0,"w":0},{"id":"2025-04_FBL3N_01","m":4,"t":0,"c":"R","p":"d","ch":7.23,"cf":5.99,"cost":0.0,"w":0},{"id":"2025-04_FBL3N_02","m":4,"t":0,"c":"R","p":"d","ch":7.23,"cf":6.12,"cost":0.0,"w":0},{"id":"2025-04_FBL3N_03","m":4,"t":0,"c":"R","p":"d","ch":7.23,"cf":6.24,"cost":0.0,"w":0},{"id":"2025-04_FBL3N_04","m":4,"t":0,"c":"R","p":"d","ch":7.23,"cf":6.36,"cost":0.0,"w":0},{"id":"2025-04_MB52_01","m":4,"t":4,"c":"R","p":"d","ch":7.23,"cf":6.44,"cost":0.0,"w":0},{"id":"2025-04_MB52_02","m":4,"t":4,"c":"R","p":"d","ch":7.23,"cf":6.53,"cost":0.0,"w":0},{"id":"2025-04_MB52_03","m":4,"t":4,"c":"R","p":"d","ch":7.23,"cf":6.61,"cost":0.0,"w":0},{"id":"2025-04_MB52_04","m":4,"t":4,"c":"R","p":"d","ch":7.23,"cf":6.69,"cost":0.0,"w":0},{"id":"2025-04_ME2M_01","m":4,"t":1,"c":"R","p":"d","ch":7.23,"cf":6.8,"cost":0.0,"w":0},{"id":"2025-04_ME2M_02","m":4,"t":1,"c":"R","p":"d","ch":7.23,"cf":6.91,"cost":0.0,"w":0},{"id":"2025-04_ME2M_03","m":4,"t":1,"c":"R","p":"d","ch":7.23,"cf":7.02,"cost":0.0,"w":0},{"id":"2025-04_ME2M_04","m":4,"t":1,"c":"R","p":"d","ch":7.23,"cf":7.13,"cost":0.0,"w":0},{"id":"2025-04_VA05_01","m":4,"t":2,"c":"R","p":"d","ch":7.23,"cf":7.19,"cost":0.0,"w":0},{"id":"2025-04_VA05_02","m":4,"t":2,"c":"R","p":"d","ch":7.23,"cf":7.24,"cost":0.0,"w":0},{"id":"2025-04_VA05_03","m":4,"t":2,"c":"R","p":"d","ch":7.23,"cf":7.3,"cost":0.0,"w":0},{"id":"2025-04_VA05_04","m":4,"t":2,"c":"R","p":"d","ch":7.23,"cf":7.36,"cost":0.0,"w":0},{"id":"2025-05_FBL1N_01","m":5,"t":3,"c":"R","p":"d","ch":7.23,"cf":7.44,"cost":0.0,"w":0},{"id":"2025-05_FBL1N_02","m":5,"t":3,"c":"R","p":"d","ch":7.23,"cf":7.53,"cost":0.0,"w":0},{"id":"2025-05_FBL1N_03","m":5,"t":3,"c":"R","p":"d","ch":7.23,"cf":7.61,"cost":0.0,"w":0},{"id":"2025-05_FBL1N_04","m":5,"t":3,"c":"R","p":"d","ch":7.23,"cf":7.69,"cost":0.0,"w":0},{"id":"2025-05_FBL3N_01","m":5,"t":0,"c":"R","p":"d","ch":7.23,"cf":7.81,"cost":0.0,"w":0},{"id":"2025-05_FBL3N_02","m":5,"t":0,"c":"R","p":"d","ch":7.23,"cf":7.93,"cost":0.0,"w":0},{"id":"2025-05_FBL3N_03","m":5,"t":0,"c":"R","p":"d","ch":7.23,"cf":8.05,"cost":0.0,"w":0},{"id":"2025-05_FBL3N_04","m":5,"t":0,"c":"R","p":"d","ch":7.23,"cf":8.18,"cost":0.0,"w":0},{"id":"2025-05_MB52_01","m":5,"t":4,"c":"R","p":"d","ch":7.23,"cf":8.26,"cost":0.0,"w":0},{"id":"2025-05_MB52_02","m":5,"t":4,"c":"R","p":"d","ch":7.23,"cf":8.34,"cost":0.0,"w":0},{"id":"2025-05_MB52_03","m":5,"t":4,"c":"R","p":"d","ch":7.23,"cf":8.43,"cost":0.0,"w":0},{"id":"2025-05_MB52_04","m":5,"t":4,"c":"R","p":"d","ch":7.23,"cf":8.51,"cost":0.0,"w":0},{"id":"2025-05_ME2M_01","m":5,"t":1,"c":"R","p":"d","ch":7.23,"cf":8.62,"cost":0.0,"w":0},{"id":"2025-05_ME2M_02","m":5,"t":1,"c":"R","p":"d","ch":7.23,"cf":8.73,"cost":0.0,"w":0},{"id":"2025-05_ME2M_03","m":5,"t":1,"c":"R","p":"d","ch":7.23,"cf":8.84,"cost":0.0,"w":0},{"id":"2025-05_ME2M_04","m":5,"t":1,"c":"R","p":"d","ch":7.23,"cf":8.95,"cost":0.0,"w":0},{"id":"2025-05_VA05_01","m":5,"t":2,"c":"R","p":"d","ch":7.23,"cf":9.0,"cost":0.0,"w":0},{"id":"2025-05_VA05_02","m":5,"t":2,"c":"R","p":"d","ch":7.23,"cf":9.06,"cost":0.0,"w":0},{"id":"2025-05_VA05_03","m":5,"t":2,"c":"R","p":"d","ch":7.23,"cf":9.12,"cost":0.0,"w":0},{"id":"2025-05_VA05_04","m":5,"t":2,"c":"R","p":"d","ch":7.23,"cf":9.18,"cost":0.0,"w":0},{"id":"2025-06_FBL1N_01","m":6,"t":3,"c":"R","p":"d","ch":7.23,"cf":9.26,"cost":0.0,"w":0},{"id":"2025-06_FBL1N_02","m":6,"t":3,"c":"R","p":"d","ch":7.23,"cf":9.34,"cost":0.0,"w":0},{"id":"2025-06_FBL1N_03","m":6,"t":3,"c":"R","p":"d","ch":7.23,"cf":9.42,"cost":0.0,"w":0},{"id":"2025-06_FBL1N_04","m":6,"t":3,"c":"R","p":"d","ch":7.23,"cf":9.51,"cost":0.0,"w":0},{"id":"2025-06_FBL3N_01","m":6,"t":0,"c":"R","p":"d","ch":7.23,"cf":9.63,"cost":0.0,"w":0},{"id":"2025-06_FBL3N_02","m":6,"t":0,"c":"R","p":"d","ch":7.23,"cf":9.75,"cost":0.0,"w":0},{"id":"2025-06_FBL3N_03","m":6,"t":0,"c":"R","p":"d","ch":7.23,"cf":9.87,"cost":0.0,"w":0},{"id":"2025-06_FBL3N_04","m":6,"t":0,"c":"R","p":"d","ch":7.23,"cf":9.99,"cost":0.0,"w":0},{"id":"2025-06_MB52_01","m":6,"t":4,"c":"R","p":"d","ch":7.23,"cf":10.08,"cost":0.0,"w":0},{"id":"2025-06_MB52_02","m":6,"t":4,"c":"R","p":"d","ch":7.23,"cf":10.16,"cost":0.0,"w":0},{"id":"2025-06_MB52_03","m":6,"t":4,"c":"R","p":"d","ch":7.23,"cf":10.25,"cost":0.0,"w":0},{"id":"2025-06_MB52_04","m":6,"t":4,"c":"R","p":"d","ch":7.23,"cf":10.33,"cost":0.0,"w":0},{"id":"2025-06_ME2M_01","m":6,"t":1,"c":"R","p":"d","ch":7.23,"cf":10.44,"cost":0.0,"w":0},{"id":"2025-06_ME2M_02","m":6,"t":1,"c":"R","p":"d","ch":7.23,"cf":10.55,"cost":0.0,"w":0},{"id":"2025-06_ME2M_03","m":6,"t":1,"c":"R","p":"d","ch":7.23,"cf":10.65,"cost":0.0,"w":0},{"id":"2025-06_ME2M_04","m":6,"t":1,"c":"R","p":"d","ch":7.23,"cf":10.76,"cost":0.0,"w":0},{"id":"2025-06_VA05_01","m":6,"t":2,"c":"R","p":"d","ch":7.23,"cf":10.82,"cost":0.0,"w":0},{"id":"2025-06_VA05_02","m":6,"t":2,"c":"R","p":"d","ch":7.23,"cf":10.88,"cost":0.0,"w":0},{"id":"2025-06_VA05_03","m":6,"t":2,"c":"R","p":"d","ch":7.23,"cf":10.94,"cost":0.0,"w":0},{"id":"2025-06_VA05_04","m":6,"t":2,"c":"R","p":"d","ch":7.23,"cf":11.0,"cost":0.0,"w":0},{"id":"2025-07_FBL1N_01","m":7,"t":3,"c":"R","p":"d","ch":7.23,"cf":11.08,"cost":0.0,"w":0},{"id":"2025-07_FBL1N_02","m":7,"t":3,"c":"R","p":"d","ch":7.23,"cf":11.16,"cost":0.0,"w":0},{"id":"2025-07_FBL1N_03","m":7,"t":3,"c":"R","p":"d","ch":7.23,"cf":11.24,"cost":0.0,"w":0},{"id":"2025-07_FBL1N_04","m":7,"t":3,"c":"R","p":"d","ch":7.23,"cf":11.32,"cost":0.0,"w":0},{"id":"2025-07_FBL3N_01","m":7,"t":0,"c":"R","p":"d","ch":7.23,"cf":11.45,"cost":0.0,"w":0},{"id":"2025-07_FBL3N_02","m":7,"t":0,"c":"R","p":"d","ch":7.23,"cf":11.57,"cost":0.0,"w":0},{"id":"2025-07_FBL3N_03","m":7,"t":0,"c":"R","p":"d","ch":7.23,"cf":11.69,"cost":0.0,"w":0},{"id":"2025-07_FBL3N_04","m":7,"t":0,"c":"R","p":"d","ch":7.23,"cf":11.81,"cost":0.0,"w":0},{"id":"2025-07_MB52_01","m":7,"t":4,"c":"R","p":"d","ch":7.23,"cf":11.9,"cost":0.0,"w":0},{"id":"2025-07_MB52_02","m":7,"t":4,"c":"R","p":"d","ch":7.23,"cf":11.98,"cost":0.0,"w":0},{"id":"2025-07_MB52_03","m":7,"t":4,"c":"R","p":"d","ch":7.23,"cf":12.06,"cost":0.0,"w":0},{"id":"2025-07_MB52_04","m":7,"t":4,"c":"R","p":"d","ch":7.23,"cf":12.15,"cost":0.0,"w":0},{"id":"2025-07_ME2M_01","m":7,"t":1,"c":"R","p":"d","ch":7.23,"cf":12.25,"cost":0.0,"w":0},{"id":"2025-07_ME2M_02","m":7,"t":1,"c":"R","p":"d","ch":7.23,"cf":12.36,"cost":0.0,"w":0},{"id":"2025-07_ME2M_03","m":7,"t":1,"c":"R","p":"d","ch":7.23,"cf":12.47,"cost":0.0,"w":0},{"id":"2025-07_ME2M_04","m":7,"t":1,"c":"R","p":"d","ch":7.23,"cf":12.58,"cost":0.0,"w":0},{"id":"2025-07_VA05_01","m":7,"t":2,"c":"R","p":"d","ch":7.23,"cf":12.64,"cost":0.0,"w":0},{"id":"2025-07_VA05_02","m":7,"t":2,"c":"R","p":"d","ch":7.23,"cf":12.7,"cost":0.0,"w":0},{"id":"2025-07_VA05_03","m":7,"t":2,"c":"R","p":"d","ch":7.23,"cf":12.75,"cost":0.0,"w":0},{"id":"2025-07_VA05_04","m":7,"t":2,"c":"R","p":"d","ch":7.23,"cf":12.81,"cost":0.0,"w":0},{"id":"2025-08_FBL1N_01","m":8,"t":3,"c":"R","p":"d","ch":7.23,"cf":12.89,"cost":0.0,"w":0},{"id":"2025-08_FBL1N_02","m":8,"t":3,"c":"R","p":"d","ch":7.23,"cf":12.98,"cost":0.0,"w":0},{"id":"2025-08_FBL1N_03","m":8,"t":3,"c":"R","p":"d","ch":7.23,"cf":13.06,"cost":0.0,"w":0},{"id":"2025-08_FBL1N_04","m":8,"t":3,"c":"R","p":"d","ch":7.23,"cf":13.14,"cost":0.0,"w":0},{"id":"2025-08_FBL3N_01","m":8,"t":0,"c":"R","p":"d","ch":7.23,"cf":13.26,"cost":0.0,"w":0},{"id":"2025-08_FBL3N_02","m":8,"t":0,"c":"R","p":"d","ch":7.23,"cf":13.38,"cost":0.0,"w":0},{"id":"2025-08_FBL3N_03","m":8,"t":0,"c":"R","p":"d","ch":7.23,"cf":13.51,"cost":0.0,"w":0},{"id":"2025-08_FBL3N_04","m":8,"t":0,"c":"V","p":"f","ch":7.39,"cf":13.66,"cost":0.16,"w":0},{"id":"2025-08_MB52_01","m":8,"t":4,"c":"R","p":"d","ch":7.39,"cf":13.75,"cost":0.0,"w":0},{"id":"2025-08_MB52_02","m":8,"t":4,"c":"R","p":"d","ch":7.39,"cf":13.83,"cost":0.0,"w":0},{"id":"2025-08_MB52_03","m":8,"t":4,"c":"R","p":"d","ch":7.39,"cf":13.91,"cost":0.0,"w":0},{"id":"2025-08_MB52_04","m":8,"t":4,"c":"R","p":"d","ch":7.39,"cf":14.0,"cost":0.0,"w":0},{"id":"2025-08_ME2M_01","m":8,"t":1,"c":"R","p":"d","ch":7.39,"cf":14.11,"cost":0.0,"w":0},{"id":"2025-08_ME2M_02","m":8,"t":1,"c":"R","p":"d","ch":7.39,"cf":14.21,"cost":0.0,"w":0},{"id":"2025-08_ME2M_03","m":8,"t":1,"c":"R","p":"d","ch":7.39,"cf":14.32,"cost":0.0,"w":0},{"id":"2025-08_ME2M_04","m":8,"t":1,"c":"R","p":"d","ch":7.39,"cf":14.43,"cost":0.0,"w":0},{"id":"2025-08_VA05_01","m":8,"t":2,"c":"R","p":"d","ch":7.39,"cf":14.49,"cost":0.0,"w":0},{"id":"2025-08_VA05_02","m":8,"t":2,"c":"R","p":"d","ch":7.39,"cf":14.55,"cost":0.0,"w":0},{"id":"2025-08_VA05_03","m":8,"t":2,"c":"R","p":"d","ch":7.39,"cf":14.61,"cost":0.0,"w":0},{"id":"2025-08_VA05_04","m":8,"t":2,"c":"V","p":"f","ch":7.44,"cf":14.66,"cost":0.05,"w":1},{"id":"2025-09_FBL1N_01","m":9,"t":3,"c":"R","p":"d","ch":7.44,"cf":14.74,"cost":0.0,"w":0},{"id":"2025-09_FBL1N_02","m":9,"t":3,"c":"R","p":"d","ch":7.44,"cf":14.82,"cost":0.0,"w":0},{"id":"2025-09_FBL1N_03","m":9,"t":3,"c":"R","p":"d","ch":7.44,"cf":14.9,"cost":0.0,"w":0},{"id":"2025-09_FBL1N_04","m":9,"t":3,"c":"F","p":"d","ch":7.44,"cf":14.99,"cost":0.0,"w":0},{"id":"2025-09_FBL3N_01","m":9,"t":0,"c":"R","p":"d","ch":7.44,"cf":15.11,"cost":0.0,"w":0},{"id":"2025-09_FBL3N_02","m":9,"t":0,"c":"R","p":"d","ch":7.44,"cf":15.23,"cost":0.0,"w":0},{"id":"2025-09_FBL3N_03","m":9,"t":0,"c":"R","p":"d","ch":7.44,"cf":15.35,"cost":0.0,"w":0},{"id":"2025-09_FBL3N_04","m":9,"t":0,"c":"R","p":"d","ch":7.44,"cf":15.47,"cost":0.0,"w":0},{"id":"2025-09_MB52_01","m":9,"t":4,"c":"R","p":"d","ch":7.44,"cf":15.56,"cost":0.0,"w":0},{"id":"2025-09_MB52_02","m":9,"t":4,"c":"R","p":"d","ch":7.44,"cf":15.64,"cost":0.0,"w":0},{"id":"2025-09_MB52_03","m":9,"t":4,"c":"R","p":"d","ch":7.44,"cf":15.73,"cost":0.0,"w":0},{"id":"2025-09_MB52_04","m":9,"t":4,"c":"R","p":"d","ch":7.44,"cf":15.81,"cost":0.0,"w":0},{"id":"2025-09_ME2M_01","m":9,"t":1,"c":"R","p":"d","ch":7.44,"cf":15.92,"cost":0.0,"w":0},{"id":"2025-09_ME2M_02","m":9,"t":1,"c":"R","p":"d","ch":7.44,"cf":16.03,"cost":0.0,"w":0},{"id":"2025-09_ME2M_03","m":9,"t":1,"c":"R","p":"d","ch":7.44,"cf":16.13,"cost":0.0,"w":0},{"id":"2025-09_ME2M_04","m":9,"t":1,"c":"F","p":"f","ch":7.52,"cf":16.21,"cost":0.08,"w":1},{"id":"2025-09_VA05_01","m":9,"t":2,"c":"R","p":"d","ch":7.52,"cf":16.27,"cost":0.0,"w":0},{"id":"2025-09_VA05_02","m":9,"t":2,"c":"R","p":"d","ch":7.52,"cf":16.33,"cost":0.0,"w":0},{"id":"2025-09_VA05_03","m":9,"t":2,"c":"V","p":"f","ch":7.57,"cf":16.38,"cost":0.05,"w":1},{"id":"2025-09_VA05_04","m":9,"t":2,"c":"F","p":"f","ch":7.62,"cf":16.43,"cost":0.05,"w":1},{"id":"2025-10_FBL1N_01","m":10,"t":3,"c":"R","p":"d","ch":7.62,"cf":16.52,"cost":0.0,"w":0},{"id":"2025-10_FBL1N_02","m":10,"t":3,"c":"R","p":"d","ch":7.62,"cf":16.6,"cost":0.0,"w":0},{"id":"2025-10_FBL1N_03","m":10,"t":3,"c":"R","p":"d","ch":7.62,"cf":16.68,"cost":0.0,"w":0},{"id":"2025-10_FBL1N_04","m":10,"t":3,"c":"F","p":"d","ch":7.62,"cf":16.76,"cost":0.0,"w":0},{"id":"2025-10_FBL3N_01","m":10,"t":0,"c":"R","p":"d","ch":7.62,"cf":16.88,"cost":0.0,"w":0},{"id":"2025-10_FBL3N_02","m":10,"t":0,"c":"R","p":"d","ch":7.62,"cf":17.01,"cost":0.0,"w":0},{"id":"2025-10_FBL3N_03","m":10,"t":0,"c":"R","p":"d","ch":7.62,"cf":17.13,"cost":0.0,"w":0},{"id":"2025-10_FBL3N_04","m":10,"t":0,"c":"V","p":"f","ch":7.78,"cf":17.28,"cost":0.16,"w":0},{"id":"2025-10_MB52_01","m":10,"t":4,"c":"R","p":"d","ch":7.78,"cf":17.37,"cost":0.0,"w":0},{"id":"2025-10_MB52_02","m":10,"t":4,"c":"R","p":"d","ch":7.78,"cf":17.45,"cost":0.0,"w":0},{"id":"2025-10_MB52_03","m":10,"t":4,"c":"R","p":"d","ch":7.78,"cf":17.54,"cost":0.0,"w":0},{"id":"2025-10_MB52_04","m":10,"t":4,"c":"R","p":"d","ch":7.78,"cf":17.62,"cost":0.0,"w":0},{"id":"2025-10_ME2M_01","m":10,"t":1,"c":"R","p":"d","ch":7.78,"cf":17.73,"cost":0.0,"w":0},{"id":"2025-10_ME2M_02","m":10,"t":1,"c":"R","p":"d","ch":7.78,"cf":17.84,"cost":0.0,"w":0},{"id":"2025-10_ME2M_03","m":10,"t":1,"c":"R","p":"d","ch":7.78,"cf":17.94,"cost":0.0,"w":0},{"id":"2025-10_ME2M_04","m":10,"t":1,"c":"F","p":"f","ch":7.86,"cf":18.02,"cost":0.08,"w":1},{"id":"2025-10_VA05_01","m":10,"t":2,"c":"R","p":"d","ch":7.86,"cf":18.08,"cost":0.0,"w":0},{"id":"2025-10_VA05_02","m":10,"t":2,"c":"R","p":"d","ch":7.86,"cf":18.14,"cost":0.0,"w":0},{"id":"2025-10_VA05_03","m":10,"t":2,"c":"V","p":"f","ch":7.91,"cf":18.19,"cost":0.05,"w":1},{"id":"2025-10_VA05_04","m":10,"t":2,"c":"F","p":"f","ch":7.96,"cf":18.24,"cost":0.05,"w":1},{"id":"2025-11_FBL1N_01","m":11,"t":3,"c":"R","p":"d","ch":7.96,"cf":18.33,"cost":0.0,"w":0},{"id":"2025-11_FBL1N_02","m":11,"t":3,"c":"R","p":"d","ch":7.96,"cf":18.41,"cost":0.0,"w":0},{"id":"2025-11_FBL1N_03","m":11,"t":3,"c":"F","p":"d","ch":7.96,"cf":18.49,"cost":0.0,"w":0},{"id":"2025-11_FBL1N_04","m":11,"t":3,"c":"F","p":"d","ch":7.96,"cf":18.57,"cost":0.0,"w":0},{"id":"2025-11_FBL3N_01","m":11,"t":0,"c":"R","p":"d","ch":7.96,"cf":18.69,"cost":0.0,"w":0},{"id":"2025-11_FBL3N_02","m":11,"t":0,"c":"R","p":"d","ch":7.96,"cf":18.82,"cost":0.0,"w":0},{"id":"2025-11_FBL3N_03","m":11,"t":0,"c":"V","p":"f","ch":8.12,"cf":18.97,"cost":0.16,"w":0},{"id":"2025-11_FBL3N_04","m":11,"t":0,"c":"R","p":"d","ch":8.12,"cf":19.09,"cost":0.0,"w":0},{"id":"2025-11_MB52_01","m":11,"t":4,"c":"R","p":"d","ch":8.12,"cf":19.18,"cost":0.0,"w":0},{"id":"2025-11_MB52_02","m":11,"t":4,"c":"R","p":"d","ch":8.12,"cf":19.26,"cost":0.0,"w":0},{"id":"2025-11_MB52_03","m":11,"t":4,"c":"R","p":"d","ch":8.12,"cf":19.35,"cost":0.0,"w":0},{"id":"2025-11_MB52_04","m":11,"t":4,"c":"R","p":"d","ch":8.12,"cf":19.43,"cost":0.0,"w":0},{"id":"2025-11_ME2M_01","m":11,"t":1,"c":"R","p":"d","ch":8.12,"cf":19.54,"cost":0.0,"w":0},{"id":"2025-11_ME2M_02","m":11,"t":1,"c":"S","p":"d","ch":8.12,"cf":19.65,"cost":0.0,"w":66},{"id":"2025-11_ME2M_03","m":11,"t":1,"c":"F","p":"f","ch":8.2,"cf":19.73,"cost":0.08,"w":1},{"id":"2025-11_ME2M_04","m":11,"t":1,"c":"F","p":"f","ch":8.28,"cf":19.8,"cost":0.08,"w":1},{"id":"2025-11_VA05_01","m":11,"t":2,"c":"R","p":"d","ch":8.28,"cf":19.86,"cost":0.0,"w":0},{"id":"2025-11_VA05_02","m":11,"t":2,"c":"R","p":"d","ch":8.28,"cf":19.92,"cost":0.0,"w":0},{"id":"2025-11_VA05_03","m":11,"t":2,"c":"F","p":"f","ch":8.33,"cf":19.97,"cost":0.05,"w":1},{"id":"2025-11_VA05_04","m":11,"t":2,"c":"F","p":"f","ch":8.38,"cf":20.03,"cost":0.05,"w":1},{"id":"2025-12_FBL1N_01","m":12,"t":3,"c":"R","p":"d","ch":8.38,"cf":20.11,"cost":0.0,"w":0},{"id":"2025-12_FBL1N_02","m":12,"t":3,"c":"R","p":"d","ch":8.38,"cf":20.19,"cost":0.0,"w":0},{"id":"2025-12_FBL1N_03","m":12,"t":3,"c":"R","p":"d","ch":8.38,"cf":20.27,"cost":0.0,"w":0},{"id":"2025-12_FBL1N_04","m":12,"t":3,"c":"F","p":"d","ch":8.38,"cf":20.35,"cost":0.0,"w":0},{"id":"2025-12_FBL3N_01","m":12,"t":0,"c":"R","p":"d","ch":8.38,"cf":20.48,"cost":0.0,"w":0},{"id":"2025-12_FBL3N_02","m":12,"t":0,"c":"R","p":"d","ch":8.38,"cf":20.6,"cost":0.0,"w":0},{"id":"2025-12_FBL3N_03","m":12,"t":0,"c":"R","p":"d","ch":8.38,"cf":20.72,"cost":0.0,"w":0},{"id":"2025-12_FBL3N_04","m":12,"t":0,"c":"R","p":"d","ch":8.38,"cf":20.84,"cost":0.0,"w":0},{"id":"2025-12_MB52_01","m":12,"t":4,"c":"R","p":"d","ch":8.38,"cf":20.93,"cost":0.0,"w":0},{"id":"2025-12_MB52_02","m":12,"t":4,"c":"R","p":"d","ch":8.38,"cf":21.01,"cost":0.0,"w":0},{"id":"2025-12_MB52_03","m":12,"t":4,"c":"R","p":"d","ch":8.38,"cf":21.09,"cost":0.0,"w":0},{"id":"2025-12_MB52_04","m":12,"t":4,"c":"R","p":"d","ch":8.38,"cf":21.18,"cost":0.0,"w":0},{"id":"2025-12_ME2M_01","m":12,"t":1,"c":"R","p":"d","ch":8.38,"cf":21.28,"cost":0.0,"w":0},{"id":"2025-12_ME2M_02","m":12,"t":1,"c":"R","p":"d","ch":8.38,"cf":21.39,"cost":0.0,"w":0},{"id":"2025-12_ME2M_03","m":12,"t":1,"c":"R","p":"d","ch":8.38,"cf":21.5,"cost":0.0,"w":0},{"id":"2025-12_ME2M_04","m":12,"t":1,"c":"F","p":"f","ch":8.46,"cf":21.58,"cost":0.08,"w":1},{"id":"2025-12_VA05_01","m":12,"t":2,"c":"R","p":"d","ch":8.46,"cf":21.64,"cost":0.0,"w":0},{"id":"2025-12_VA05_02","m":12,"t":2,"c":"R","p":"d","ch":8.46,"cf":21.7,"cost":0.0,"w":0},{"id":"2025-12_VA05_03","m":12,"t":2,"c":"R","p":"d","ch":8.46,"cf":21.76,"cost":0.0,"w":0},{"id":"2025-12_VA05_04","m":12,"t":2,"c":"F","p":"f","ch":8.51,"cf":21.81,"cost":0.05,"w":1}],"activations":[{"i":23,"type":"FBL1N"},{"i":27,"type":"FBL3N"},{"i":31,"type":"MB52"},{"i":35,"type":"ME2M"},{"i":39,"type":"VA05"}],"summary":{"det_share_pct":"76.7%","det_acc_excl_pct":"100.000%","det_acc_incl_pct":"99.952%","llm_acc_pct":"99.962%","saving_pct":"61%"},"scorecard":[{"cls":"R","n":218,"designed":"model during discovery, plain code thereafter","actual":"exactly that: 40 discovery, 178 deterministic, zero field errors","dev":false},{"cls":"V","n":6,"designed":"stays with the model (too rare to learn)","actual":"as designed: all six fell back to the model","dev":false},{"cls":"F","n":15,"designed":"breaks the parser, falls back safely","actual":"ten as designed; five parsed correctly instead — the parser was better than our trap","dev":true},{"cls":"S","n":1,"designed":"passes every check, silently wrong","actual":"as designed: caught by nothing except the answer key","dev":false}],"horror":{"text":"Kreditoren Einzelpostenliste                                                          Seite     1\n----------------------------------------------------------------------------------------------------\nKreditor: 10037   Sørensen Fastgørelse A/S\nBuchungskreis: 1000   Jalavakoski Konepaja Oy\nStichtag: 31.01.2025   Benutzer: EMAKI\n\nSt    Belegnr    BelArt Belegdatum Buchungsdatum Fälligkeit S/H          Betrag Whg  AusglBeleg\n-----------------------------------------------------------------------------------------------\n@0A@  1600000020 KA     03.01.2025 03.01.2025    03.01.2025 H         2.723,05- EUR\n@0A@  1600000027 KA     06.01.2025 06.01.2025    06.01.2025 H         1.639,81- EUR\n@0A@  1600000030 KA     07.01.2025 07.01.2025    07.01.2025 H         2.778,64- EUR\n@0A@  1600000017 KA     08.01.2025 08.01.2025    08.01.2025 H         2.740,66- EUR\n@0A@  1600000025 KA     08.01.2025 08.01.2025    08.01.2025 H         2.010,61- EUR\n@0A@  1600000011 KA     09.01.2025 09.01.2025    09.01.2025 H         2.840,21- EUR\n@0A@  1600000026 KA     09.01.2025 09.01.2025    09.01.2025 H         1.677,71- EUR\n@0A@  1600000035 KA     09.01.2025 09.01.2025    09.01.2025 H         2.988,48- EUR\n@0A@  1600000003 KA     10.01.2025 10.01.2025    10.01.2025 H         2.930,84- EUR\n@0A@  1600000022 KA     13.01.2025 13.01.2025    13.01.2025 H         1.669,69- EUR\n@0A@  1600000007 KA     14.01.2025 14.01.2025    14.01.2025 H         2.347,21- EUR\n@0A@  1600000008 KA     14.01.2025 14.01.2025    14.01.2025 H         2.512,70- EUR\n@0A@  1600000029 KA     14.01.2025 14.01.2025    14.01.2025 H           785,77- EUR\n@0A@  1600000004 KA     15.01.2025 15.01.2025    15.01.2025 H         3.124,73- EUR\n@0A@  1600000009 KA     15.01.2025 15.01.2025    15.01.2025 H         3.509,54- EUR\n@0A@  1600000034 KA     15.01.2025 15.01.2025    15.01.2025 H         1.076,55- EUR\n@0A@  1600000006 KA     16.01.2025 16.01.2025    16.01.2025 H         1.568,34- EUR\n@0A@  1600000019 KA     16.01.2025 16.01.2025    16.01.2025 H         1.374,75- EUR\n@0A@  1600000024 KA     17.01.2025 17.01.2025    17.01.2025 H           936,36- EUR\n@0A@  1600000033 KA     18.01.2025 18.01.2025    18.01.2025 H         3.070,51- EUR\n@0A@  1600000002 KA     20.01.2025 20.01.2025    20.01.2025 H           798,20- EUR\n@0A@  1600000012 KA     20.01.2025 20.01.2025    20.01.2025 H         2.813,28- EUR\n@0A@  1600000016 KA     20.01.2025 20.01.2025    20.01.2025 H         3.404,51- EUR\n@0A@  1600000023 KA     20.01.2025 20.01.2025    20.01.2025 H         3.520,68- EUR\n@0A@  1600000028 KA     21.01.2025 21.01.2025    21.01.2025 H         1.282,66- EUR\n@0A@  1600000021 KA     22.01.2025 22.01.2025    22.01.2025 H         1.924,17- EUR\n@0A@  1600000005 KA     24.01.2025 24.01.2025    24.01.2025 H         1.001,87- EUR\n@0A@  1600000013 KA     24.01.2025 24.01.2025    24.01.2025 H           623,86- EUR\n@09@  1700000002 KR     25.01.2025 27.01.2025    10.02.2025 H         3.084,66- EUR  1400000001\n@0A@  1600000014 KA     27.01.2025 27.01.2025    27.01.2025 H         1.770,75- EUR\n@0A@  1600000032 KA     27.01.2025 27.01.2025    27.01.2025 H         3.378,63- EUR\n@0A@  1700000001 KR     26.01.2025 28.01.2025    11.02.2025 H         2.835,34- EUR\n@0A@  1600000010 KA     28.01.2025 28.01.2025    28.01.2025 H         1.289,74- EUR\n@0A@  1600000015 KA     29.01.2025 29.01.2025    29.01.2025 H         2.379,95- EUR\n@0A@  1600000001 KA     30.01.2025 30.01.2025    30.01.2025 H         3.271,05- EUR\n@0A@  1600000018 KA     30.01.2025 30.01.2025    30.01.2025 H           967,80- EUR\n@0A@  1600000031 KA     30.01.2025 30.01.2025    30.01.2025 H           566,92- EUR\n@09@  1500000001 KZ     31.01.2025 31.01.2025    31.01.2025 S          1.787,48 EUR  1400000001\n@0A@  1700000003 KR     31.01.2025 31.01.2025    14.02.2025 H         3.850,08- EUR\n* Summe offen/teilweise EUR          81.282,83-\n* Summe ausgeglichen EUR                   0,00","caption":"2025-01_FBL1N_01.txt, page 1 of the rendered spool file — synthetic, built from documented SAP list conventions."},"parser":{"code":"# Generated by the overseer step of the ERP Cleanup pipeline.\n# Date: 2026-07-03\n# Generating model: claude-sonnet-5 (Claude Code subagent)\n#\n# Source doc_ids (raw documents + their accepted LLM parses, used as the sole\n# induction basis for this parser):\n#   2025-01_FBL3N_01, 2025-01_FBL3N_02, 2025-01_FBL3N_03, 2025-01_FBL3N_04,\n#   2025-02_FBL3N_01, 2025-02_FBL3N_02, 2025-02_FBL3N_03, 2025-02_FBL3N_04\n#\n# Induced from the LLM path's accepted parses; the answer key was never read.\n#\n# Document type: SAP FBL3N \"Sachkonten Einzelpostenliste\" (G/L account line\n# item list). Pure stdlib, deterministic, no I/O.\n\nimport re\nfrom datetime import datetime\n\n__all__ = [\"parse\"]\n\n_DATE = r'\\d{2}\\.\\d{2}\\.\\d{4}'\n_MONEY = r'[\\d.]+,\\d{2}-?'\n\n# --- Header key/value lines -------------------------------------------------\n# These appear once, near the top of the document, in the order:\n#   Buchungskreis: <code>   <company name>            (company name discarded)\n#   Sachkonto: <code>   <account name>\n#   Zeitraum: <DD.MM.YYYY> - <DD.MM.YYYY>\n#   Datum: <DD.MM.YYYY>   Benutzer: <user>\n#   [Selektionsvariante: <name>]                        (optional, discarded)\n\n_RE_BUCHUNGSKREIS = re.compile(r'^Buchungskreis:\\s*(\\S+)', re.MULTILINE)\n_RE_SACHKONTO = re.compile(r'^Sachkonto:\\s*(\\S+)\\s+(.+)$', re.MULTILINE)\n_RE_ZEITRAUM = re.compile(\n    r'^Zeitraum:\\s*(' + _DATE + r')\\s*-\\s*(' + _DATE + r')\\s*$', re.MULTILINE\n)\n_RE_DATUM = re.compile(\n    r'^Datum:\\s*(' + _DATE + r')\\s+Benutzer:\\s*(\\S+)', re.MULTILINE\n)\n\n# The column header repeats on every page (form-feed pagination). Its exact\n# inter-column spacing varies from document to document (the numeric columns\n# are right-aligned and can be wider than their labels), so the check below\n# only fixes the label order/identity, not column widths.\n_RE_COLUMN_HEADER = re.compile(\n    r'^Buch\\.datum\\s+Belegnr\\s+BelArt\\s+S/H\\s+Betrag\\s+Steuerbetr\\.\\s+'\n    r'AusglBeleg\\s+Referenz\\s+Text\\s*$',\n    re.MULTILINE,\n)\n\n_RE_TITLE = 'Sachkonten Einzelpostenliste'\n\n# --- Line item rows ----------------------------------------------------------\n# Buch.datum Belegnr    BelArt S/H          Betrag   Steuerbetr. AusglBeleg Referenz  Text\n# Belegnr (document number) and AusglBeleg (clearing document) are always\n# 10-digit SAP document numbers. AusglBeleg and Referenz are both optional\n# (blank cell -> column simply absent from the row, since these are\n# whitespace/token-separated, not fixed-column-sliced). Referenz is always an\n# uppercase-letters-then-digits code, which is what lets us tell it apart\n# from Text (free-form, mixed-case German words, possibly multi-word).\n_RE_LINE = re.compile(\n    r'^(?P<date>' + _DATE + r')\\s+'\n    r'(?P<docnum>\\d{10})\\s+'\n    r'(?P<doctype>[A-Z]{2})\\s+'\n    r'(?P<dc>[SH])\\s+'\n    r'(?P<amount>' + _MONEY + r')\\s+'\n    r'(?P<tax>' + _MONEY + r')\\s+'\n    r'(?:(?P<clearing>\\d{10})\\s+)?'\n    r'(?:(?P<reference>[A-Z]+\\d+)\\s+)?'\n    r'(?P<text>\\S.*)$'\n)\n_RE_DATE_START = re.compile(r'^' + _DATE)\n\n# --- Totals block (end of report, once) --------------------------------------\n# * Summe Soll        <amount>\n# * Summe Haben        <amount>\n# * Saldo              <amount>\n# * Summe Steuerbetrag <amount>   (not part of the output schema; ignored)\n_RE_TOTALS = re.compile(\n    r'^\\*\\s*(Summe Soll|Summe Haben|Saldo|Summe Steuerbetrag)\\s+(' + _MONEY + r')\\s*$'\n)\n\n\ndef _german_amount_to_float(raw):\n    \"\"\"'1.234,56' -> 1234.56 ; trailing '-' -> negative. Rounded to 2 dp.\"\"\"\n    s = raw.strip()\n    negative = s.endswith('-')\n    if negative:\n        s = s[:-1]\n    s = s.replace('.', '').replace(',', '.')\n    try:\n        value = float(s)\n    except ValueError:\n        raise ValueError(\"could not parse amount %r\" % (raw,))\n    if negative:\n        value = -value\n    return round(value, 2)\n\n\ndef _german_date_to_iso(raw):\n    try:\n        dt = datetime.strptime(raw.strip(), '%d.%m.%Y')\n    except ValueError:\n        raise ValueError(\"could not parse date %r\" % (raw,))\n    return dt.strftime('%Y-%m-%d')\n\n\ndef parse(text: str) -> dict:\n    \"\"\"Parse an SAP FBL3N 'Sachkonten Einzelpostenliste' text export.\n\n    Returns a dict with keys 'header', 'line_items', 'totals' matching the\n    accepted-parse JSON schema for this document type. Raises ValueError if\n    the document's structure does not match the induced FBL3N layout.\n    \"\"\"\n    if not text or not text.strip():\n        raise ValueError(\"empty document\")\n\n    text = text.replace('\\r\\n', '\\n').replace('\\r', '\\n')\n\n    if _RE_TITLE not in text:\n        raise ValueError(\n            \"missing report title %r -- not an FBL3N Sachkonten \"\n            \"Einzelpostenliste export\" % (_RE_TITLE,)\n        )\n\n    m = _RE_BUCHUNGSKREIS.search(text)\n    if not m:\n        raise ValueError(\"missing 'Buchungskreis:' header line\")\n    company_code = m.group(1)\n\n    m = _RE_SACHKONTO.search(text)\n    if not m:\n        raise ValueError(\"missing 'Sachkonto:' header line\")\n    gl_account = m.group(1)\n    gl_account_name = m.group(2).strip()\n\n    m = _RE_ZEITRAUM.search(text)\n    if not m:\n        raise ValueError(\"missing or unparseable 'Zeitraum:' header line\")\n    period_from = _german_date_to_iso(m.group(1))\n    period_to = _german_date_to_iso(m.group(2))\n\n    m = _RE_DATUM.search(text)\n    if not m:\n        raise ValueError(\"missing or unparseable 'Datum:'/'Benutzer:' header line\")\n    report_date = _german_date_to_iso(m.group(1))\n    user = m.group(2)\n\n    if not _RE_COLUMN_HEADER.search(text):\n        raise ValueError(\n            \"unknown column set: line-item column header does not match the \"\n            \"induced 'Buch.datum Belegnr BelArt S/H Betrag Steuerbetr. \"\n            \"AusglBeleg Referenz Text' layout\"\n        )\n\n    header = {\n        \"company_code\": company_code,\n        \"gl_account\": gl_account,\n        \"gl_account_name\": gl_account_name,\n        \"period_from\": period_from,\n        \"period_to\": period_to,\n        \"report_date\": report_date,\n        \"user\": user,\n    }\n\n    line_items = []\n    totals_raw = {}\n\n    for raw_line in text.split('\\n'):\n        line = raw_line.rstrip()\n        if not line.strip():\n            continue\n\n        if _RE_DATE_START.match(line):\n            m = _RE_LINE.match(line)\n            if not m:\n                raise ValueError(\"unparseable line-item row: %r\" % (line,))\n            line_items.append({\n                \"posting_date\": _german_date_to_iso(m.group('date')),\n                \"document_number\": m.group('docnum'),\n                \"document_type\": m.group('doctype'),\n                \"debit_credit\": m.group('dc'),\n                \"amount\": _german_amount_to_float(m.group('amount')),\n                \"tax_amount\": _german_amount_to_float(m.group('tax')),\n                \"clearing_document\": m.group('clearing'),\n                \"reference\": m.group('reference'),\n                \"text\": m.group('text').strip(),\n            })\n            continue\n\n        if line.lstrip().startswith('*'):\n            m = _RE_TOTALS.match(line.strip())\n            if not m:\n                raise ValueError(\"unparseable totals row: %r\" % (line,))\n            label, amount_raw = m.group(1), m.group(2)\n            totals_raw[label] = _german_amount_to_float(amount_raw)\n            continue\n\n        # Furniture: report title, dashed separators, repeated column\n        # headers, pagination (\"Seite N\"), header key/value lines already\n        # captured above, optional Selektionsvariante line, etc. Skip.\n\n    if not line_items:\n        raise ValueError(\"no line items found\")\n\n    missing = [\n        label for label in (\"Summe Soll\", \"Summe Haben\", \"Saldo\")\n        if label not in totals_raw\n    ]\n    if missing:\n        raise ValueError(\"missing totals line(s): %s\" % (\", \".join(missing),))\n\n    totals = {\n        \"sum_debit\": totals_raw[\"Summe Soll\"],\n        \"sum_credit\": totals_raw[\"Summe Haben\"],\n        \"balance\": totals_raw[\"Saldo\"],\n    }\n\n    return {\n        \"header\": header,\n        \"line_items\": line_items,\n        \"totals\": totals,\n    }\n","caption":"parser_fbl3n.py — generated by the overseer, verbatim. Pure standard library; induced from the first eight accepted parses; the answer key was never read."}};
+
+(function(){
+  "use strict";
+  if (!HPX) return;
+  const $ = id => document.getElementById(id);
+  const PCOL = {d:"var(--hpx-c-det)", l:"var(--hpx-c-llm)", f:"var(--hpx-c-fb)"};
+  const PNAME = {d:"deterministic parser", l:"model (discovery)", f:"model (fallback)"};
+  const CNAME = {R:"routine", V:"variant", F:"planted failure", S:"silent error"};
+  const NS = "http://www.w3.org/2000/svg";
+  const fmt$ = v => "$" + v.toFixed(2);
+
+  /* ---- the horror ---- */
+  $("hpx-spool").textContent = HPX.horror.text;
+  $("hpx-spool-cap").textContent = HPX.horror.caption;
+
+  /* ---- stat tiles ---- */
+  const tiles = [
+    [HPX.summary.det_share_pct, "of the stream ends up on plain code"],
+    [HPX.summary.det_acc_excl_pct, "deterministic field accuracy, exact"],
+    [HPX.summary.llm_acc_pct, "model-path field accuracy, exact"],
+    ["≈" + HPX.summary.saving_pct, "estimated saving vs all-model · 240 docs"],
+  ];
+  $("hpx-tiles").innerHTML = tiles.map(t =>
+    `<div class="hpx-tile"><div class="hpx-tile-v">${t[0]}</div><div class="hpx-tile-l hpx-mono">${t[1]}</div></div>`).join("");
+  $("hpx-det-incl").textContent = HPX.summary.det_acc_incl_pct + " – the difference is that document";
+
+  /* ---- scorecard ---- */
+  $("hpx-scorecard").querySelector("tbody").innerHTML = HPX.scorecard.map(r =>
+    `<tr><td>${r.cls} · ${r.n}</td><td>${r.designed}</td><td>${r.dev ? `<span class="hpx-dev">${r.actual}</span>` : r.actual}</td></tr>`).join("");
+
+  /* ---- geometry helpers ---- */
+  function el(name, attrs, parent){
+    const e = document.createElementNS(NS, name);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  /* ---- timeline ---- */
+  const TL = {w:960, h:96, top:18, bh:52};
+  const tsvg = $("hpx-timeline");
+  const step = TL.w / HPX.docs.length;
+  const ticks = [];
+  HPX.docs.forEach((d,i) => {
+    const t = el("rect", {x:(i*step+0.6).toFixed(2), y:TL.top, width:Math.max(step-1.2,1.6).toFixed(2), height:TL.bh,
+      fill:PCOL[d.p], "data-i":i, rx:1}, tsvg);
+    if (d.c === "S"){ t.setAttribute("stroke","var(--hpx-ink)"); t.setAttribute("stroke-width","2"); }
+    ticks.push(t);
+  });
+  // month labels along the base
+  for (let m=1; m<=12; m+=1){
+    const first = HPX.docs.findIndex(d => d.m === m);
+    if (first < 0) continue;
+    el("line", {x1:first*step, x2:first*step, y1:TL.top+TL.bh, y2:TL.top+TL.bh+6, stroke:"var(--hpx-rule)"}, tsvg);
+    const tx = el("text", {x:first*step+3, y:TL.top+TL.bh+20, "font-family":"Geist Mono,monospace","font-size":"10","fill":"var(--hpx-mute2)"}, tsvg);
+    tx.textContent = "M" + m;
+  }
+
+  /* ---- cost chart ---- */
+  const C = {w:960, h:320, l:56, r:150, t:16, b:34};
+  const csvg = $("hpx-cost");
+  const maxY = HPX.docs[HPX.docs.length-1].cf * 1.06;
+  const X = i => C.l + (i/(HPX.docs.length-1)) * (C.w - C.l - C.r);
+  const Y = v => C.t + (1 - v/maxY) * (C.h - C.t - C.b);
+  // recessive y grid + labels
+  for (let g=0; g<=4; g+=1){
+    const v = maxY * g/4;
+    el("line", {x1:C.l, x2:C.w-C.r, y1:Y(v), y2:Y(v), stroke:"var(--hpx-rule-soft)"}, csvg);
+    const t = el("text", {x:C.l-8, y:Y(v)+4, "text-anchor":"end","font-family":"Geist Mono,monospace","font-size":"10",fill:"var(--hpx-mute2)"}, csvg);
+    t.textContent = "$" + Math.round(v);
+  }
+  const xt = el("text", {x:C.l, y:C.h-8, "font-family":"Geist Mono,monospace","font-size":"10",fill:"var(--hpx-mute2)"}, csvg);
+  xt.textContent = "documents, stream order →";
+  // activation markers
+  HPX.activations.forEach(a => {
+    el("line", {x1:X(a.i), x2:X(a.i), y1:Y(0)-4, y2:Y(0)-26, stroke:"var(--hpx-c-fb)","stroke-width":"2","data-act":a.type, "class":"hpx-act"}, csvg);
+  });
+  const pathFrom = key => HPX.docs.map((d,i) => (i? "L":"M") + X(i).toFixed(1) + " " + Y(d[key]).toFixed(1)).join(" ");
+  const cfPath = el("path", {d:pathFrom("cf"), fill:"none", stroke:"var(--hpx-c-llm)","stroke-width":"2"}, csvg);
+  const hyPath = el("path", {d:pathFrom("ch"), fill:"none", stroke:"var(--hpx-c-det)","stroke-width":"2"}, csvg);
+  // direct labels at line ends
+  const lastD = HPX.docs[HPX.docs.length-1];
+  [["all-model", lastD.cf, "var(--hpx-c-llm)"], ["hybrid", lastD.ch, "var(--hpx-c-det)"]].forEach(L => {
+    const t = el("text", {x:C.w-C.r+8, y:Y(L[1])+4, "font-family":"Geist Mono,monospace","font-size":"11", fill:L[2]}, csvg);
+    t.textContent = L[0] + " " + fmt$(L[1]) + "*";
+  });
+  const cross = el("line", {x1:-9, x2:-9, y1:C.t, y2:C.h-C.b, stroke:"var(--hpx-mute2)","stroke-width":"1","stroke-dasharray":"3 3"}, csvg);
+
+  /* ---- play / scrub ---- */
+  const clip = el("clipPath", {id:"hpx-clip"}, csvg);
+  const clipRect = el("rect", {x:0, y:0, width:C.w, height:C.h}, clip);
+  cfPath.setAttribute("clip-path","url(#hpx-clip)");
+  hyPath.setAttribute("clip-path","url(#hpx-clip)");
+  const scrub = $("hpx-scrub"), monthlbl = $("hpx-monthlbl");
+  function setPos(i){
+    i = Math.max(0, Math.min(239, i|0));
+    clipRect.setAttribute("width", X(i)+1);
+    ticks.forEach((t,k) => t.setAttribute("opacity", k<=i ? "1" : "0.16"));
+    monthlbl.textContent = "2025-" + String(HPX.docs[i].m).padStart(2,"0");
+    scrub.value = i;
+  }
+  setPos(239);
+  scrub.addEventListener("input", () => setPos(+scrub.value));
+  let timer = null;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  $("hpx-play").addEventListener("click", () => {
+    if (timer){ clearInterval(timer); timer=null; $("hpx-play").textContent="Play"; return; }
+    if (reduced){ setPos(239); return; }
+    let i = 0; setPos(0); $("hpx-play").textContent="Stop";
+    timer = setInterval(() => { i += 2; setPos(i);
+      if (i >= 239){ clearInterval(timer); timer=null; $("hpx-play").textContent="Play"; } }, 40);
+  });
+
+  /* ---- tooltips + drill ---- */
+  const tlTip = $("hpx-tl-tip"), costTip = $("hpx-cost-tip"), drill = $("hpx-drill");
+  function docLine(d){
+    return `<b>${d.id}</b><br>${PNAME[d.p]} · class ${d.c} (${CNAME[d.c]})<br>` +
+      (d.p==="d" ? `marginal cost ≈ $0` : `est. cost ${fmt$(d.cost)}`) +
+      (d.w ? `<br><b>${d.w}</b> field${d.w>1?"s":""} wrong vs answer key` : `<br>0 fields wrong`);
+  }
+  function place(tip, fig, clientX, clientY, html){
+    const r = fig.getBoundingClientRect();
+    tip.innerHTML = html;
+    tip.style.left = (clientX - r.left) + "px";
+    tip.style.top  = Math.max(clientY - r.top, 30) + "px";
+    tip.style.opacity = "1";
+  }
+  tsvg.addEventListener("mousemove", e => {
+    const i = e.target.getAttribute && e.target.getAttribute("data-i");
+    if (i === null || i === undefined){ tlTip.style.opacity="0"; return; }
+    place(tlTip, $("hpx-timeline-fig"), e.clientX, e.clientY, docLine(HPX.docs[+i]));
+  });
+  tsvg.addEventListener("mouseleave", () => tlTip.style.opacity="0");
+  tsvg.addEventListener("click", e => {
+    const i = e.target.getAttribute && e.target.getAttribute("data-i");
+    if (i === null || i === undefined) return;
+    const d = HPX.docs[+i];
+    drill.innerHTML = docLine(d).replaceAll("<br>", " · ") +
+      (d.c==="S" ? ` <span class="hpx-flag">← every automated check passed; only the answer key disagrees</span>` : "") +
+      (d.c==="F" && d.p==="f" ? ` <em>(the parser refused it – by design)</em>` : "") +
+      (d.c==="F" && d.p==="d" ? ` <span class="hpx-flag">← designed to fail, parsed correctly – the deviation we report</span>` : "");
+    $("hpx-parser-exhibit").classList.remove("hpx-open");
+  });
+  csvg.addEventListener("mousemove", e => {
+    const r = csvg.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (C.w / r.width);
+    const i = Math.round((px - C.l) / (C.w - C.l - C.r) * (HPX.docs.length-1));
+    if (i < 0 || i > 239){ costTip.style.opacity="0"; cross.setAttribute("x1",-9); cross.setAttribute("x2",-9); return; }
+    const d = HPX.docs[i];
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i));
+    place(costTip, $("hpx-cost-fig"), e.clientX, e.clientY,
+      `doc ${i+1} · 2025-${String(d.m).padStart(2,"0")}<br>hybrid <b>${fmt$(d.ch)}</b> · all-model <b>${fmt$(d.cf)}</b>`);
+  });
+  csvg.addEventListener("mouseleave", () => { costTip.style.opacity="0"; cross.setAttribute("x1",-9); cross.setAttribute("x2",-9); });
+  csvg.addEventListener("click", e => {
+    const act = e.target.getAttribute && e.target.getAttribute("data-act");
+    if (!act) return;
+    drill.innerHTML = `<b>parser generated · ${act}</b> · written by the overseer from the first eight accepted parses · activated only after reproducing them exactly · one-time cost, then ≈ $0 per document`;
+    $("hpx-parser-cap").textContent = HPX.parser.caption;
+    $("hpx-parser-code").textContent = HPX.parser.code;
+    $("hpx-parser-exhibit").classList.add("hpx-open");
+  });
+
+  /* ---- iframe height reporting (progressive enhancement) ---- */
+  function postHeight(){ try{ parent.postMessage({hpx:"height", value:document.documentElement.scrollHeight}, "*"); }catch(_e){} }
+  addEventListener("load", postHeight); addEventListener("resize", postHeight);
+})();
+</script>
+</body>
+</html>

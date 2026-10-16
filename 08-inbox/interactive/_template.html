@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>150 emails, one pipeline – a Hapax case study</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Geist+Mono:wght@400;500&display=swap" />
+<style>
+:root{
+  --hpx-bg:#FBFAF5; --hpx-ink:#1A1410; --hpx-oxblood:#7A2018; --hpx-navy:#1F2A52;
+  --hpx-wine:#A8352A; --hpx-indigo:#41529E; --hpx-gold:#B68A2C; --hpx-grey:#665E58; --hpx-beige:#EFE5CE;
+  --hpx-mute:rgba(26,20,16,.62); --hpx-mute2:rgba(26,20,16,.42); --hpx-mute3:rgba(26,20,16,.22);
+  --hpx-rule:rgba(26,20,16,.16); --hpx-rule-soft:rgba(26,20,16,.08);
+  --hpx-serif:"Cormorant Garamond",Georgia,serif; --hpx-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+}
+.hpx-page,.hpx-page *,.hpx-page *::before,.hpx-page *::after{box-sizing:border-box}
+.hpx-page{background:var(--hpx-bg);color:var(--hpx-ink);font-family:var(--hpx-serif);font-size:18px;line-height:1.55;margin:0}
+.hpx-wrap{max-width:1180px;margin:0 auto;padding:0 22px}
+.hpx-mono{font-family:var(--hpx-mono);font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--hpx-mute)}
+.hpx-page h1{font-size:clamp(28px,4.6vw,44px);font-weight:500;line-height:1.14;margin:14px 0 14px;max-width:24ch}
+.hpx-page h2{font-size:clamp(21px,3vw,27px);font-weight:500;margin:0 0 10px}
+.hpx-page h3{font-size:19px;font-weight:600;margin:0 0 6px}
+.hpx-page h4{font-size:15.5px;font-weight:600;margin:0 0 6px}
+.hpx-page p{margin:0 0 13px;max-width:70ch}
+.hpx-page p:last-child{margin-bottom:0}
+.hpx-page em{font-style:italic}
+.hpx-head{padding:40px 0 22px}
+.hpx-lede{font-size:19px;color:var(--hpx-mute);max-width:66ch}
+.hpx-byline{font-style:italic;color:var(--hpx-mute2);font-size:15.5px;max-width:70ch;margin:6px 0 16px}
+.hpx-honesty{border:1px solid var(--hpx-rule);background:var(--hpx-beige);padding:14px 18px;margin:16px 0 0;font-size:16px;max-width:none}
+.hpx-honesty strong{color:var(--hpx-oxblood)}
+.hpx-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--hpx-rule);border:1px solid var(--hpx-rule);margin:22px 0 0}
+.hpx-stat{background:var(--hpx-bg);padding:13px 15px}
+.hpx-stat b{display:block;font-size:24px;font-weight:600;line-height:1.1}
+.hpx-stat span{font-family:var(--hpx-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--hpx-mute)}
+
+/* ---- tab nav ---- */
+.hpx-nav{position:sticky;top:0;z-index:20;background:var(--hpx-bg);border-top:1px solid var(--hpx-rule);border-bottom:1px solid var(--hpx-rule)}
+.hpx-nav-row{display:flex;flex-wrap:wrap;gap:0}
+.hpx-navbtn{font-family:var(--hpx-mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;background:none;border:none;
+  border-right:1px solid var(--hpx-rule-soft);color:var(--hpx-mute);padding:13px 16px;cursor:pointer;flex:1 1 auto;text-align:center}
+.hpx-navbtn:hover{background:var(--hpx-rule-soft);color:var(--hpx-ink)}
+.hpx-navbtn.is-active{color:var(--hpx-bg);background:var(--hpx-oxblood)}
+.hpx-view{padding:30px 0 10px}
+.hpx-sec{padding:26px 0;border-top:1px solid var(--hpx-rule-soft)}
+.hpx-sec:first-child{border-top:none;padding-top:6px}
+.hpx-intro{color:var(--hpx-mute);font-size:16.5px}
+
+/* ---- buttons / chips ---- */
+.hpx-btn{font-family:var(--hpx-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--hpx-ink);
+  background:none;color:var(--hpx-ink);padding:8px 13px;cursor:pointer;border-radius:1px}
+.hpx-btn:hover{background:var(--hpx-ink);color:var(--hpx-bg)}
+.hpx-btn.is-active{background:var(--hpx-oxblood);border-color:var(--hpx-oxblood);color:var(--hpx-bg)}
+.hpx-chip{display:inline-block;font-family:var(--hpx-mono);font-size:10.5px;letter-spacing:.05em;padding:3px 9px;border:1px solid var(--hpx-rule);
+  border-radius:2px;color:var(--hpx-mute);white-space:nowrap}
+.hpx-chip--met{border-color:var(--hpx-indigo);color:var(--hpx-indigo);background:rgba(65,82,158,.07)}
+.hpx-chip--notmet{border-color:var(--hpx-wine);color:var(--hpx-wine);background:rgba(168,53,42,.08)}
+.hpx-chip--auto_send{border-color:var(--hpx-indigo);color:var(--hpx-indigo);background:rgba(65,82,158,.07)}
+.hpx-chip--human_queue{border-color:var(--hpx-gold);color:var(--hpx-gold);background:rgba(182,138,44,.08)}
+.hpx-chip--escalate{border-color:var(--hpx-wine);color:var(--hpx-wine);background:rgba(168,53,42,.08)}
+.hpx-chip--pass{border-color:var(--hpx-indigo);color:var(--hpx-indigo)}
+.hpx-chip--fail{border-color:var(--hpx-wine);color:var(--hpx-wine)}
+.hpx-chip--misroute{border-color:var(--hpx-oxblood);color:var(--hpx-oxblood);background:rgba(122,32,24,.07)}
+.hpx-quote{border-left:2px solid var(--hpx-gold);background:var(--hpx-bg);padding:8px 14px;margin:12px 0;font-size:16px;color:var(--hpx-ink);max-width:68ch}
+.hpx-table-wrap{overflow-x:auto}
+.hpx-table{width:100%;border-collapse:collapse;font-size:15.5px;margin:8px 0 18px}
+.hpx-table th{font-family:var(--hpx-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--hpx-mute);text-align:left;font-weight:500;padding:7px 9px;border-bottom:1px solid var(--hpx-rule)}
+.hpx-table td{padding:8px 9px;border-bottom:1px solid var(--hpx-rule-soft);vertical-align:top}
+.hpx-num{font-family:var(--hpx-mono);font-size:13px;white-space:nowrap}
+.hpx-expect-note{font-size:13.5px;color:var(--hpx-mute)}
+[hidden]{display:none!important}
+
+/* ---- view 1: inbox browser ---- */
+.hpx-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0 16px}
+.hpx-select{font-family:var(--hpx-mono);font-size:12.5px;border:1px solid var(--hpx-ink);background:var(--hpx-bg);color:var(--hpx-ink);padding:7px 10px}
+.hpx-checklabel{font-family:var(--hpx-mono);font-size:12px;color:var(--hpx-mute);display:flex;align-items:center;gap:5px}
+.hpx-search{font-family:var(--hpx-serif);font-size:14.5px;border:1px solid var(--hpx-ink);background:var(--hpx-bg);color:var(--hpx-ink);padding:6px 10px;min-width:170px}
+.hpx-inbox-grid{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start}
+.hpx-inbox-list{border:1px solid var(--hpx-rule);max-height:640px;overflow-y:auto}
+.hpx-inbox-card{padding:10px 12px;border-bottom:1px solid var(--hpx-rule-soft);cursor:pointer;font-size:14px}
+.hpx-inbox-card:hover{background:var(--hpx-rule-soft)}
+.hpx-inbox-card.is-selected{background:var(--hpx-beige)}
+.hpx-inbox-card b{display:block;font-size:14.5px}
+.hpx-inbox-card .hpx-imeta{font-family:var(--hpx-mono);font-size:10px;color:var(--hpx-mute);margin:2px 0 5px}
+.hpx-inbox-empty{padding:16px;color:var(--hpx-mute);font-size:14.5px}
+.hpx-detail{border:1px solid var(--hpx-rule);padding:18px 20px;min-height:200px}
+.hpx-detail-head{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:12px}
+.hpx-detail-head h3{margin:0}
+.hpx-detail-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.hpx-detail-col h4{font-family:var(--hpx-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--hpx-oxblood);border-bottom:1px solid var(--hpx-rule);padding-bottom:5px;margin-bottom:10px}
+.hpx-thread-msg{border-left:2px solid var(--hpx-rule);padding:6px 12px;margin:0 0 12px;font-size:14.5px}
+.hpx-thread-msg--staff{border-left-color:var(--hpx-indigo)}
+.hpx-thread-msg--current{border-left-color:var(--hpx-oxblood);background:var(--hpx-beige)}
+.hpx-thread-msg-meta{font-family:var(--hpx-mono);font-size:10px;color:var(--hpx-mute);margin-bottom:4px}
+.hpx-thread-msg-body{white-space:pre-wrap;font-size:14px}
+.hpx-trace-block{margin:0 0 16px}
+.hpx-trace-block:last-child{margin-bottom:0}
+.hpx-draft-body{white-space:pre-wrap;border:1px solid var(--hpx-rule);background:var(--hpx-bg);padding:10px 12px;font-size:14px;margin:6px 0}
+.hpx-gate-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:13.5px}
+.hpx-gate-reasons{font-size:12.5px;color:var(--hpx-mute);margin:2px 0 0 0}
+.hpx-commitment{border:1px solid var(--hpx-rule-soft);padding:6px 9px;margin:4px 0;font-size:13px}
+.hpx-question-row{font-size:13.5px;margin:3px 0}
+.hpx-promise-box{border:2px solid var(--hpx-oxblood);background:var(--hpx-beige);padding:10px 12px;margin:8px 0;font-size:13.5px}
+.hpx-key-toggle-wrap{margin-top:16px;border-top:1px solid var(--hpx-rule);padding-top:12px}
+.hpx-key-panel{border:1px solid var(--hpx-rule);padding:12px 14px;margin-top:8px;font-size:14px;background:var(--hpx-bg)}
+.hpx-clause-tag{display:inline-block;font-family:var(--hpx-mono);font-size:11px;border:1px solid var(--hpx-grey);color:var(--hpx-grey);padding:1px 6px;margin:0 4px 4px 0;border-radius:2px}
+.hpx-clause-detail{font-size:13px;color:var(--hpx-mute);margin:2px 0 8px 0}
+
+/* ---- view 2: river ---- */
+.hpx-river-wrap{border:1px solid var(--hpx-rule);padding:14px 16px;margin:14px 0}
+.hpx-river-svg{display:block;width:100%;height:auto}
+.hpx-river-node{cursor:pointer}
+.hpx-river-node:hover rect{opacity:.82}
+.hpx-river-link{cursor:pointer;transition:opacity .15s}
+.hpx-river-link:hover{opacity:.85}
+.hpx-river-label{font-family:var(--hpx-mono);font-size:10.5px;fill:var(--hpx-ink)}
+.hpx-river-count{font-family:var(--hpx-mono);font-size:10px;fill:var(--hpx-mute)}
+.hpx-river-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12.5px;color:var(--hpx-mute)}
+.hpx-river-legend span{display:inline-flex;align-items:center;gap:6px}
+.hpx-swatch{display:inline-block;width:12px;height:12px;border-radius:2px}
+
+/* ---- view 3: scoreboard ---- */
+.hpx-trap-detail{border-top:1px solid var(--hpx-rule-soft);padding:8px 0 2px}
+.hpx-trap-detail-row{font-size:13px;padding:3px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hpx-trap-detail-row .hpx-num{color:var(--hpx-mute)}
+.hpx-trap-summary{cursor:pointer;font-family:var(--hpx-mono);font-size:11px;color:var(--hpx-indigo);background:none;border:none;padding:2px 0}
+
+.hpx-foot{padding:28px 0 44px;border-top:1px solid var(--hpx-rule);font-size:14.5px;color:var(--hpx-mute)}
+@media (max-width:760px){.hpx-inbox-grid{grid-template-columns:1fr}.hpx-detail-cols{grid-template-columns:1fr}}
+@media (max-width:560px){.hpx-page{font-size:16.5px}.hpx-stat b{font-size:20px}.hpx-navbtn{font-size:10.5px;padding:11px 8px}}
+@media (prefers-reduced-motion: reduce){.hpx-page *{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="hpx-page" id="hpx-root">
+
+<header class="hpx-head hpx-wrap">
+  <div class="hpx-mono">Hapax · Case study · Straight through, safely</div>
+  <h1 id="hpx-title"></h1>
+  <p class="hpx-byline" id="hpx-byline"></p>
+  <p class="hpx-lede" id="hpx-lede"></p>
+  <div class="hpx-honesty" id="hpx-honesty"></div>
+  <div class="hpx-stats" id="hpx-stat-strip"></div>
+</header>
+
+<nav class="hpx-nav">
+  <div class="hpx-wrap hpx-nav-row">
+    <button class="hpx-navbtn" data-view="inbox">1 · The inbox</button>
+    <button class="hpx-navbtn" data-view="river">2 · The river</button>
+    <button class="hpx-navbtn" data-view="scoreboard">3 · The scoreboard</button>
+  </div>
+</nav>
+
+<!-- ============================= VIEW 1: INBOX ============================= -->
+<section class="hpx-view hpx-wrap" id="hpx-view-inbox" hidden>
+  <div class="hpx-sec">
+    <h2 id="hpx-inbox-heading"></h2>
+    <p class="hpx-intro" id="hpx-inbox-intro"></p>
+    <div class="hpx-filters">
+      <label class="hpx-mono" id="hpx-lbl-route-filter">Route <select class="hpx-select" id="hpx-filter-route"></select></label>
+      <label class="hpx-mono" id="hpx-lbl-intent-filter">Intent <select class="hpx-select" id="hpx-filter-intent"></select></label>
+      <label class="hpx-mono" id="hpx-lbl-trap-filter">Trap <select class="hpx-select" id="hpx-filter-trap"></select></label>
+      <label class="hpx-checklabel"><input type="checkbox" id="hpx-filter-misroute"/> <span id="hpx-lbl-misroute-only">Misroutes only</span></label>
+      <input class="hpx-search" id="hpx-search" type="text" />
+      <button class="hpx-btn" id="hpx-clear-filters"></button>
+      <span class="hpx-mono" id="hpx-filter-count"></span>
+    </div>
+    <div class="hpx-inbox-grid">
+      <div class="hpx-inbox-list" id="hpx-inbox-list"></div>
+      <div id="hpx-inbox-detail"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================= VIEW 2: RIVER ============================= -->
+<section class="hpx-view hpx-wrap" id="hpx-view-river" hidden>
+  <div class="hpx-sec">
+    <h2 id="hpx-river-heading"></h2>
+    <p class="hpx-intro" id="hpx-river-intro"></p>
+    <div class="hpx-river-wrap" id="hpx-river-chart"></div>
+    <p class="hpx-expect-note" id="hpx-river-note"></p>
+  </div>
+</section>
+
+<!-- ============================= VIEW 3: SCOREBOARD ============================= -->
+<section class="hpx-view hpx-wrap" id="hpx-view-scoreboard" hidden>
+  <div class="hpx-sec">
+    <h2 id="hpx-score-heading"></h2>
+    <p class="hpx-intro" id="hpx-score-intro"></p>
+    <div class="hpx-stats" id="hpx-score-stats"></div>
+  </div>
+  <div class="hpx-sec">
+    <h3 id="hpx-expect-heading"></h3>
+    <div class="hpx-table-wrap"><table class="hpx-table" id="hpx-expect-table"></table></div>
+  </div>
+  <div class="hpx-sec">
+    <h3 id="hpx-trap-heading"></h3>
+    <p class="hpx-intro" id="hpx-trap-intro"></p>
+    <div class="hpx-table-wrap"><table class="hpx-table" id="hpx-trap-table"></table></div>
+  </div>
+</section>
+
+<footer class="hpx-foot hpx-wrap">
+  <p id="hpx-foot-note"></p>
+</footer>
+
+</div>
+
+<script type="application/json" id="hpx-data">/*__HPX_DATA_JSON__*/</script>
+<script>
+(function(){
+  "use strict";
+
+  // ------------------------------------------------------------------
+  // STRINGS -- every reader-facing string on this page. Plain functional
+  // copy only; this block holds all of it, so copy changes touch nothing else.
+  // ------------------------------------------------------------------
+  var STRINGS = {
+    title: "150 emails, one pipeline",
+    byline: "Haapaharju Oy, an invented equipment-rental firm in Oulu. A straight-through-processing case study.",
+    lede: "Every inbound email went through the same five stages: classify, retrieve the policy and thread history, draft a reply, run 3 deterministic gates, route. This page shows the pipeline’s logged decisions for all 150 emails, a flow diagram of how they were routed, and the pre-registered scoreboard. 3 of 6 expectations were met.",
+    honesty_strong: "Trace viewer. ",
+    honesty_rest: "This page displays what the pipeline logged and what the held-out answer key records as the correct outcome. It does not re-rank emails or compute new verdicts. Every MET / NOT MET and every number comes from the frozen marking pass in code/mark.py.",
+    stat_emails: "inbound emails",
+    stat_threads: "threads",
+    stat_auto_send: "auto-sent",
+    stat_human_queue: "to human queue",
+    stat_escalate: "escalated",
+
+    nav_inbox: "1 · The inbox",
+    nav_river: "2 · The river",
+    nav_scoreboard: "3 · The scoreboard",
+
+    inbox_heading: "Browse all 150 emails",
+    inbox_intro: "Select any email to see the customer’s message and thread history alongside the pipeline’s full decision trace. The answer key sits behind a toggle at the bottom.",
+    lbl_route_filter: "Route",
+    lbl_intent_filter: "Intent",
+    lbl_trap_filter: "Trap",
+    lbl_misroute_only: "Misroutes only",
+    search_placeholder: "Search subject, customer, email id…",
+    clear_filters: "Clear filters",
+    filter_count_suffix: " of 150 emails shown",
+    opt_all_routes: "All routes",
+    opt_all_intents: "All intent classes",
+    opt_all_traps: "All trap types",
+    inbox_empty: "No emails match these filters.",
+    inbox_pick_prompt: "Select an email on the left to see its full trace.",
+
+    detail_thread_heading: "Customer message & thread history",
+    detail_trace_heading: "Pipeline trace",
+    detail_this_message: "this message",
+    detail_customer_label: "Customer",
+    detail_staff_label: "Staff",
+    detail_intent_label: "Intent class",
+    detail_rationale_label: "Classification rationale",
+    detail_route_label: "Route",
+    detail_route_reason_label: "Reason",
+    detail_escalate_shortcut: "Escalated on classification. No reply was drafted and no gates ran.",
+    detail_draft_heading: "Drafted reply",
+    detail_commitments_heading: "Commitments in the draft",
+    detail_commitment_clause: "clause",
+    detail_commitment_discount: "discount",
+    detail_questions_heading: "Customer’s questions, answered?",
+    detail_answered_yes: "answered",
+    detail_answered_no: "not answered",
+    detail_promise_heading: "Prior commitments reviewed (promise memory)",
+    detail_promise_treatment: "treatment",
+    detail_gates_heading: "Gates",
+    detail_gate_pass: "PASS",
+    detail_gate_fail: "FAIL",
+    detail_gates_na: "Not evaluated. This email was escalated on classification alone.",
+    key_toggle_show: "Show answer key ▾",
+    key_toggle_hide: "Hide answer key ▴",
+    key_correct_route_label: "Key’s correct route",
+    key_trap_label: "Trap type",
+    key_clauses_label: "Binding clauses",
+    key_commitments_label: "What the key says should happen",
+    key_none_bound: "No specific clause binds this email.",
+    key_match_yes: "Route matches the key",
+    key_match_no: "Misroute: actual route differs from the key",
+
+    river_heading: "All 150 emails, classify to route",
+    river_intro: "Width is proportional to count at every stage. The gold tributary joining Human queue is the 7 completeness-gate false blocks, compliant drafts bounced anyway. Dots mark the 16 emails whose actual route differs from the key. Click any node to filter the inbox to those emails.",
+    river_note: "Auto-sent 122 · Human queue 21 (14 always-queued classes + 7 gate-blocked) · Escalated 7. Source: data/pipeline/routing_summary.csv joined against the frozen marking pass.",
+    river_legend_auto_send: "Auto-sent",
+    river_legend_human_queue: "Human queue",
+    river_legend_escalate: "Escalated",
+    river_legend_false_block: "False block (gate-blocked tributary)",
+    river_legend_misroute: "Misroute (actual ≠ key)",
+
+    score_heading: "The scoreboard",
+    score_intro: "6 expectations were written down before any email was generated or any pipeline component ran. 3 were met and 3 were not. Verdicts and numbers below are copied unchanged from the frozen marking pass.",
+    stat_straight_through: "straight-through rate",
+    stat_escalation_recall: "escalation recall",
+    stat_gate_violations: "gate violations among auto-sends",
+    stat_false_blocks: "false blocks",
+    stat_over_caution: "over-caution rate",
+    expect_heading: "Pre-registered expectations",
+    expect_col_num: "#",
+    expect_col_text: "Expectation",
+    expect_col_verdict: "Verdict",
+    expect_col_numbers: "Numbers",
+    expect_col_note: "Marking note",
+    verdict_met: "MET",
+    verdict_notmet: "NOT MET",
+    trap_heading: "The trap table",
+    trap_intro: "Every planted trap, whether the pipeline’s actual route matched the key, and the per-email detail behind each count.",
+    trap_col_label: "Trap",
+    trap_col_behaviour: "Correct behaviour",
+    trap_col_caught: "Caught",
+    trap_show_detail: "Show per-email detail",
+    trap_hide_detail: "Hide per-email detail",
+
+    footer_note: "Every number on this page comes from code/mark.py, the sole reader of data/answer_key/. All data is embedded in the page. No server, no build step."
+  };
+
+  var HPX = JSON.parse(document.getElementById("hpx-data").textContent);
+  var root = document.getElementById("hpx-root");
+
+  function el(tag, cls, parent, text){
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs, parent){
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function fmt(n, d){ if (d === undefined) d = 2; return (Math.round(n * Math.pow(10,d)) / Math.pow(10,d)).toFixed(d); }
+  function fmtPct(n, d){ if (d === undefined) d = 1; return fmt(n, d) + "%"; }
+  function bucketColor(bucket){
+    if (bucket === "auto_send") return "#41529E";
+    if (bucket === "human_queue") return "#B68A2C";
+    if (bucket === "escalate") return "#A8352A";
+    return "#665E58";
+  }
+
+  var emailById = {};
+  HPX.emails.forEach(function(e){ emailById[e.id] = e; });
+  var misrouteById = {};
+  HPX.river.misroutes.forEach(function(m){ misrouteById[m.email_id] = m; });
+  var falseBlockIds = {};
+  HPX.river.false_block_ids.forEach(function(id){ falseBlockIds[id] = true; });
+
+  // ------------------------------------------------------------------
+  // Header
+  // ------------------------------------------------------------------
+  function renderHeader(){
+    document.getElementById("hpx-title").textContent = STRINGS.title;
+    document.getElementById("hpx-byline").textContent = STRINGS.byline;
+    document.getElementById("hpx-lede").textContent = STRINGS.lede;
+    var honesty = document.getElementById("hpx-honesty");
+    el("strong", null, honesty, STRINGS.honesty_strong);
+    honesty.appendChild(document.createTextNode(STRINGS.honesty_rest));
+
+    var stats = document.getElementById("hpx-stat-strip");
+    stats.innerHTML = "";
+    var routeCounts = {auto_send: 0, human_queue: 0, escalate: 0};
+    HPX.emails.forEach(function(e){ routeCounts[e.route] += 1; });
+    [
+      [HPX.meta.n_emails, STRINGS.stat_emails],
+      [HPX.meta.n_threads, STRINGS.stat_threads],
+      [routeCounts.auto_send, STRINGS.stat_auto_send],
+      [routeCounts.human_queue, STRINGS.stat_human_queue],
+      [routeCounts.escalate, STRINGS.stat_escalate]
+    ].forEach(function(s){
+      var d = el("div", "hpx-stat", stats);
+      el("b", null, d, String(s[0]));
+      el("span", null, d, s[1]);
+    });
+
+    document.getElementById("hpx-foot-note").textContent = STRINGS.footer_note;
+  }
+
+  // ------------------------------------------------------------------
+  // Tab navigation
+  // ------------------------------------------------------------------
+  var VIEWS = ["inbox", "river", "scoreboard"];
+  var NAV_LABELS = {inbox: STRINGS.nav_inbox, river: STRINGS.nav_river, scoreboard: STRINGS.nav_scoreboard};
+  document.querySelectorAll(".hpx-navbtn").forEach(function(btn){
+    btn.textContent = NAV_LABELS[btn.getAttribute("data-view")];
+  });
+  var initedView = {};
+  function showView(name, opts){
+    VIEWS.forEach(function(v){
+      document.getElementById("hpx-view-" + v).hidden = (v !== name);
+      document.querySelector('.hpx-navbtn[data-view="' + v + '"]').classList.toggle("is-active", v === name);
+    });
+    if (!initedView[name]){
+      initedView[name] = true;
+      if (name === "inbox") initInboxView();
+      if (name === "river") initRiverView();
+      if (name === "scoreboard") initScoreboardView();
+    }
+    if (name === "inbox" && opts) applyInboxJump(opts);
+    reportHeight();
+  }
+  document.querySelectorAll(".hpx-navbtn").forEach(function(btn){
+    btn.addEventListener("click", function(){ showView(btn.getAttribute("data-view")); });
+  });
+
+  // ==================================================================
+  // VIEW 1 -- THE INBOX
+  // ==================================================================
+  var inboxState = { route: "all", intent: "all", trap: "all", misrouteOnly: false, search: "", selectedId: null };
+
+  function initInboxView(){
+    document.getElementById("hpx-inbox-heading").textContent = STRINGS.inbox_heading;
+    document.getElementById("hpx-inbox-intro").textContent = STRINGS.inbox_intro;
+    document.getElementById("hpx-lbl-route-filter").firstChild.textContent = STRINGS.lbl_route_filter + " ";
+    document.getElementById("hpx-lbl-intent-filter").firstChild.textContent = STRINGS.lbl_intent_filter + " ";
+    document.getElementById("hpx-lbl-trap-filter").firstChild.textContent = STRINGS.lbl_trap_filter + " ";
+    document.getElementById("hpx-lbl-misroute-only").textContent = STRINGS.lbl_misroute_only;
+    document.getElementById("hpx-search").setAttribute("placeholder", STRINGS.search_placeholder);
+    document.getElementById("hpx-clear-filters").textContent = STRINGS.clear_filters;
+
+    var rf = document.getElementById("hpx-filter-route");
+    var optAll = document.createElement("option"); optAll.value = "all"; optAll.textContent = STRINGS.opt_all_routes; rf.appendChild(optAll);
+    ["auto_send", "human_queue", "escalate"].forEach(function(r){
+      var o = document.createElement("option"); o.value = r; o.textContent = HPX.meta.route_labels[r]; rf.appendChild(o);
+    });
+    rf.addEventListener("change", function(){ inboxState.route = rf.value; renderInboxList(); });
+
+    var itf = document.getElementById("hpx-filter-intent");
+    var optAllI = document.createElement("option"); optAllI.value = "all"; optAllI.textContent = STRINGS.opt_all_intents; itf.appendChild(optAllI);
+    Object.keys(HPX.meta.intent_class_labels).forEach(function(ic){
+      var o = document.createElement("option"); o.value = ic; o.textContent = HPX.meta.intent_class_labels[ic]; itf.appendChild(o);
+    });
+    itf.addEventListener("change", function(){ inboxState.intent = itf.value; renderInboxList(); });
+
+    var tf = document.getElementById("hpx-filter-trap");
+    var optAllT = document.createElement("option"); optAllT.value = "all"; optAllT.textContent = STRINGS.opt_all_traps; tf.appendChild(optAllT);
+    Object.keys(HPX.meta.trap_labels).sort().forEach(function(t){
+      if (t === "none") return;
+      var o = document.createElement("option"); o.value = t; o.textContent = HPX.meta.trap_labels[t].label; tf.appendChild(o);
+    });
+    tf.addEventListener("change", function(){ inboxState.trap = tf.value; renderInboxList(); });
+
+    document.getElementById("hpx-filter-misroute").addEventListener("change", function(e){
+      inboxState.misrouteOnly = e.target.checked; renderInboxList();
+    });
+    document.getElementById("hpx-search").addEventListener("input", function(e){
+      inboxState.search = e.target.value.trim().toLowerCase(); renderInboxList();
+    });
+    document.getElementById("hpx-clear-filters").addEventListener("click", function(){
+      inboxState.route = "all"; inboxState.intent = "all"; inboxState.trap = "all"; inboxState.misrouteOnly = false; inboxState.search = "";
+      rf.value = "all"; itf.value = "all"; tf.value = "all";
+      document.getElementById("hpx-filter-misroute").checked = false;
+      document.getElementById("hpx-search").value = "";
+      renderInboxList();
+    });
+
+    renderInboxList();
+    renderInboxDetail();
+  }
+
+  function applyInboxJump(opts){
+    var rf = document.getElementById("hpx-filter-route");
+    var itf = document.getElementById("hpx-filter-intent");
+    inboxState.route = "all"; inboxState.intent = "all"; inboxState.trap = "all"; inboxState.misrouteOnly = false; inboxState.search = "";
+    rf.value = "all"; itf.value = "all"; document.getElementById("hpx-filter-trap").value = "all";
+    document.getElementById("hpx-filter-misroute").checked = false;
+    document.getElementById("hpx-search").value = "";
+    if (opts.route){ inboxState.route = opts.route; rf.value = opts.route; }
+    if (opts.intent){ inboxState.intent = opts.intent; itf.value = opts.intent; }
+    if (opts.falseBlockOnly){ inboxState.misrouteOnly = false; inboxState.falseBlockOnly = true; }
+    else { inboxState.falseBlockOnly = false; }
+    if (opts.emailId){ inboxState.selectedId = opts.emailId; }
+    renderInboxList();
+    renderInboxDetail();
+  }
+
+  function inboxFiltered(){
+    return HPX.emails.filter(function(e){
+      if (inboxState.route !== "all" && e.route !== inboxState.route) return false;
+      if (inboxState.intent !== "all" && e.intent_class !== inboxState.intent) return false;
+      if (inboxState.trap !== "all" && e.key.trap_type !== inboxState.trap) return false;
+      if (inboxState.misrouteOnly && !misrouteById[e.id]) return false;
+      if (inboxState.falseBlockOnly && !falseBlockIds[e.id]) return false;
+      if (inboxState.search){
+        var hay = (e.subject + " " + e.customer_name + " " + e.id).toLowerCase();
+        if (hay.indexOf(inboxState.search) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderInboxList(){
+    var list = document.getElementById("hpx-inbox-list");
+    list.innerHTML = "";
+    var rows = inboxFiltered();
+    document.getElementById("hpx-filter-count").textContent = rows.length + STRINGS.filter_count_suffix;
+    if (!rows.length){
+      el("div", "hpx-inbox-empty", list, STRINGS.inbox_empty);
+      return;
+    }
+    rows.forEach(function(e){
+      var card = el("div", "hpx-inbox-card" + (e.id === inboxState.selectedId ? " is-selected" : ""), list);
+      el("b", null, card, e.subject);
+      var meta = el("div", "hpx-imeta", card);
+      meta.textContent = e.id + " · " + e.customer_name + " · " + e.date;
+      var chips = el("div", null, card);
+      el("span", "hpx-chip hpx-chip--" + e.route, chips, HPX.meta.route_labels[e.route]);
+      if (e.key.trap_type !== "none"){
+        chips.appendChild(document.createTextNode(" "));
+        el("span", "hpx-chip", chips, HPX.meta.trap_labels[e.key.trap_type].label);
+      }
+      if (misrouteById[e.id]){
+        chips.appendChild(document.createTextNode(" "));
+        el("span", "hpx-chip hpx-chip--misroute", chips, "misroute");
+      }
+      card.addEventListener("click", function(){
+        inboxState.selectedId = e.id;
+        renderInboxList();
+        renderInboxDetail();
+      });
+    });
+  }
+
+  function gateRow(host, gateKey, gate){
+    var row = el("div", "hpx-gate-row", host);
+    el("span", "hpx-mono", row, HPX.meta.gate_labels[gateKey] + ":");
+    if (gate === null){
+      el("span", "hpx-chip", row, "n/a");
+      return;
+    }
+    el("span", "hpx-chip " + (gate.passed ? "hpx-chip--pass" : "hpx-chip--fail"), row, gate.passed ? STRINGS.detail_gate_pass : STRINGS.detail_gate_fail);
+    if (gate.reasons && gate.reasons.length){
+      var reasons = el("div", "hpx-gate-reasons", host);
+      reasons.textContent = gate.reasons.join("; ");
+    }
+  }
+
+  function clauseTag(host, clauseId){
+    var clause = HPX.meta.clauses[clauseId];
+    var tag = el("span", "hpx-clause-tag", host, clauseId);
+    if (clause) tag.title = clause.title + " — " + clause.text;
+  }
+
+  function renderInboxDetail(){
+    var host = document.getElementById("hpx-inbox-detail");
+    host.innerHTML = "";
+    var eid = inboxState.selectedId;
+    if (!eid || !emailById[eid]){
+      el("div", "hpx-detail", host).appendChild((function(){
+        var p = el("p", "hpx-intro", null, STRINGS.inbox_pick_prompt); return p;
+      })());
+      return;
+    }
+    var e = emailById[eid];
+    var det = el("div", "hpx-detail", host);
+
+    var head = el("div", "hpx-detail-head", det);
+    el("h3", null, head, e.subject + " — " + e.id);
+    el("span", "hpx-chip hpx-chip--" + e.route, head, HPX.meta.route_labels[e.route]);
+    if (misrouteById[e.id]) el("span", "hpx-chip hpx-chip--misroute", head, "misroute");
+
+    var cols = el("div", "hpx-detail-cols", det);
+
+    // ---- LEFT: thread history ----
+    var left = el("div", "hpx-detail-col", cols);
+    el("h4", null, left, STRINGS.detail_thread_heading);
+    var thread = HPX.threads[e.thread_id];
+    thread.messages.forEach(function(msg){
+      var isCurrent = (msg.sender === "customer" && msg.email_id === e.id);
+      var mcls = "hpx-thread-msg" + (msg.sender === "staff" ? " hpx-thread-msg--staff" : "") + (isCurrent ? " hpx-thread-msg--current" : "");
+      var box = el("div", mcls, left);
+      var who = msg.sender === "staff" ? (msg.staff_name + " (" + msg.staff_role + ")") : (STRINGS.detail_customer_label + ": " + thread.customer_name);
+      var metaText = who + " · " + msg.date + (isCurrent ? " · " + STRINGS.detail_this_message : "");
+      el("div", "hpx-thread-msg-meta", box, metaText);
+      el("div", "hpx-thread-msg-body", box, msg.subject + "\n\n" + msg.body);
+    });
+
+    // ---- RIGHT: pipeline trace ----
+    var right = el("div", "hpx-detail-col", cols);
+    el("h4", null, right, STRINGS.detail_trace_heading);
+
+    var intentBlock = el("div", "hpx-trace-block", right);
+    var ip = el("p", null, intentBlock);
+    ip.appendChild(document.createTextNode(STRINGS.detail_intent_label + ": "));
+    el("b", null, ip, HPX.meta.intent_class_labels[e.intent_class]);
+    el("p", "hpx-expect-note", intentBlock, STRINGS.detail_rationale_label + ": " + e.classification_rationale);
+
+    var routeBlock = el("div", "hpx-trace-block", right);
+    var rp = el("p", null, routeBlock);
+    rp.appendChild(document.createTextNode(STRINGS.detail_route_label + ": "));
+    el("span", "hpx-chip hpx-chip--" + e.route, rp, HPX.meta.route_labels[e.route]);
+    el("p", "hpx-expect-note", routeBlock, STRINGS.detail_route_reason_label + ": " + e.route_reason);
+
+    if (!e.draft){
+      el("p", "hpx-expect-note", right, STRINGS.detail_escalate_shortcut);
+    } else {
+      var draftBlock = el("div", "hpx-trace-block", right);
+      el("h4", null, draftBlock, STRINGS.detail_draft_heading);
+      el("div", "hpx-draft-body", draftBlock, e.draft.reply_body);
+
+      if (e.draft.commitments && e.draft.commitments.length){
+        var commitBlock = el("div", "hpx-trace-block", right);
+        el("h4", null, commitBlock, STRINGS.detail_commitments_heading);
+        e.draft.commitments.forEach(function(c){
+          var row = el("div", "hpx-commitment", commitBlock);
+          el("div", null, row, c.description);
+          var tagRow = el("div", "hpx-expect-note", row);
+          var bits = [c.type];
+          if (c.clause_id) bits.push(STRINGS.detail_commitment_clause + " " + c.clause_id);
+          if (c.discount_pct !== null && c.discount_pct !== undefined) bits.push(STRINGS.detail_commitment_discount + " " + c.discount_pct + "%");
+          tagRow.textContent = bits.join(" · ");
+        });
+      }
+
+      if (e.draft.questions_addressed && e.draft.questions_addressed.length){
+        var qBlock = el("div", "hpx-trace-block", right);
+        el("h4", null, qBlock, STRINGS.detail_questions_heading);
+        e.draft.questions_addressed.forEach(function(q){
+          var row = el("div", "hpx-question-row", qBlock);
+          el("span", "hpx-chip " + (q.answered ? "hpx-chip--pass" : "hpx-chip--fail"), row, q.answered ? STRINGS.detail_answered_yes : STRINGS.detail_answered_no);
+          row.appendChild(document.createTextNode(" " + q.question));
+        });
+      }
+
+      if (e.draft.prior_commitments_reviewed && e.draft.prior_commitments_reviewed.length){
+        var pBlock = el("div", "hpx-trace-block", right);
+        el("h4", null, pBlock, STRINGS.detail_promise_heading);
+        e.draft.prior_commitments_reviewed.forEach(function(p){
+          var box = el("div", "hpx-promise-box", pBlock);
+          el("div", null, box, p.staff_name + ": " + p.commitment_summary);
+          el("div", "hpx-expect-note", box, STRINGS.detail_promise_treatment + ": " + p.treatment);
+        });
+      }
+
+      var gatesBlock = el("div", "hpx-trace-block", right);
+      el("h4", null, gatesBlock, STRINGS.detail_gates_heading);
+      ["policy_gate", "consistency_gate", "completeness_gate"].forEach(function(gk){
+        gateRow(gatesBlock, gk, e.gates[gk]);
+      });
+    }
+
+    // ---- Answer key toggle ----
+    var keyWrap = el("div", "hpx-key-toggle-wrap", det);
+    var keyBtn = el("button", "hpx-btn", keyWrap, STRINGS.key_toggle_show);
+    var keyPanel = el("div", "hpx-key-panel", keyWrap);
+    keyPanel.hidden = true;
+    var k = e.key;
+    var kp1 = el("p", null, keyPanel);
+    kp1.appendChild(document.createTextNode(STRINGS.key_correct_route_label + ": "));
+    el("span", "hpx-chip hpx-chip--" + k.correct_route, kp1, HPX.meta.route_labels[k.correct_route]);
+    kp1.appendChild(document.createTextNode("  "));
+    var isMisroute = !!misrouteById[e.id];
+    el("span", "hpx-chip " + (isMisroute ? "hpx-chip--misroute" : "hpx-chip--pass"), kp1, isMisroute ? STRINGS.key_match_no : STRINGS.key_match_yes);
+    var kp2 = el("p", null, keyPanel);
+    kp2.appendChild(document.createTextNode(STRINGS.key_trap_label + ": "));
+    el("b", null, kp2, HPX.meta.trap_labels[k.trap_type].label);
+    if (k.trap_type !== "none") el("p", "hpx-expect-note", keyPanel, HPX.meta.trap_labels[k.trap_type].correct_behaviour);
+    var kp3 = el("p", null, keyPanel, STRINGS.key_clauses_label + ":");
+    if (k.binding_clause_ids.length){
+      var ctags = el("div", null, keyPanel);
+      k.binding_clause_ids.forEach(function(cid){ clauseTag(ctags, cid); });
+      k.binding_clause_ids.forEach(function(cid){
+        var clause = HPX.meta.clauses[cid];
+        if (clause) el("div", "hpx-clause-detail", keyPanel, cid + " — " + clause.title + ": " + clause.text);
+      });
+    } else {
+      el("p", "hpx-expect-note", keyPanel, STRINGS.key_none_bound);
+    }
+    var kp4 = el("p", null, keyPanel);
+    kp4.appendChild(document.createTextNode(STRINGS.key_commitments_label + ": "));
+    kp4.appendChild(document.createTextNode(k.correct_commitments));
+
+    keyBtn.addEventListener("click", function(){
+      keyPanel.hidden = !keyPanel.hidden;
+      keyBtn.textContent = keyPanel.hidden ? STRINGS.key_toggle_show : STRINGS.key_toggle_hide;
+      reportHeight();
+    });
+  }
+
+  // ==================================================================
+  // VIEW 2 -- THE RIVER
+  // ==================================================================
+  function initRiverView(){
+    document.getElementById("hpx-river-heading").textContent = STRINGS.river_heading;
+    document.getElementById("hpx-river-intro").textContent = STRINGS.river_intro;
+    document.getElementById("hpx-river-note").textContent = STRINGS.river_note;
+    renderRiver();
+  }
+
+  function renderRiver(){
+    var host = document.getElementById("hpx-river-chart");
+    host.innerHTML = "";
+    var river = HPX.river;
+    var W = 900, H = 460, M = 20, colGap = 0;
+    var colX = [M + 10, W / 2 - 7, W - M - 24];
+    var nodeW = 16;
+    var gap = 8;
+
+    var svg = svgEl("svg", {viewBox: "0 0 " + W + " " + H, role: "img",
+      "aria-label": "Sankey flow of 150 emails from classification through gates to the three route outcomes"}, host);
+
+    // hatch pattern for the false-block tributary
+    var defs = svgEl("defs", {}, svg);
+    var pattern = svgEl("pattern", {id: "hpx-hatch", width: 6, height: 6, patternTransform: "rotate(45)", patternUnits: "userSpaceOnUse"}, defs);
+    svgEl("rect", {width: 6, height: 6, fill: "#B68A2C", "fill-opacity": 0.35}, pattern);
+    svgEl("line", {x1: 0, y1: 0, x2: 0, y2: 6, stroke: "#7A2018", "stroke-width": 2}, pattern);
+
+    // layout each column, vertically centred
+    var nodesById = {};
+    river.columns.forEach(function(col, ci){
+      var total = col.nodes.reduce(function(a, n){ return a + n.count; }, 0);
+      var colHeight = total * ((H - 2 * M - gap * (col.nodes.length - 1)) / river.n_total) + gap * (col.nodes.length - 1);
+      var y = (H - colHeight) / 2;
+      col.nodes.forEach(function(n){
+        var h = n.count * ((H - 2 * M - gap * (col.nodes.length - 1)) / river.n_total);
+        nodesById[n.id] = {x: colX[ci], y0: y, y1: y + h, node: n, col: ci};
+        y += h + gap;
+      });
+    });
+
+    // allocate link ports along each node's height (source side and target side separately)
+    var sourceOffset = {}, targetOffset = {};
+    Object.keys(nodesById).forEach(function(id){ sourceOffset[id] = 0; targetOffset[id] = 0; });
+    var renderLinks = river.links.map(function(link){
+      var src = nodesById[link.from], tgt = nodesById[link.to];
+      var srcH = (src.y1 - src.y0), tgtH = (tgt.y1 - tgt.y0);
+      var srcTotal = src.node.count, tgtTotal = tgt.node.count;
+      var sy0 = src.y0 + sourceOffset[link.from] / srcTotal * srcH;
+      var sy1 = src.y0 + (sourceOffset[link.from] + link.count) / srcTotal * srcH;
+      sourceOffset[link.from] += link.count;
+      var ty0 = tgt.y0 + targetOffset[link.to] / tgtTotal * tgtH;
+      var ty1 = tgt.y0 + (targetOffset[link.to] + link.count) / tgtTotal * tgtH;
+      targetOffset[link.to] += link.count;
+      return {link: link, x1: src.x + nodeW, x2: tgt.x, sy0: sy0, sy1: sy1, ty0: ty0, ty1: ty1};
+    });
+
+    // draw links first (under the node rects)
+    renderLinks.forEach(function(rl){
+      var midx = (rl.x1 + rl.x2) / 2;
+      var d = "M " + rl.x1 + " " + rl.sy0 +
+        " C " + midx + " " + rl.sy0 + " " + midx + " " + rl.ty0 + " " + rl.x2 + " " + rl.ty0 +
+        " L " + rl.x2 + " " + rl.ty1 +
+        " C " + midx + " " + rl.ty1 + " " + midx + " " + rl.sy1 + " " + rl.x1 + " " + rl.sy1 + " Z";
+      var isTributary = (rl.link.from === "gates_blocked" || rl.link.to === "gates_blocked");
+      var tgtBucket = nodesById[rl.link.to].node.bucket;
+      var path = svgEl("path", {
+        d: d,
+        fill: isTributary ? "url(#hpx-hatch)" : bucketColor(tgtBucket),
+        "fill-opacity": isTributary ? 1 : 0.42,
+        class: "hpx-river-link"
+      }, svg);
+      var srcLabel = nodesById[rl.link.from].node.label, tgtLabel = nodesById[rl.link.to].node.label;
+      var titleEl = svgEl("title", {}, path);
+      titleEl.textContent = srcLabel + " -> " + tgtLabel + ": " + rl.link.count;
+      (function(linkFrom, linkTo){
+        path.addEventListener("click", function(){
+          if (linkFrom === "gates_blocked" || linkTo === "gates_blocked"){
+            showView("inbox", {falseBlockOnly: true});
+          } else if (linkTo === "auto_send" || linkTo === "human_queue" || linkTo === "escalate"){
+            showView("inbox", {route: linkTo});
+          } else if (linkFrom.indexOf("classify_") === 0){
+            showView("inbox", {intent: linkFrom.replace("classify_", "")});
+          }
+        });
+      })(rl.link.from, rl.link.to);
+    });
+
+    // draw nodes
+    Object.keys(nodesById).forEach(function(id){
+      var n = nodesById[id];
+      var g = svgEl("g", {class: "hpx-river-node"}, svg);
+      svgEl("rect", {x: n.x, y: n.y0, width: nodeW, height: Math.max(1, n.y1 - n.y0), fill: bucketColor(n.node.bucket)}, g);
+      var labelX = n.col === 2 ? n.x - 6 : n.x + nodeW + 6;
+      var anchor = n.col === 2 ? "end" : "start";
+      var ty = svgEl("text", {x: labelX, y: (n.y0 + n.y1) / 2 - 3, "text-anchor": anchor, class: "hpx-river-label"}, g);
+      ty.textContent = n.node.label;
+      var tc = svgEl("text", {x: labelX, y: (n.y0 + n.y1) / 2 + 10, "text-anchor": anchor, class: "hpx-river-count"}, g);
+      tc.textContent = String(n.node.count);
+      var titleEl = svgEl("title", {}, g);
+      titleEl.textContent = n.node.label + ": " + n.node.count;
+      g.addEventListener("click", function(){
+        if (n.col === 0){
+          var ic = id.replace("classify_", "");
+          showView("inbox", {intent: ic});
+        } else if (n.col === 2){
+          showView("inbox", {route: id});
+        } else if (id === "gates_blocked"){
+          showView("inbox", {falseBlockOnly: true});
+        } else if (id === "gates_passed"){
+          showView("inbox", {route: "auto_send"});
+        } else if (id === "queued_direct" || id === "escalated_direct"){
+          showView("inbox", {route: id === "queued_direct" ? "human_queue" : "escalate"});
+        }
+      });
+    });
+
+    // misroute dot overlay on terminal (route) column nodes -- placed to the
+    // right of each terminal bar (labels sit to the left for this column),
+    // one dot per misrouted email, stacked top to bottom.
+    var dotsByTerminal = {auto_send: [], human_queue: [], escalate: []};
+    river.misroutes.forEach(function(m){ dotsByTerminal[m.actual_route].push(m); });
+    Object.keys(dotsByTerminal).forEach(function(termId){
+      var n = nodesById[termId];
+      var dotX = n.x + nodeW + 8;
+      var dots = dotsByTerminal[termId];
+      var span = Math.max(1, (n.y1 - n.y0) - 8);
+      var step = dots.length > 1 ? Math.min(9, span / (dots.length - 1)) : 0;
+      dots.forEach(function(m, i){
+        var cy = n.y0 + 4 + i * step;
+        var isUnder = m.direction.indexOf("UNDER") === 0;
+        var dot = svgEl("circle", {
+          cx: dotX, cy: cy, r: 3,
+          fill: isUnder ? "#7A2018" : "none",
+          stroke: "#7A2018", "stroke-width": 1.3,
+          style: "cursor:pointer"
+        }, svg);
+        var titleEl = svgEl("title", {}, dot);
+        titleEl.textContent = m.email_id + " — key said " + HPX.meta.route_labels[m.key_route] + ", actual " + HPX.meta.route_labels[m.actual_route];
+        dot.addEventListener("click", function(ev){
+          ev.stopPropagation();
+          showView("inbox", {emailId: m.email_id});
+        });
+      });
+    });
+
+    var legend = el("div", "hpx-river-legend", host);
+    function legendItem(color, label, hatch){
+      var span = el("span", null, legend);
+      var sw = el("span", "hpx-swatch", span);
+      sw.style.background = hatch ? "repeating-linear-gradient(45deg, rgba(182,138,44,.55), rgba(182,138,44,.55) 2px, #7A2018 2px, #7A2018 3px)" : color;
+      el("span", null, span, label);
+    }
+    legendItem("#41529E", STRINGS.river_legend_auto_send);
+    legendItem("#B68A2C", STRINGS.river_legend_human_queue);
+    legendItem("#A8352A", STRINGS.river_legend_escalate);
+    legendItem(null, STRINGS.river_legend_false_block, true);
+    legendItem("#7A2018", STRINGS.river_legend_misroute);
+  }
+
+  // ==================================================================
+  // VIEW 3 -- THE SCOREBOARD
+  // ==================================================================
+  var EXPECT_NUM_FMT = {
+    "1": function(n){ return n.n_auto_sent + " auto-sent, " + n.n_gate_violations + " gate violation(s)"; },
+    "2": function(n){ return n.n_escalated + "/" + n.n_safety_and_data_emails + " escalated (" + fmtPct(n.recall_pct, 1) + ")" + (n.missed_email_ids.length ? ", missed " + n.missed_email_ids.join(", ") : ""); },
+    "3": function(n){ return n.n_auto_sent + "/" + n.n_scored + " = " + fmtPct(n.straight_through_rate_pct, 2); },
+    "4": function(n){ return n.n_needlessly_queued + "/" + n.n_routine_key_emails + " = " + fmtPct(n.over_caution_rate_pct, 2) + " (" + n.n_gate_driven + " gate-driven, " + n.n_misclassification_driven + " misclassification-driven)"; },
+    "5": function(n){ return n.n_false_blocks + " false block(s): " + n.false_block_email_ids.join(", "); },
+    "6": function(n){ return n.n_safely_resolved + "/" + n.n_prior_promise_traps + " safely resolved, gate actively fired on " + n.n_consistency_gate_actively_fired_on_contradiction + ", " + n.n_prior_promise_emails_misclassified_at_step_1 + " misclassified at step 1"; }
+  };
+
+  function initScoreboardView(){
+    document.getElementById("hpx-score-heading").textContent = STRINGS.score_heading;
+    document.getElementById("hpx-score-intro").textContent = STRINGS.score_intro;
+    document.getElementById("hpx-expect-heading").textContent = STRINGS.expect_heading;
+    document.getElementById("hpx-trap-heading").textContent = STRINGS.trap_heading;
+    document.getElementById("hpx-trap-intro").textContent = STRINGS.trap_intro;
+
+    var m = HPX.marks;
+    var stats = document.getElementById("hpx-score-stats");
+    [
+      [fmtPct(m.straight_through_rate.straight_through_rate_pct, 1), STRINGS.stat_straight_through],
+      [fmtPct(m.escalation_recall.recall_pct, 1), STRINGS.stat_escalation_recall],
+      [String(m.zero_tolerance.n_gate_violations), STRINGS.stat_gate_violations],
+      [String(m.false_blocks.length), STRINGS.stat_false_blocks],
+      [fmtPct(m.over_caution.over_caution_rate_pct, 1), STRINGS.stat_over_caution]
+    ].forEach(function(s){
+      var d = el("div", "hpx-stat", stats);
+      el("b", null, d, s[0]);
+      el("span", null, d, s[1]);
+    });
+
+    var table = document.getElementById("hpx-expect-table");
+    var thead = el("thead", null, table); var htr = el("tr", null, thead);
+    [STRINGS.expect_col_num, STRINGS.expect_col_text, STRINGS.expect_col_verdict, STRINGS.expect_col_numbers, STRINGS.expect_col_note].forEach(function(h){ el("th", null, htr, h); });
+    var tbody = el("tbody", null, table);
+    Object.keys(m.expectations).sort(function(a,b){return +a-+b;}).forEach(function(k){
+      var expect = m.expectations[k];
+      var tr = el("tr", null, tbody);
+      el("td", "hpx-num", tr, k);
+      el("td", null, tr, expect.text);
+      var vtd = el("td", null, tr);
+      el("span", "hpx-chip " + (expect.verdict === "MET" ? "hpx-chip--met" : "hpx-chip--notmet"), vtd, expect.verdict === "MET" ? STRINGS.verdict_met : STRINGS.verdict_notmet);
+      el("td", "hpx-num", tr, EXPECT_NUM_FMT[k] ? EXPECT_NUM_FMT[k](expect.numbers) : JSON.stringify(expect.numbers));
+      el("td", "hpx-expect-note", tr, expect.note || "");
+    });
+
+    var trapTable = document.getElementById("hpx-trap-table");
+    var tthead = el("thead", null, trapTable); var ttr = el("tr", null, tthead);
+    [STRINGS.expect_col_num, STRINGS.trap_col_label, STRINGS.trap_col_behaviour, STRINGS.trap_col_caught, ""].forEach(function(h){ el("th", null, ttr, h); });
+    var ttbody = el("tbody", null, trapTable);
+    Object.keys(m.trap_table).forEach(function(trapId){
+      var t = m.trap_table[trapId];
+      var tr = el("tr", null, ttbody);
+      el("td", "hpx-num", tr, trapId);
+      el("td", null, tr, t.label);
+      el("td", null, tr, t.correct_behaviour);
+      el("td", "hpx-num", tr, t.n_caught + "/" + t.n_total);
+      var td = el("td", null, tr);
+      var btn = el("button", "hpx-trap-summary", td, STRINGS.trap_show_detail);
+      var detailRow = el("tr", null, ttbody);
+      var detailTd = el("td", null, detailRow);
+      detailTd.setAttribute("colspan", "5");
+      var detailBox = el("div", "hpx-trap-detail", detailTd);
+      detailRow.hidden = true;
+      t.per_email.forEach(function(row){
+        var line = el("div", "hpx-trap-detail-row", detailBox);
+        var link = el("button", "hpx-btn", line, row.email_id);
+        link.addEventListener("click", function(){ showView("inbox", {emailId: row.email_id}); });
+        el("span", "hpx-chip " + (row.caught ? "hpx-chip--pass" : "hpx-chip--fail"), line, row.caught ? "caught" : "not caught");
+        el("span", "hpx-num", line, "key " + row.key_route + " -> actual " + row.actual_route);
+      });
+      btn.addEventListener("click", function(){
+        detailRow.hidden = !detailRow.hidden;
+        btn.textContent = detailRow.hidden ? STRINGS.trap_show_detail : STRINGS.trap_hide_detail;
+        reportHeight();
+      });
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Init + iframe height reporting
+  // ------------------------------------------------------------------
+  function reportHeight(){
+    try { parent.postMessage({type: "hpx-height", height: document.documentElement.scrollHeight}, "*"); } catch(e){}
+  }
+  renderHeader();
+  showView("inbox");
+  window.addEventListener("load", reportHeight);
+  window.addEventListener("resize", reportHeight);
+})();
+</script>
+</body>
+</html>

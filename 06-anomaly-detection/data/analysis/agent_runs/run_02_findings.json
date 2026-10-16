@@ -1,0 +1,623 @@
+[
+  {
+    "finding_id": "F-01",
+    "headline": "V-0006 Mainostoimisto Kaarniala: all eight advertising invoices booked to IT services (7200) instead of Marketing (7100).",
+    "unit_id": "RU-01",
+    "verdict": "worry",
+    "mechanism": "A marketing agency whose only permitted account is 7100 (Marketing) has its entire year of campaign invoices manually posted by one clerk (U-204) to 7200 (IT services). It is a persistent miscoding, not fraud: EUR 36,934 of marketing spend is sitting in the wrong expense-by-nature line, understating Marketing and overstating IT services.",
+    "affected": {"vendor_ids": ["V-0006"], "accounts": ["7200", "7100"], "months": [9, 10], "users": ["U-204"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "all 8 rows for V-0006, memo verbatim", "figure": "8/8 posted to 7200; memos 'Mainoskampanja, syyskuu/lokakuu 2025'; vendor allowed_accounts=7100 only"},
+      {"source": "vendor_master.csv", "what": "vendor identity vs account", "figure": "V-0006 = 'Mainostoimisto Kaarniala Oy' (advertising agency), allowed 7100 (Marketing)"},
+      {"source": "checks.py calibration", "what": "mapping violations ledger-wide", "figure": "exactly 8 rows, all V-0006 - this is the only mapping breach in 50,000 lines"}
+    ],
+    "severity": "watch",
+    "confidence": "high",
+    "recommended_action": "Recode the eight invoices from 7200 to 7100 and set V-0006's posting default to Marketing so the classification stops recurring."
+  },
+  {
+    "finding_id": "F-02",
+    "headline": "V-0008 Pulttitarvike: both of the vendor's orders billed twice at identical amounts under the same order number.",
+    "unit_id": "RU-02",
+    "verdict": "worry",
+    "mechanism": "The vendor's entire year is two orders, each invoiced twice for the exact same euro amount within a week, both invoices citing the same purchase order. That is the classic duplicate-billing fingerprint (identical amount + same order + no partial-delivery marker), not a staged delivery, which would carry different amounts and an 'osatoimitus' note.",
+    "affected": {"vendor_ids": ["V-0008"], "accounts": ["4000"], "months": [2, 8], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "pair 1 memos + amounts", "figure": "TXN004166 & TXN004816 both EUR 842.50, both 'Ostolasku, tilaus 358022', 4 days apart, inv 801524/801525"},
+      {"source": "gl_transactions.csv", "what": "pair 2 memos + amounts", "figure": "TXN027877 & TXN028688 both EUR 615.20, both 'Ostolasku, tilaus 358023', 7 days apart, inv 801526/801527"},
+      {"source": "checks.py", "what": "duplicate exposure if both are true duplicates", "figure": "recoverable half = 842.50 + 615.20 = EUR 1,457.70"}
+    ],
+    "severity": "watch",
+    "confidence": "medium",
+    "recommended_action": "Confirm a single goods receipt exists for orders 358022 and 358023 and recover the duplicate half if only one delivery was received."
+  },
+  {
+    "finding_id": "F-03",
+    "headline": "V-0009 Poralogistiikka: two orders each billed twice at identical amounts under the same order number.",
+    "unit_id": "RU-03",
+    "verdict": "worry",
+    "mechanism": "Same duplicate-billing fingerprint as V-0008: orders 787675 and 787676 are each invoiced twice for the exact same amount within five days, both invoices quoting the same order and no partial-delivery marker.",
+    "affected": {"vendor_ids": ["V-0009"], "accounts": ["4200"], "months": [4, 10], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "pair 1", "figure": "TXN012557 & TXN013198 both EUR 1,365.00, both 'Ostolasku, tilaus 787675', 5 days apart"},
+      {"source": "gl_transactions.csv", "what": "pair 2", "figure": "TXN035706 & TXN036341 both EUR 3,780.60, both 'Ostolasku, tilaus 787676', 5 days apart"},
+      {"source": "checks.py", "what": "duplicate exposure", "figure": "recoverable half = 1,365.00 + 3,780.60 = EUR 5,145.60"}
+    ],
+    "severity": "watch",
+    "confidence": "medium",
+    "recommended_action": "Confirm single goods receipts for orders 787675/787676 and recover EUR 5,145.60 if the second invoices are duplicates."
+  },
+  {
+    "finding_id": "F-04",
+    "headline": "V-0010 Kumipalvelu: two orders each billed twice at identical amounts under the same order number.",
+    "unit_id": "RU-04",
+    "verdict": "worry",
+    "mechanism": "Same duplicate-billing fingerprint: orders 847310 and 847311 each invoiced twice for the exact same amount within a week, both invoices quoting the same order, no partial-delivery marker.",
+    "affected": {"vendor_ids": ["V-0010"], "accounts": ["4300"], "months": [6, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "pair 1", "figure": "TXN020678 & TXN021479 both EUR 2,940.75, both 'Ostolasku, tilaus 847310', 6 days apart"},
+      {"source": "gl_transactions.csv", "what": "pair 2", "figure": "TXN045781 & TXN047018 both EUR 1,120.35, both 'Ostolasku, tilaus 847311', 6 days apart"},
+      {"source": "checks.py", "what": "duplicate exposure", "figure": "recoverable half = 2,940.75 + 1,120.35 = EUR 4,061.10"}
+    ],
+    "severity": "watch",
+    "confidence": "medium",
+    "recommended_action": "Confirm single goods receipts for orders 847310/847311 and recover EUR 4,061.10 if the second invoices are duplicates."
+  },
+  {
+    "finding_id": "F-05",
+    "headline": "V-0011 Sailiopalvelu: six steel invoices land on exact round thousands, implausible for per-tonne pricing.",
+    "unit_id": "RU-05",
+    "verdict": "worry",
+    "mechanism": "Six bimonthly invoices for steel and metal products (account 4100) are each an exact EUR 1,000 multiple, ramping 5k-6k-7k-8k-9k then 6k. Per-tonne steel does not land on round thousands six times running; the amounts look set by hand (estimate, advance, or fixed draw) rather than measured quantity. It cannot be stood down on the ledger alone because no contract or PO basis is visible.",
+    "affected": {"vendor_ids": ["V-0011"], "accounts": ["4100"], "months": [1, 3, 5, 7, 9, 11], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "the six amounts", "figure": "5000, 6000, 7000, 8000, 9000, 6000 (all exact k); memos 'Ostolasku, tilaus 077948-077953'"},
+      {"source": "checks.py calibration", "what": "round-thousand invoices ledger-wide", "figure": "only V-0011 (6 rows) and V-0016 (rent, 12 rows) - V-0011 is the only non-rent round-sum vendor"}
+    ],
+    "severity": "watch",
+    "confidence": "medium",
+    "recommended_action": "Ask AP to match these six invoices to purchase orders or a supply agreement and confirm they reflect delivered quantities, not round estimates."
+  },
+  {
+    "finding_id": "F-06",
+    "headline": "V-0012 Ratashuolto: all four quarterly freight invoices sit just below the EUR 10,000 approval tier.",
+    "unit_id": "RU-06",
+    "verdict": "worry",
+    "mechanism": "The vendor's only four invoices, one per quarter, all fall in EUR 9,580-9,900 - the top 5% band immediately under the EUR 10,000 department-head approval threshold. The tiny spread (EUR 320) and one value at 9,899.99 mean the EUR 10,000 control is never triggered on a EUR 38.8k/yr freight relationship. Whether the sizing is the vendor's or internal, the approval tier is being skirted.",
+    "affected": {"vendor_ids": ["V-0012"], "accounts": ["4410"], "months": [2, 5, 8, 11], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "the four amounts", "figure": "9712.45, 9580.10, 9899.99, 9650.75 - all in [9500,9999.99]"},
+      {"source": "checks.py calibration", "what": "near-threshold invoices ledger-wide", "figure": "exactly 4 rows, all V-0012 - no other vendor hugs the threshold"}
+    ],
+    "severity": "watch",
+    "confidence": "medium",
+    "recommended_action": "Verify the four freight bills reflect actual carriage and review whether this vendor's invoicing is being kept under EUR 10,000 to avoid department-head sign-off."
+  },
+  {
+    "finding_id": "F-07",
+    "headline": "V-0013 Kantamateriaali: two split-delivery pairs summing over EUR 10,000 - but e-invoiced partial deliveries with natural amounts.",
+    "unit_id": "RU-07",
+    "verdict": "stand_down",
+    "mechanism": "Two pairs (Jan and Jul) each sum just over EUR 10,000 with parts in the split band, which trips the split rule. But both invoices in each pair are e-invoiced by INTEG-01 (vendor-originated, not a clerk manually splitting), carry explicit 'osatoimitus' (partial delivery) markers with distinct sub-order numbers, and the parts are unequal mid-range values, not two slices maximised just under EUR 10,000. Consistent with genuine staged delivery.",
+    "affected": {"vendor_ids": ["V-0013"], "accounts": ["4110"], "months": [1, 7], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "pair sums + memos", "figure": "Jan 5820.40+5495.10=11315.50; Jul 6340.25+6910.80=13251.05; all memos 'osatoimitus 238987-238990'"},
+      {"source": "gl_transactions.csv", "what": "posting channel", "figure": "4/4 posted by INTEG-01 (e-invoice), so the split is in the vendor's billing, not internal"}
+    ],
+    "severity": "info",
+    "confidence": "medium",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-08",
+    "headline": "V-0014 Verkkokomponentti: two split-delivery pairs over EUR 10,000 - e-invoiced partial deliveries, benign.",
+    "unit_id": "RU-08",
+    "verdict": "stand_down",
+    "mechanism": "Same pattern as RU-07: two pairs (Apr, Oct) sum just over EUR 10,000, both e-invoiced by INTEG-01 with 'osatoimitus' markers and distinct sub-order numbers, and the parts are unequal mid-range amounts rather than slices engineered to sit under the threshold.",
+    "affected": {"vendor_ids": ["V-0014"], "accounts": ["4310"], "months": [4, 10], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "pair sums + memos", "figure": "Apr 4780.60+6255.90=11036.50; Oct 7120.15+4610.35=11730.50; memos 'osatoimitus 732301-732304'"},
+      {"source": "gl_transactions.csv", "what": "posting channel", "figure": "4/4 INTEG-01 e-invoice"}
+    ],
+    "severity": "info",
+    "confidence": "medium",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-09",
+    "headline": "V-0015 Kairakomponentti: one split-delivery pair over EUR 10,000 - e-invoiced partial delivery, benign.",
+    "unit_id": "RU-09",
+    "verdict": "stand_down",
+    "mechanism": "A single Sep pair sums to EUR 13,330.75, tripping the split rule, but both lines are e-invoiced by INTEG-01 with 'osatoimitus' markers and consecutive sub-order numbers, one day apart - a genuine two-part delivery, not an internal split to dodge approval.",
+    "affected": {"vendor_ids": ["V-0015"], "accounts": ["4420"], "months": [9], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "pair sum + memos", "figure": "5990.55+7340.20=13330.75; memos 'osatoimitus 890739/890740', 1 day apart"},
+      {"source": "gl_transactions.csv", "what": "posting channel", "figure": "2/2 INTEG-01 e-invoice"}
+    ],
+    "severity": "info",
+    "confidence": "medium",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-10",
+    "headline": "V-0016 property company: twelve round EUR 15,000 postings are contractual monthly rent - a round-sum false positive.",
+    "unit_id": "RU-10",
+    "verdict": "stand_down",
+    "mechanism": "The round-sum rule flagged twelve identical EUR 15,000 postings, but the vendor is a property company (Kiinteisto Oy) and every line is monthly premises rent on account 7000, one per calendar month, memo 'Toimitilavuokra, [month] 2025'. Round contractual rent is exactly what a round-number test misfires on.",
+    "affected": {"vendor_ids": ["V-0016"], "accounts": ["7000"], "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "the twelve rows", "figure": "12 x EUR 15,000.00, one per month, account 7000, memos 'Toimitilavuokra, tammikuu..joulukuu 2025'"},
+      {"source": "vendor_master.csv", "what": "vendor identity", "figure": "V-0016 = 'Kiinteisto Oy Vantaan Teollisuustalo', allowed 7000 (Premises rent)"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-11",
+    "headline": "V-0018 Ruuvitukku: two invoices of exactly EUR 7,420.00 four days apart, but under two different purchase orders.",
+    "unit_id": "RU-11",
+    "verdict": "worry",
+    "mechanism": "The vendor's only two invoices are the identical amount EUR 7,420.00 four days apart. Unlike RU-02/03/04 they cite different purchase orders (PO-48213 vs PO-48297), which points to two genuine orders that happen to share a value; but an exact-to-the-cent repeat on a round figure still meets the duplicate-review bar and cannot be cleared without checking the two deliveries are distinct.",
+    "affected": {"vendor_ids": ["V-0018"], "accounts": ["4200"], "months": [6], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "the two rows", "figure": "TXN021299 (PO-48213) & TXN022042 (PO-48297), both EUR 7,420.00, 4 days apart"},
+      {"source": "checks.py", "what": "distinguishing feature vs other duplicates", "figure": "different PO refs in memo, unlike the same-order pairs in RU-02/03/04"}
+    ],
+    "severity": "watch",
+    "confidence": "low",
+    "recommended_action": "Confirm PO-48213 and PO-48297 are two separate deliveries rather than one order billed under two PO numbers."
+  },
+  {
+    "finding_id": "F-12",
+    "headline": "U-031 posted two non-working-day lines on 15 Nov, explained by a scheduled inventory count with agreed overtime.",
+    "unit_id": "RU-12",
+    "verdict": "stand_down",
+    "mechanism": "Both calendar-flagged rows are the same warehouse-service vendor, same day (Sat 15 Nov), for agreed overtime during a stock count. The memo states the reason outright, and posting the two overtime lines the same day is normal. A benign, self-explaining non-working-day event.",
+    "affected": {"vendor_ids": ["V-0017"], "accounts": ["4420"], "months": [11], "users": ["U-031"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "memo verbatim", "figure": "TXN041654/041655 both 'Sovittu ylityo, inventaario 15.11.2025' (agreed overtime, stock count 15.11.2025), EUR 1,260.80 + 1,840.35"},
+      {"source": "vendor_master.csv", "what": "vendor fit", "figure": "V-0017 = 'Varastopalvelu Toivanen Ky' (warehouse service), account 4420 subcontracting - matches an inventory-count overtime charge"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-13",
+    "headline": "U-117 is the only AP user posting a run of non-working-day lines (8), though every line is small and unremarkable.",
+    "unit_id": "RU-13",
+    "verdict": "worry",
+    "mechanism": "Across the whole ledger, only two AP users ever post on non-working days: U-117 (8 lines) and U-031 (2, explained above); the other four post zero. U-117's eight are eight different weekends/holidays over Feb-Jun, each a small (EUR 300-2,000) ordinary invoice for a different vendor with invoice dates a few days earlier - i.e. weekend catch-up, not concealment. The transactions are benign but the concentration of all weekend posting in one user is a mild segregation point worth monitoring.",
+    "affected": {"vendor_ids": ["V-0168", "V-0184", "V-0085", "V-0163", "V-0194", "V-0145", "V-0024", "V-0135"], "accounts": ["4200", "7850", "4210", "4000", "4420", "7200"], "months": [2, 3, 4, 5, 6], "users": ["U-117"]},
+    "evidence": [
+      {"source": "checks.py", "what": "non-working-day human postings by user, full ledger", "figure": "U-117=8, U-031=2, all other AP users=0"},
+      {"source": "gl_transactions.csv", "what": "content of the 8 rows", "figure": "amounts EUR 300.37-2000.20, 8 different vendors, ordinary memos, invoice_date precedes posting by 3-7 days"}
+    ],
+    "severity": "watch",
+    "confidence": "medium",
+    "recommended_action": "Confirm U-117's weekend/holiday access is sanctioned catch-up work and that no single user should hold sole out-of-hours posting rights."
+  },
+  {
+    "finding_id": "F-14",
+    "headline": "V-0029 Poratekniikka: seven detector flags are the vendor's small year-end tail, all within allowed accounts.",
+    "unit_id": "DU-01",
+    "verdict": "stand_down",
+    "mechanism": "The detector picked up a late-December cluster of small invoices alternating the vendor's two normal accounts. Nothing crosses a control: accounts 4020/4200 are both allowed, amounts sit inside the vendor's own annual range, and none coincides with any rule flag.",
+    "affected": {"vendor_ids": ["V-0029"], "accounts": ["4020", "4200"], "months": [4, 7, 12], "users": ["INTEG-01", "U-058"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4020,4200} = allowed set; flagged amounts 148.77-1560.35 within vendor range 119.83-2918.05 (n=474)"},
+      {"source": "detector_flags.csv / checks", "what": "score and rule overlap", "figure": "max score 0.0266; 0 of 7 also carry a rule flag; 0 mapping violations"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-15",
+    "headline": "V-0037 Metallipalvelu: six flags reflect the vendor's two-account mix and its largest invoice, all benign.",
+    "unit_id": "DU-02",
+    "verdict": "stand_down",
+    "mechanism": "Flags are the vendor's alternation between accounts 7400 and 7900 (both allowed) plus its single largest invoice; the detector reads the two-account cadence as unusual. No threshold, duplicate or mapping issue.",
+    "affected": {"vendor_ids": ["V-0037"], "accounts": ["7400", "7900"], "months": [3, 5, 7, 9, 11], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {7400,7900} = allowed; amounts 215.38-2571.01 within vendor range 120.69-2571.01 (n=263)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0448; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-16",
+    "headline": "V-0041 Tarviketekniikka: five flags are small routine invoices within allowed accounts.",
+    "unit_id": "DU-03",
+    "verdict": "stand_down",
+    "mechanism": "Small maintenance-supply invoices on account 4300 (allowed), flagged for cadence/account-rarity relative to the vendor's usual 4200. Nothing breaches a control.",
+    "affected": {"vendor_ids": ["V-0041"], "accounts": ["4300"], "months": [1, 9, 10, 11], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "acct 4300 in allowed {4200,4300}; amounts 176.30-1264.99 within vendor range 104.22-2586.27 (n=584)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0163; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-17",
+    "headline": "V-0062 Metalltechnik (DE): three flags are ordinary invoices on the vendor's two allowed accounts.",
+    "unit_id": "DU-04",
+    "verdict": "stand_down",
+    "mechanism": "A German energy/marketing-account vendor with three flagged rows spread across the year; both accounts (7100, 7900) are allowed and amounts are within range. Detector reads a low-frequency foreign vendor as slightly anomalous.",
+    "affected": {"vendor_ids": ["V-0062"], "accounts": ["7100", "7900"], "months": [1, 3, 8], "users": ["INTEG-01", "U-058"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {7100,7900} = allowed; amounts 348.78-2865.74 within vendor range 205.50-3994.29 (n=132)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0171; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-18",
+    "headline": "V-0067 Stahltechnik (DE): seven flags are the vendor's normal two-account spread, benign.",
+    "unit_id": "DU-05",
+    "verdict": "stand_down",
+    "mechanism": "Security-services and other-operating invoices alternating accounts 7850/7990 (both allowed); amounts inside the vendor's range. No control breach.",
+    "affected": {"vendor_ids": ["V-0067"], "accounts": ["7850", "7990"], "months": [1, 2, 6, 10, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {7850,7990} = allowed; amounts 345.95-2956.57 within vendor range 186.83-3373.29 (n=345)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0298; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-19",
+    "headline": "V-0072 Nostotukku: three flags are very small invoices, all benign.",
+    "unit_id": "DU-06",
+    "verdict": "stand_down",
+    "mechanism": "Three low-value invoices (EUR 298-487) on account 4000 (allowed), flagged for being on the vendor's secondary account. Well inside range; nothing wrong.",
+    "affected": {"vendor_ids": ["V-0072"], "accounts": ["4000"], "months": [4, 8, 11], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "acct 4000 in allowed {4300,4000}; amounts 297.89-487.38 within vendor range 144.09-2338.38 (n=361)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0207; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-20",
+    "headline": "V-0076 Vasaravaraosa: four flags including one larger service invoice, all within allowed accounts.",
+    "unit_id": "DU-07",
+    "verdict": "stand_down",
+    "mechanism": "Three subcontracting invoices plus one larger EUR 5,353 external-services invoice; both accounts (4420, 4440) allowed and the top amount is below the vendor's own max. Detector reads the account switch as unusual.",
+    "affected": {"vendor_ids": ["V-0076"], "accounts": ["4420", "4440"], "months": [1, 6, 11], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4420,4440} = allowed; amounts 1992.35-5353.57 within vendor range 381.17-5828.69 (n=664)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0118; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-21",
+    "headline": "V-0078 Kumipalvelu Oy Ab: fourteen flags (most of any vendor) trace to a high-value dual-account supplier, all benign.",
+    "unit_id": "DU-08",
+    "verdict": "stand_down",
+    "mechanism": "A EUR 521k/yr supplier that alternates foreign-purchases (4010) and spare-parts (4310) at mid-to-high values; that combination gives the detector many outlier-looking points. Every flagged row is within allowed accounts and below the vendor's max; the two human-posted rows are on working days.",
+    "affected": {"vendor_ids": ["V-0078"], "accounts": ["4010", "4310"], "months": [1, 2, 3, 4, 6, 7, 8, 10, 11, 12], "users": ["INTEG-01", "U-204", "U-058"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4010,4310} = allowed; amounts 1545.46-6172.62 within vendor range 462.91-6588.79 (n=160)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0630; 0 of 14 carry a rule flag; human rows on working days"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-22",
+    "headline": "V-0090 Industriehandel (DE): nine small flags, all within allowed accounts.",
+    "unit_id": "DU-09",
+    "verdict": "stand_down",
+    "mechanism": "Small tool/maintenance invoices alternating 4200/4300 (both allowed); the frequent low-value cadence draws detector attention but breaches nothing.",
+    "affected": {"vendor_ids": ["V-0090"], "accounts": ["4200", "4300"], "months": [1, 2, 3, 4, 5, 7, 8, 9, 10], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4200,4300} = allowed; amounts 200.53-1790.95 within vendor range 113.60-3757.68 (n=365)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0222; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-23",
+    "headline": "V-0098 Hällsvik Bergsteknik (SE): four small flags, benign.",
+    "unit_id": "DU-10",
+    "verdict": "stand_down",
+    "mechanism": "Four low-value invoices on accounts 4020/4300 (both allowed); flagged as a low-frequency Swedish vendor. Inside range, no control issue.",
+    "affected": {"vendor_ids": ["V-0098"], "accounts": ["4020", "4300"], "months": [1, 2, 3, 5], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4020,4300} = allowed; amounts 187.44-2007.60 within vendor range 109.53-2098.26 (n=143)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0272; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-24",
+    "headline": "V-0099 Hällsvik Malmhandel (SE): eleven flags including the vendor's largest invoice (EUR 11,282), all within allowed accounts.",
+    "unit_id": "DU-11",
+    "verdict": "stand_down",
+    "mechanism": "A freight/external-services supplier whose flags are its account switches (4410/4440, both allowed) and one EUR 11,282 service invoice - its single largest, above EUR 10,000 but a single genuine invoice, not a split. No mapping or duplicate issue.",
+    "affected": {"vendor_ids": ["V-0099"], "accounts": ["4410", "4440"], "months": [1, 2, 3, 6, 9, 10, 11], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + largest invoice", "figure": "accts {4410,4440} = allowed; EUR 11,281.91 on 4440 = vendor annual max; amounts 1044.10-11281.91 within range (n=224)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0457; no rule-flag overlap; single invoice, not a split pair"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-25",
+    "headline": "V-0110 Levykomponentti: three flags are ordinary mid-value invoices within allowed accounts.",
+    "unit_id": "DU-12",
+    "verdict": "stand_down",
+    "mechanism": "Three invoices (EUR 1,732-2,268) on accounts 4000/4210 (both allowed), at the top of the vendor's range, which the detector reads as outliers. No control breach.",
+    "affected": {"vendor_ids": ["V-0110"], "accounts": ["4000", "4210"], "months": [5, 9, 10], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4000,4210} = allowed; amounts 1732.00-2268.31 within vendor range 165.65-2268.31 (n=146)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0211; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-26",
+    "headline": "V-0114 Ratasmateriaali: seven small flags across two allowed accounts, benign.",
+    "unit_id": "DU-13",
+    "verdict": "stand_down",
+    "mechanism": "Small software/IT-services invoices (accounts 7250/7200, both allowed) flagged for cadence. All well inside the vendor's range; nothing wrong.",
+    "affected": {"vendor_ids": ["V-0114"], "accounts": ["7250", "7200"], "months": [3, 4, 5, 7, 11, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {7250,7200} = allowed; amounts 339.73-1377.82 within vendor range 199.21-3403.77 (n=144)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0337; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-27",
+    "headline": "V-0118 Levypalvelu: six very small flags, one human-posted on a working day, all benign.",
+    "unit_id": "DU-14",
+    "verdict": "stand_down",
+    "mechanism": "Six low-value invoices (EUR 214-770) on accounts 4200/4000 (both allowed); the one human posting (U-142) is on a working day. Nothing breaches a control.",
+    "affected": {"vendor_ids": ["V-0118"], "accounts": ["4200", "4000"], "months": [3, 5, 8, 10, 12], "users": ["INTEG-01", "U-142"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4200,4000} = allowed; amounts 214.32-769.74 within vendor range 125.86-2226.87 (n=217)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0188; no rule-flag overlap; U-142 row on a working day"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-28",
+    "headline": "V-0121 Putkimateriaali: six flags including two same-day invoices of different amounts - benign.",
+    "unit_id": "DU-15",
+    "verdict": "stand_down",
+    "mechanism": "Flags are ordinary invoices on account 7990 (allowed) plus two invoices posted the same day (16 Mar) for different amounts and different order numbers - two deliveries, not a duplicate. All within range.",
+    "affected": {"vendor_ids": ["V-0121"], "accounts": ["7990"], "months": [1, 3, 5, 9, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "same-day pair", "figure": "TXN009798 EUR 1,845.80 (inv 771689) and TXN009799 EUR 572.92 (inv 771690), same day, different amounts - not a duplicate"},
+      {"source": "gl_transactions.csv / checks", "what": "accounts, range, score", "figure": "acct 7990 in allowed {7250,7990}; amounts 572.92-2351.65 within range 200.63-4588.56 (n=390); max score 0.0593"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-29",
+    "headline": "V-0125 Ratastukku: five flags are mid-value telecom invoices within allowed accounts.",
+    "unit_id": "DU-16",
+    "verdict": "stand_down",
+    "mechanism": "Five invoices on account 7400 (allowed), flagged for being on the vendor's secondary account. All inside range; no control issue.",
+    "affected": {"vendor_ids": ["V-0125"], "accounts": ["7400"], "months": [2, 3, 5, 6, 10], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "acct 7400 in allowed {7990,7400}; amounts 961.78-2119.78 within vendor range 102.58-3489.70 (n=116)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0202; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-30",
+    "headline": "V-0131 Turvalogistiikka: seventeen flags (most of any unit) trace to a high-volume dual-account supplier, all benign.",
+    "unit_id": "DU-17",
+    "verdict": "stand_down",
+    "mechanism": "A EUR 537k/yr supplier alternating seals/components (4110) and spare-parts (4310) at mid-high values generates many outlier-looking points. Every flagged row is within allowed accounts and below the vendor's max; the one human posting (U-117) is on a working day.",
+    "affected": {"vendor_ids": ["V-0131"], "accounts": ["4110", "4310"], "months": [1, 2, 3, 4, 6, 7, 9, 10, 11, 12], "users": ["INTEG-01", "U-117"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4110,4310} = allowed; amounts 1695.20-6938.75 within vendor range 605.83-7066.54 (n=166)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0578; 0 of 17 carry a rule flag; U-117 row on a working day"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-31",
+    "headline": "V-0132 Kulmatekniikka: three flags including the vendor's single largest invoice (EUR 10,040), all on its one allowed account.",
+    "unit_id": "DU-18",
+    "verdict": "stand_down",
+    "mechanism": "Three larger spare-parts invoices, including one at EUR 10,039.71 - the vendor's annual max, marginally over EUR 10,000 but a single genuine invoice on account 4310 (the vendor's only allowed account), not a split or duplicate.",
+    "affected": {"vendor_ids": ["V-0132"], "accounts": ["4310"], "months": [2, 6, 8], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "largest invoice + account", "figure": "EUR 10,039.71 on 4310 = vendor annual max; single invoice (inv 488660), not a split pair"},
+      {"source": "checks", "what": "range, score, overlap", "figure": "amounts 6579.04-10039.71 within range 539.71-10039.71 (n=348); max score 0.0084; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-32",
+    "headline": "V-0135 Metallijarjestelma: nine flags including the ledger's top-ranked detector row, all within allowed accounts.",
+    "unit_id": "DU-19",
+    "verdict": "stand_down",
+    "mechanism": "This vendor carries the single most anomalous detector score in the ledger (TXN024115, 0.079), but the row is a EUR 3,722 telecom invoice on account 7400 - within the vendor's allowed set {7200,7400} and below its max of EUR 4,092. The high score reflects a rare account/amount combination, not a control breach.",
+    "affected": {"vendor_ids": ["V-0135"], "accounts": ["7200", "7400"], "months": [1, 3, 4, 7, 9, 11, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "detector_flags.csv", "what": "rank-1 row identity", "figure": "TXN024115 score 0.0790 = EUR 3,721.96 on 7400 (allowed); vendor max 4,091.51"},
+      {"source": "gl_transactions.csv / checks", "what": "accounts vs allowed, overlap", "figure": "accts {7200,7400} = allowed; amounts 445.38-4091.51 within range 203.02-4091.51 (n=228); no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-33",
+    "headline": "V-0155 Pistetukku: three flags including two same-day December invoices, benign.",
+    "unit_id": "DU-20",
+    "verdict": "stand_down",
+    "mechanism": "Three marketing-account (7100, allowed) invoices, two posted the same day (24 Dec) for different amounts and consecutive order numbers - two deliveries, not a duplicate. All within range.",
+    "affected": {"vendor_ids": ["V-0155"], "accounts": ["7100"], "months": [4, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "same-day pair", "figure": "TXN048859 EUR 1,690.55 & TXN048860 EUR 1,420.13, same day, different amounts/orders"},
+      {"source": "checks", "what": "accounts, range, score", "figure": "acct 7100 in allowed {7400,7100}; amounts 1420.13-1943.29 within range 135.64-5141.54 (n=586); max score 0.0186"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-34",
+    "headline": "V-0156 Verkkotukku: eight tiny flags, two same-day, all benign.",
+    "unit_id": "DU-21",
+    "verdict": "stand_down",
+    "mechanism": "Very small invoices (EUR 99-811) on accounts 4020/4200 (both allowed), including two same-day (11 Jan) for different amounts and orders. The low values and frequency draw the detector; no control breach.",
+    "affected": {"vendor_ids": ["V-0156"], "accounts": ["4020", "4200"], "months": [1, 2, 4, 6, 7, 9], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "same-day pair + range", "figure": "TXN001079 EUR 646.40 & TXN001080 EUR 280.12 same day; all amounts 98.86-811.49 within range 98.86-2197.98 (n=171)"},
+      {"source": "checks", "what": "accounts, score, overlap", "figure": "accts {4020,4200} = allowed; max score 0.0392; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-35",
+    "headline": "V-0157 Kumivaraosa: seven mid-value flags across two allowed accounts, benign.",
+    "unit_id": "DU-22",
+    "verdict": "stand_down",
+    "mechanism": "Steel and spare-parts invoices (accounts 4100/4310, both allowed) at mid values, flagged for the account switch. All inside the vendor's range; nothing wrong.",
+    "affected": {"vendor_ids": ["V-0157"], "accounts": ["4100", "4310"], "months": [2, 5, 6, 7, 9, 11], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4100,4310} = allowed; amounts 2404.24-6615.30 within vendor range 1361.62-7832.79 (n=170)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0460; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-36",
+    "headline": "V-0176 Hällsvik Nordgrossist (SE): three small flags within allowed accounts.",
+    "unit_id": "DU-23",
+    "verdict": "stand_down",
+    "mechanism": "Three low-value invoices on accounts 4300/4020 (both allowed), flagged as a low-frequency Swedish vendor. Inside range; no control issue.",
+    "affected": {"vendor_ids": ["V-0176"], "accounts": ["4300", "4020"], "months": [3, 7, 10], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {4300,4020} = allowed; amounts 233.30-1246.51 within vendor range 159.81-3276.52 (n=203)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0374; no rule-flag overlap"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-37",
+    "headline": "V-0198 Metallitukku: ten small flags, one human-posted on a working day, all benign.",
+    "unit_id": "DU-24",
+    "verdict": "stand_down",
+    "mechanism": "Small software/security invoices (accounts 7250/7850, both allowed), the one human posting (U-117) on a working day. Frequent low-value cadence draws the detector but breaches nothing.",
+    "affected": {"vendor_ids": ["V-0198"], "accounts": ["7250", "7850"], "months": [1, 2, 3, 5, 7, 8, 9, 11, 12], "users": ["INTEG-01", "U-117"]},
+    "evidence": [
+      {"source": "gl_transactions.csv", "what": "accounts vs allowed + amount range", "figure": "accts {7250,7850} = allowed; amounts 211.92-2440.87 within vendor range 211.92-2872.17 (n=207)"},
+      {"source": "checks", "what": "score and rule overlap", "figure": "max score 0.0413; no rule-flag overlap; U-117 row on a working day"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-38",
+    "headline": "SINGLES: the detector's ten highest-scoring singletons are each a vendor's large or rare-account invoice, none breaching a control.",
+    "unit_id": "SINGLES",
+    "verdict": "stand_down",
+    "mechanism": "These ten carry the top anomaly scores in the ledger, but on inspection each is simply one vendor's largest or unusual-account invoice: e.g. TXN010666 (V-0071, EUR 8,464.74, the vendor's annual max) and TXN045742 (V-0195, EUR 7,575.97 representation, its max). All are e-invoiced by INTEG-01 (so calendar-exempt), all use accounts within the vendor's allowed set, none is a round sum, a near-threshold amount, or a duplicate.",
+    "affected": {"vendor_ids": ["V-0095", "V-0142", "V-0105", "V-0071", "V-0075", "V-0023", "V-0195", "V-0150", "V-0171"], "accounts": ["4110", "4430", "7250", "4310", "7700", "4020", "4300"], "months": [1, 2, 3, 7, 11, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "gl_transactions.csv / checks", "what": "control checks across the 10", "figure": "0/10 mapping violations, 0/10 round thousands, 0/10 in 9500-9999.99, 0/10 duplicates; each amount <= its vendor's annual max"},
+      {"source": "detector_flags.csv", "what": "score band vs rule overlap", "figure": "scores 0.0237-0.0750 (the highest in the ledger) yet 0/10 overlap any rule flag"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-39",
+    "headline": "RESIDUAL: the 30 lowest-scoring ungrouped detector rows are ordinary tail transactions, benign in aggregate.",
+    "unit_id": "RESIDUAL",
+    "verdict": "stand_down",
+    "mechanism": "This is the bottom of the anomaly distribution (scores 0.0005-0.016, below every grouped unit's top score). All 30 rows are e-invoiced by INTEG-01 across 26 different vendors, every one on an account within the vendor's allowed set, with no round sums, near-threshold amounts, split pairs or duplicates. The largest (TXN024676, V-0191, EUR 9,447.82 on 4010) is a single in-range foreign purchase. Distributionally these are the detector's weakest signals and carry no control exception.",
+    "affected": {"vendor_ids": ["V-0163", "V-0087", "V-0159", "V-0162", "V-0195", "V-0191", "V-0197", "V-0194", "V-0189", "V-0069", "V-0085", "V-0138", "V-0068", "V-0040", "V-0094", "V-0081", "V-0051", "V-0150", "V-0033", "V-0153", "V-0108", "V-0027", "V-0093"], "accounts": ["7850", "7700", "4430", "4010", "4100", "7250", "4210", "4020", "4310", "7600", "4200", "7000", "4300", "7800", "4000"], "months": [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "checks.py", "what": "control checks across all 30", "figure": "0 mapping violations, 0 round thousands, 0 near-threshold, 0 duplicates; all posted by INTEG-01"},
+      {"source": "detector_flags.csv", "what": "score band", "figure": "scores 0.000505-0.016032, the lowest of any unit; max amount EUR 9,447.82 (in-range, single invoice)"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  },
+  {
+    "finding_id": "F-40",
+    "headline": "One supplier (Karrenbach Dichtungstechnik GmbH) exists as three vendor masters with three different bank accounts - a live duplicate-payment and payment-diversion surface.",
+    "unit_id": "free-hunt",
+    "verdict": "worry",
+    "mechanism": "V-0003, V-0004 and V-0005 share one VAT number (DE199283746) and one address (Beispielstrasse 14, Hamburg) but are three separate vendor records with three different IBANs and three spellings of the name (proper / 'Kaerrenbach' / ALL CAPS). Byte-different names slip past the name-hygiene rule. Three masters for one legal entity means duplicate-invoice controls keyed on vendor_id cannot see across them, and three bank accounts mean a payment could be routed to any of them - the classic fingerprint of a duplicate/re-added vendor and a payment-diversion risk.",
+    "affected": {"vendor_ids": ["V-0003", "V-0004", "V-0005"], "accounts": ["4110"], "months": [1, 4, 6, 7, 8, 9, 10, 11, 12], "users": ["INTEG-01"]},
+    "evidence": [
+      {"source": "vendor_master.csv", "what": "shared VAT/address, divergent IBAN/name", "figure": "one VAT DE199283746 + one address across V-0003/4/5; IBANs DE05..7867, DE76..5008, DE54..4734; names 'Karrenbach', 'Kaerrenbach', 'KARRENBACH'"},
+      {"source": "gl_transactions.csv", "what": "spend split across the three masters", "figure": "V-0003 EUR 23,651 (7 inv), V-0004 EUR 15,026 (5), V-0005 EUR 10,324 (3); combined EUR 49,001, all on account 4110; V-0004/V-0005 activity only starts April"},
+      {"source": "checks.py", "what": "cross-master duplicate scan", "figure": "no same-amount invoice within 15 days across the three ids yet - so no realised double payment, but the exposure is open"}
+    ],
+    "severity": "act",
+    "confidence": "high",
+    "recommended_action": "Confirm the three IBANs genuinely belong to Karrenbach, merge V-0003/4/5 into one master, and block payments on the duplicates before the next run."
+  },
+  {
+    "finding_id": "F-41",
+    "headline": "Monthly-total, top-mover and user-posting sweeps are clean: spend is stable, human posting is evenly shared, the only large one-off is a benign EUR 78,400 capital purchase.",
+    "unit_id": "free-hunt",
+    "verdict": "stand_down",
+    "mechanism": "The standard analyst sweeps beyond the flags turned up nothing actionable. Month-by-account totals are stable (no cell exceeds 2.2x its account's median except one), the only large one-off is a single EUR 78,400 machinery invoice (V-0019, account 1200, October) - a clean capital purchase, not an expense anomaly - and manual posting volume is spread evenly across the six AP users (1,408-1,538 lines each), so no single user dominates data entry.",
+    "affected": {"vendor_ids": ["V-0019"], "accounts": ["1200"], "months": [10], "users": ["U-058", "U-117", "U-204", "U-142", "U-031", "U-176"]},
+    "evidence": [
+      {"source": "checks2.py", "what": "month-account spike scan", "figure": "only spike >2.2x median & >50k is account 1200 in October (EUR 78,400), a one-off capex from a vendor with no other activity"},
+      {"source": "checks2.py", "what": "user posting volumes", "figure": "human rows per user 1408-1538, near-uniform; INTEG-01 posts 41,225 (82%)"},
+      {"source": "checks.py", "what": "master integrity", "figure": "0 invoices dated before vendor active_from; 0 IBANs shared across vendors"}
+    ],
+    "severity": "info",
+    "confidence": "high",
+    "recommended_action": ""
+  }
+]
