@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-D-t45-r3",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T45",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "678c8b5171829c4c9c0252d7314eb8df93102629a0113b0d6d326c53807b7612",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:13:32",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE '%Tampere%' OR store_name ILIKE '%Tampere%' ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n21 | 115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n23 | 117 | Tampere Kaleva | Tampere | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n42 | 136 | Tampere Lamminpää | Tampere | West | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n46 | 900 | Tuomimetsä web shop | Tampere | Online | Web | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n47 | 999 | Training store | Tampere | Head office | Training | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:13:37",
+   "statement": "WITH cur AS (SELECT * FROM dim_member WHERE is_current)\nSELECT m.home_store_id, count(*) AS rows_cur, count(DISTINCT m.member_id) AS members,\n  (SELECT count(DISTINCT member_id) FROM dim_member) AS all_members,\n  (SELECT count(*) FROM dim_member) AS all_rows,\n  (SELECT count(*) FROM (SELECT member_id FROM dim_member WHERE is_current GROUP BY 1 HAVING count(*)>1)) AS dup_current,\n  (SELECT count(*) FROM (SELECT member_id FROM dim_member GROUP BY 1 HAVING sum(CASE WHEN is_current THEN 1 ELSE 0 END)<>1)) AS no_one_current\nFROM cur m WHERE m.home_store_id IN (115,116,117,136,900,999) GROUP BY ALL ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "home_store_id | rows_cur | members | all_members | all_rows | dup_current | no_one_current\n115 | 2788 | 2788 | 60000 | 89314 | 0 | 0\n116 | 1721 | 1721 | 60000 | 89314 | 0 | 0\n117 | 1692 | 1692 | 60000 | 89314 | 0 | 0\n136 | 974 | 974 | 60000 | 89314 | 0 | 0\n900 | 12028 | 12028 | 60000 | 89314 | 0 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:13:44",
+   "statement": "WITH asof AS (SELECT DATE '2026-10-04' AS d),\nver AS (  -- member version valid on as-of Sunday\n  SELECT m.* FROM dim_member m, asof WHERE m.valid_from <= asof.d AND m.valid_to >= asof.d),\nact AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key, asof\n  WHERE f.sale_date > asof.d - 364 AND f.sale_date <= asof.d\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test')\nSELECT v.home_store_id,\n  count(DISTINCT v.member_id) AS members_asof_ver,\n  count(DISTINCT CASE WHEN a.member_id IS NOT NULL THEN v.member_id END) AS active_members,\n  count(DISTINCT CASE WHEN v.marketing_consent THEN v.member_id END) AS consent\nFROM ver v LEFT JOIN act a ON a.member_id = v.member_id\nWHERE v.home_store_id IN (115,116,117,136,900,999) GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"asof\"\n\nLINE 1: WITH asof AS (SELECT DATE '2026-10-04' AS d),\n             ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:13:51",
+   "statement": "WITH ao AS (SELECT DATE '2026-10-04' AS d),\nver AS (\n  SELECT m.* FROM dim_member m, ao WHERE m.valid_from <= ao.d AND m.valid_to >= ao.d),\nact AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key, ao\n  WHERE f.sale_date > ao.d - 364 AND f.sale_date <= ao.d\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test')\nSELECT v.home_store_id,\n  count(DISTINCT v.member_id) AS members_asof_ver,\n  count(DISTINCT CASE WHEN a.member_id IS NOT NULL THEN v.member_id END) AS active_members,\n  count(DISTINCT CASE WHEN v.marketing_consent THEN v.member_id END) AS consent\nFROM ver v LEFT JOIN act a ON a.member_id = v.member_id\nWHERE v.home_store_id IN (115,116,117,136,900,999) GROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "home_store_id | members_asof_ver | active_members | consent\n115 | 2788 | 1708 | 1892\n116 | 1721 | 1052 | 1155\n117 | 1692 | 1034 | 1138\n136 | 974 | 647 | 656\n900 | 12028 | 4698 | 8214\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:14:01",
+   "statement": "WITH tampere_stores AS (\n  SELECT DISTINCT store_id FROM dim_store\n  WHERE city = 'Tampere' AND store_id < 900),\nmember_asof AS (\n  SELECT m.member_id, m.home_store_id FROM dim_member m\n  WHERE m.valid_from <= DATE '2026-10-04' AND m.valid_to >= DATE '2026-10-04'),\nactive_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test')\nSELECT COUNT(DISTINCT a.member_id) AS active_members_tampere\nFROM member_asof a\nJOIN tampere_stores t ON t.store_id = a.home_store_id\nJOIN active_members am ON am.member_id = a.member_id\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "active_members_tampere\n4441\n(1 row)"
+  }
+ ]
+}

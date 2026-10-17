@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH q1_sales AS (\n  SELECT \n    f.sales_line_id,\n    f.product_key,\n    f.quantity,\n    p.subcategory\n  FROM fact_sales_line f\n  INNER JOIN dim_product p ON f.product_key = p.product_key\n  WHERE p.category = 'Garden'\n    AND f.sale_date &gt;= '2025-04-28'\n    AND f.sale_date &lt;= '2025-07-27'\n),\nreturns_of_q1_sales AS (\n  SELECT \n    q.sales_line_id,\n    q.product_key,\n    q.quantity as quantity_sold,\n    COALESCE(r.quantity_returned, 0) as quantity_returned,\n    q.subcategory\n  FROM q1_sales q\n  LEFT JOIN fact_return_line r ON q.sales_line_id = r.sales_line_id\n)\nSELECT \n  subcategory,\n  ROUND(100.0 * SUM(quantity_returned) / SUM(quantity_sold), 2) as return_rate_pct\nFROM returns_of_q1_sales\nGROUP BY subcategory\nORDER BY subcategory",
+  "result": {
+    "columns": ["subcategory", "return_rate_pct"],
+    "rows": [
+      ["Barbecue &amp; Grills", 6.47],
+      ["Edible Plants &amp; Seeds", 0.99],
+      ["Garden Furniture", 12.69],
+      ["Garden Tools", 5.19],
+      ["Outdoor Lighting", 7.23],
+      ["Plants &amp; Flowers", 2.72],
+      ["Pots &amp; Planters", 3.89],
+      ["Soil &amp; Fertiliser", 1.71]
+    ]
+  },
+  "definitions_applied": [
+    "Q1 fiscal quarter: fiscal periods 1-3 of the fiscal year",
+    "Return rate: units returned as a percentage of units sold",
+    "Garden category: products where dim_product.category = 'Garden'"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2025/26 (the previous completed fiscal year from the request date of 2026-10-06)",
+    "Q1 runs from 2025-04-28 to 2025-07-27 (the three fiscal periods that comprise Q1 of FY2025/26)",
+    "Return rate is calculated using unit quantities (not refund amounts)",
+    "Returns are counted regardless of when they were returned, so long as the original sale was in Q1"
+  ],
+  "caveats": [
+    "No data quality issues detected; all 125,120 units sold across 81,840 Garden category sale lines have valid product keys",
+    "Return lag: some returns from Q1 sales were recorded through 2025-08-22, after the Q1 period ended, which is normal customer behaviour",
+    "Return rate includes all types of returns (damage, defect, customer preference, etc.) without distinction"
+  ]
+}
+```

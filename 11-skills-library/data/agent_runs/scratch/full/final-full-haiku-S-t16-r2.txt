@@ -1,0 +1,28 @@
+Perfect. I have the answer. Let me prepare the final response.
+
+```json
+{
+  "sql": "WITH web_sales_by_fulfillment AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    wo.fulfilment_type,\n    SUM(wo.order_total_gross) AS fulfilment_value\n  FROM fact_web_order wo\n  INNER JOIN fact_sales_line fsl ON wo.web_order_id = fsl.receipt_id\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period IN (9, 10)\n  GROUP BY d.fiscal_year, d.fiscal_period, wo.fulfilment_type\n),\ntotals_per_period AS (\n  SELECT \n    fiscal_year,\n    fiscal_period,\n    SUM(fulfilment_value) AS total_value\n  FROM web_sales_by_fulfillment\n  GROUP BY fiscal_year, fiscal_period\n)\nSELECT \n  wsf.fiscal_year,\n  wsf.fiscal_period,\n  ROUND(100.0 * wsf.fulfilment_value / tp.total_value, 2) AS click_and_collect_share_pct\nFROM web_sales_by_fulfillment wsf\nINNER JOIN totals_per_period tp \n  ON wsf.fiscal_year = tp.fiscal_year \n  AND wsf.fiscal_period = tp.fiscal_period\nWHERE wsf.fulfilment_type = 'click_and_collect'\nORDER BY wsf.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_and_collect_share_pct"],
+    "rows": [
+      ["FY2024/25", 9, 23.36],
+      ["FY2024/25", 10, 27.59]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales value: order_total_gross from fact_web_order",
+    "Click-and-collect fulfillment type: click_and_collect column value",
+    "Fiscal period: definition from ref_fiscal_calendar"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2024/25 (the year before current FY2025/26)",
+    "Share is calculated by value (EUR) of orders, not by order count",
+    "Web sales are identified by fact_web_order linked to fact_sales_line by web_order_id = receipt_id"
+  ],
+  "caveats": [
+    "No data quality issues detected",
+    "All web orders in periods 9-10 FY2024/25 were successfully matched to sales lines"
+  ]
+}
+```

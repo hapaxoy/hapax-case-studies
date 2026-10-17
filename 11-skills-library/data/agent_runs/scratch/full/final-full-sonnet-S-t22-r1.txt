@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH contacted AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = 19), purchases AS (SELECT sum(f.net_amount) AS net_purchases FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key WHERE f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24' AND m.member_id IN (SELECT member_id FROM contacted)), refunds AS (SELECT coalesce(sum(r.refund_net), 0) AS net_refunds FROM fact_return_line r JOIN dim_member m ON m.member_key = r.member_key WHERE r.return_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24' AND m.member_id IN (SELECT member_id FROM contacted)) SELECT 19 AS campaign_id, 'Spring Garden Launch 2026' AS campaign_name, (SELECT count(*) FROM contacted) AS members_contacted, round((SELECT net_purchases FROM purchases) - (SELECT net_refunds FROM refunds), 2) AS net_spend_eur_ex_vat",
+  "result": {
+    "columns": ["campaign_id", "campaign_name", "members_contacted", "net_spend_eur_ex_vat"],
+    "rows": [[19, "Spring Garden Launch 2026", 15001, 183344.76]]
+  },
+  "definitions_applied": [
+    "Members counted by member_id (the stable loyalty number), not member_key, which is a per-version surrogate key",
+    "Campaign window 2026-05-04 to 2026-05-24 (dim_campaign id 19), matching the requested 4 to 24 May 2026, both ends inclusive",
+    "Net spend = net_amount (EUR excluding VAT, after line discounts) over store and web lines, less refund_net on returns booked in the window; this follows the net sales definition in rpt_daily_store_sales",
+    "Sale date taken from sale_date (business date), not the UTC timestamp",
+    "Contacted = at least one row in fact_campaign_exposure for the campaign, whether or not it was delivered or opened",
+    "Fact tables joined to dim_member on member_key, then collapsed to member_id so every version of a member counts once"
+  ],
+  "assumptions": [
+    "'Contacted' includes members whose email or SMS failed to deliver, because the contact was made. Members with at least one delivered contact number 14,814.",
+    "'Spend' means spend in EUR excluding VAT, net of refunds, consistent with how the company reports net sales.",
+    "Spend covers all channels (stores and web, including click-and-collect), not only the garden category and not only stores.",
+    "'Between 4 and 24 May 2026' is read as inclusive of both dates, which equals the campaign window.",
+    "Staff purchases are included, as they are in the rpt_daily_store_sales net sales figures.",
+    "Refunds are counted when booked (return_date in the window), regardless of the date of the original sale, as in the daily net sales report."
+  ],
+  "caveats": [
+    "Member versioning: the same member can appear under several member_keys. Counting member_keys gives 15,063 rather than 15,001 distinct members, so the count was corrected to distinct member_id.",
+    "The mailing list size recorded in dim_campaign (16,624) less the holdout (1,597) gives 15,027, which is 26 more than the 15,001 members who actually have a contact row. I could not explain the 26 from the warehouse, and the answer uses actual contact rows.",
+    "No holdout member (campaign_holdout) appears among the contacted members, so there is no holdout contamination in the count or the spend.",
+    "Spend is the total for all contacted members. It is not the incremental effect of the campaign, because the holdout group was not compared. Only 2,626 of the 15,001 contacted members made a purchase in the window.",
+    "Alternative figures if a different spend definition is wanted: 191,576.08 EUR before refunds; 189,035.29 EUR before refunds and excluding 117 staff-purchase lines; 239,917.96 EUR including VAT before refunds. Refunds booked in the window were 8,231.32 EUR ex VAT.",
+    "The sales data for 4 to 24 May is complete: 21 daily loads, no duplicate sales lines, and none of the staging-table rows (dated October 2026) fall in the window.",
+    "channel_code is empty on the 2026 sales lines, so channel was identified through channel_id (1 store, 2 web home delivery, 3 click and collect). All web orders in the window are delivered or collected, with none cancelled."
+  ]
+}
+```

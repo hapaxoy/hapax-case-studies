@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "WITH sales_lines AS (\n  SELECT \n    f.sales_line_id,\n    cp.sku,\n    cp.product_name,\n    f.net_amount,\n    f.standard_cost\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON s.store_key = f.store_key\n  INNER JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  INNER JOIN dim_product p ON p.product_key = f.product_key\n  INNER JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2024/25' \n    AND d.fiscal_week BETWEEN 40 AND 52\n    AND cs.region = 'South'\n    AND cs.store_id &lt; 900\n    AND cp.category != 'ZZ Test'\n),\nreturn_lines AS (\n  SELECT \n    fr.sales_line_id,\n    fr.refund_net,\n    fr.standard_cost_returned\n  FROM fact_return_line fr\n),\nproduct_margins AS (\n  SELECT \n    sl.sku,\n    sl.product_name,\n    SUM(sl.net_amount) as net_sales_before_returns,\n    SUM(sl.standard_cost) as cost_before_returns,\n    COALESCE(SUM(rl.refund_net), 0) as total_refunds,\n    COALESCE(SUM(rl.standard_cost_returned), 0) as cost_of_returns\n  FROM sales_lines sl\n  LEFT JOIN return_lines rl ON sl.sales_line_id = rl.sales_line_id\n  GROUP BY sl.sku, sl.product_name\n)\nSELECT \n  sku,\n  product_name,\n  ROUND(net_sales_before_returns - total_refunds - (cost_before_returns - cost_of_returns), 2) as gross_margin\nFROM product_margins\nORDER BY gross_margin DESC\nLIMIT 10",
+  "result": {
+    "columns": ["sku", "product_name", "gross_margin"],
+    "rows": [
+      [103075, "Cushions &amp; Throws Tuulikki 338", 2935.29],
+      [100955, "Interior Paint Norvik 298", 2138.48],
+      [101763, "Fixings &amp; Fasteners Nordhem 594", 2080.55],
+      [103390, "Bedroom Peltola 793", 1993.84],
+      [100953, "Interior Paint Tuulikki 224", 1388.76],
+      [103062, "Cushions &amp; Throws Kuusela 657", 1362.42],
+      [102468, "Plumbing Parts Ahvenisto 279", 1342.48],
+      [102538, "Cookware Nordhem 469", 1177.39],
+      [101398, "Power Tools Havu Pro 689", 1095.66],
+      [101888, "Indoor Lighting Havu 419", 978.84]
+    ]
+  },
+  "definitions_applied": [
+    "Gross margin (metric-dictionary): net sales minus standard cost of goods sold, both after returns",
+    "Net sales (metric-dictionary): net amount excluding VAT, after returns; store 999 and category ZZ Test excluded",
+    "South region as-is (store-and-product-history): current region hierarchy applied to all history"
+  ],
+  "assumptions": [
+    "Q4 resolved as the most recently completed fiscal quarter: FY2024/25 Q4 (fiscal weeks 40-52, 27 January to 27 April 2025)",
+    "South region uses as-is reporting with current store-region mappings (includes stores that moved to South after the period)",
+    "Top 10 means the 10 products with the highest absolute gross margin value in EUR"
+  ],
+  "caveats": [
+    "Gross margin values are in EUR; no margin percentage calculated",
+    "Returns are credited back at standard cost per the company definition",
+    "Standard cost is revalued each April and applied to all sales in the period",
+    "The result spans multiple product categories within the South region"
+  ]
+}
+```

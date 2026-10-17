@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t15-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T15",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "829fdfe803bfbe7e70ad3bc0d9c51080f9a8930b18ac395d5f047a75f78610ee",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:53",
+   "statement": "SELECT status, COUNT(*) AS rows_n, COUNT(DISTINCT web_order_id) AS distinct_orders, MIN(order_ts_utc), MAX(order_ts_utc)\nFROM fact_web_order o\nWHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\nGROUP BY status ORDER BY status\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | rows_n | distinct_orders | min(order_ts_utc) | max(order_ts_utc)\ncancelled | 19 | 19 | 2025-11-30T22:29:57 | 2025-12-01T21:27:52\ncollected | 87 | 87 | 2025-11-30T22:04:28 | 2025-12-01T21:54:46\ndelivered | 239 | 239 | 2025-11-30T22:03:10 | 2025-12-01T21:50:12\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:54",
+   "statement": "SELECT d.calendar_date, d.day_name, d.is_public_holiday, d.holiday_name, d.is_trading_day\nFROM dim_date d WHERE d.calendar_date = DATE '2025-12-01'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "calendar_date | day_name | is_public_holiday | holiday_name | is_trading_day\n2025-12-01 | Monday | false | NULL | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:59",
+   "statement": "WITH o AS (\n  SELECT * FROM fact_web_order\n  WHERE status <> 'cancelled'\n    AND CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n),\nt AS (\n  SELECT o.web_order_id,\n         MAX(CASE WHEN p.category = 'ZZ Test' THEN 1 ELSE 0 END) AS has_test,\n         MAX(CASE WHEN s.store_id = 999 THEN 1 ELSE 0 END) AS in_999,\n         COUNT(f.sales_line_id) AS lines_n\n  FROM o\n  LEFT JOIN fact_sales_line f ON f.receipt_id = o.web_order_id\n  LEFT JOIN dim_product p ON p.product_key = f.product_key\n  LEFT JOIN dim_store s ON s.store_key = f.store_key\n  GROUP BY o.web_order_id\n)\nSELECT COUNT(*) AS orders, SUM(has_test) AS test_orders, SUM(in_999) AS s999, SUM(CASE WHEN lines_n=0 THEN 1 ELSE 0 END) AS no_lines,\n (SELECT COUNT(*) FROM (SELECT web_order_id FROM fact_web_order GROUP BY 1 HAVING COUNT(*)>1)) AS dup_ids_all\nFROM t\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | test_orders | s999 | no_lines | dup_ids_all\n326 | 0 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:03",
+   "statement": "SELECT CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) AS d,\n       COUNT(*) AS all_orders, SUM(CASE WHEN status<>'cancelled' THEN 1 ELSE 0 END) AS not_cancelled,\n       SUM(CASE WHEN CAST(order_ts_utc AS DATE) <> CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) THEN 1 ELSE 0 END) AS utc_date_differs\nFROM fact_web_order\nWHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-11-24' AND DATE '2025-12-07'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "d | all_orders | not_cancelled | utc_date_differs\n2025-11-24 | 126 | 122 | 7\n2025-11-25 | 136 | 128 | 6\n2025-11-26 | 131 | 124 | 3\n2025-11-27 | 136 | 131 | 4\n2025-11-28 | 424 | 402 | 55\n2025-11-29 | 128 | 122 | 8\n2025-11-30 | 145 | 141 | 6\n2025-12-01 | 345 | 326 | 61\n2025-12-02 | 156 | 150 | 7\n2025-12-03 | 145 | 136 | 6\n2025-12-04 | 149 | 144 | 6\n2025-12-05 | 137 | 132 | 3\n2025-12-06 | 134 | 130 | 4\n2025-12-07 | 153 | 148 | 10\n(14 rows)"
+  }
+ ]
+}

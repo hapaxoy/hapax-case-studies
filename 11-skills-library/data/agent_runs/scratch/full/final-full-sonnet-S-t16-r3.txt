@@ -1,0 +1,33 @@
+```json
+{
+  "sql": "WITH web_lines AS (SELECT d.fiscal_year, d.fiscal_period, w.fulfilment_type, f.net_amount FROM fact_sales_line f JOIN fact_web_order w ON w.web_order_id = f.receipt_id JOIN dim_date d ON d.calendar_date = f.sale_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (9, 10) AND w.status IN ('delivered', 'collected') AND NOT f.staff_purchase_flag) SELECT fiscal_year, fiscal_period, round(100.0 * sum(CASE WHEN fulfilment_type = 'click_and_collect' THEN net_amount END) / sum(net_amount), 2) AS click_and_collect_share_pct FROM web_lines GROUP BY fiscal_year, fiscal_period ORDER BY fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_and_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 9, 29.75],
+      ["FY2025/26", 10, 30.45]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: periods taken from dim_date and ref_fiscal_calendar (FY2025/26 P09 = 2025-12-22 to 2026-01-25, 5 weeks; P10 = 2026-01-26 to 2026-02-22, 4 weeks)",
+    "Web sales = web order lines in fact_sales_line, net_amount in EUR excluding VAT, before returns",
+    "Click-and-collect = fact_web_order.fulfilment_type = 'click_and_collect' (not the channel columns on the sales line)",
+    "sale_date used for the period (local business date, already Helsinki time)",
+    "Cancelled orders excluded (they have no sales lines anyway); staff purchases excluded (none present in these periods)"
+  ],
+  "assumptions": [
+    "'Last year' means the fiscal year before the current one: the request is dated 2026-10-06, which falls in FY2026/27, so last year is FY2025/26, a 53-week year.",
+    "'Periods 9 and 10' are fiscal periods, not calendar months. I gave one row per period because the request names two periods; the two periods combined come to 30.02%.",
+    "'Share of web sales' is measured on value (net sales excluding VAT, before returns), not on order count.",
+    "The share is of web sales only (home delivery plus click-and-collect). Store sales are not in the denominator."
+  ],
+  "caveats": [
+    "Correction: the channel tagging on web sales lines is unreliable in these periods. channel_code is NULL on every line, and channel_id is 2 (web home delivery) on 1,473 lines of 758 click-and-collect orders. Only channel_id = 3 lines count as click-and-collect, which would give about 17.4% for the two periods combined. I took the fulfilment type from fact_web_order instead. All 12,260 web lines match an order, and that type is consistent per order.",
+    "The view rpt.v_daily_sales filters on channel_code = 'WB', which is NULL on these lines. It would miss all web sales in these periods, so I did not use it.",
+    "Figures are before returns. Net of refunds (refund_net on returns dated in the periods, matched via sales_line_id) the shares are 29.86% (P9) and 30.59% (P10). The difference is small.",
+    "Gross (VAT-inclusive) shares are almost identical: 29.76% (P9) and 30.46% (P10). By order count they are 29.33% and 30.10%.",
+    "Web net sales in the denominator are EUR 211,149.80 (P9) and EUR 136,281.50 (P10). P9 is 5 weeks and includes the Christmas peak; P10 is 4 weeks.",
+    "Data checks passed. Every day of both periods is present with one loaded week at a time. There are no duplicate order or line IDs. Cancelled orders carry no sales lines. The staging tables (stg_*) hold only October 2026 data and do not affect these periods."
+  ]
+}
+```

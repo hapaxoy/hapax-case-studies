@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t07-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T07",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "d9cd477264f7d92cae7ba812d3532c28ab6affadbc0d2b3a618eeb9e78e2065e",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:07",
+   "statement": "SELECT 'cal' AS k, fiscal_year || ' Q' || fiscal_quarter AS a, CAST(min(calendar_date) AS VARCHAR) AS b, CAST(max(calendar_date) AS VARCHAR) AS c, CAST(count(DISTINCT fiscal_week) AS VARCHAR) AS d\nFROM dim_date WHERE fiscal_year='FY2024/25' AND fiscal_quarter=4 GROUP BY 1,2\nUNION ALL\nSELECT 'store', region, string_agg(DISTINCT CAST(store_id AS VARCHAR), ',' ORDER BY CAST(store_id AS VARCHAR)), CAST(count(*) AS VARCHAR), string_agg(DISTINCT format, ',')\nFROM dim_store WHERE is_current GROUP BY region\n",
+   "n": 1,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "k | a | b | c | d\ncal | FY2024/25 Q4 | 2025-01-27 | 2025-04-27 | 13\nstore | South | 106,107,108,109,110,111,112,113,114,137 | 10 | Medium,Small,Large\nstore | West | 115,116,117,118,119,120,121,122,123,136 | 10 | Large,Medium,Small\nstore | Online | 900 | 1 | Web\nstore | Capital Region | 101,102,103,104,105 | 5 | Large,Small,Medium\nstore | North | 131,132,133,134,135,139 | 6 | Medium,Small,Large\nstore | Head office | 999 | 1 | Training\nstore | East | 124,125,126,127,128,129,130,138 | 8 | Large,Medium,Small\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:13",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, cp.category, cp.brand,\n       SUM(n.net_sales) AS net_sales, SUM(n.net_sales - n.cost) AS gross_margin\nFROM net_lines n\nJOIN dim_date d     ON d.calendar_date = n.business_date\nJOIN dim_store cs   ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4\n  AND cs.region = 'South'\nGROUP BY 1,2,3,4\nORDER BY gross_margin DESC\nLIMIT 14\n",
+   "n": 2,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "sku | product_name | category | brand | net_sales | gross_margin\n103075 | Cushions & Throws Tuulikki 338 | Home Textiles & Decor | Tuulikki | 5292.14 | 2927.42\n100955 | Interior Paint Norvik 298 | Paint & Decorating | Norvik | 6816.15 | 2138.48\n101763 | Fixings & Fasteners Nordhem 594 | Tools & Hardware | Nordhem | 3418.53 | 2074.88\n103390 | Bedroom Peltola 793 | Furniture | Peltola | 5877.95 | 1859.55\n100953 | Interior Paint Tuulikki 224 | Paint & Decorating | Tuulikki | 4005.86 | 1383.86\n103062 | Cushions & Throws Kuusela 657 | Home Textiles & Decor | Kuusela | 2494.08 | 1346.56\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | Ahvenisto | 2317.30 | 1342.48\n102538 | Cookware Nordhem 469 | Kitchen & Dining | Nordhem | 3196.78 | 1177.39\n101398 | Power Tools Havu Pro 689 | Tools & Hardware | Havu Pro | 3371.57 | 1095.66\n101888 | Indoor Lighting Havu 419 | Electrical | Havu | 2340.12 | 978.84\n102116 | Smart Home Tuulikki 855 | Electrical | Tuulikki | 3032.49 | 935.46\n103415 | Home Office Peltola 918 | Furniture | Peltola | 2726.78 | 925.28\n101512 | Hand Tools Havu 907 | Tools & Hardware | Havu | 1600.80 | 899.28\n102359 | Bathroom Furniture Mäntylä 246 | Bathroom & Plumbing | Mäntylä | 1695.51 | 799.71\n(14 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:20",
+   "statement": "SELECT 'sales' AS t, count(*) AS n_rows, count(DISTINCT sales_line_id) AS n_ids, count(DISTINCT (receipt_id, line_no)) AS n_receipt_lines,\n       min(sale_date) AS d0, max(sale_date) AS d1, count(DISTINCT etl_loaded_at) AS loads, sum(net_amount) AS net\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27'\nUNION ALL\nSELECT 'returns', count(*), count(DISTINCT return_line_id), count(DISTINCT sales_line_id), min(return_date), max(return_date), 0, sum(refund_net)\nFROM fact_return_line WHERE return_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27'\nUNION ALL\nSELECT 'ctl', count(*), count(DISTINCT (business_date, store_id)), 0, min(business_date), max(business_date), 0, sum(net_sales)\nFROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "t | n_rows | n_ids | n_receipt_lines | d0 | d1 | loads | net\nsales | 129694 | 129694 | 129694 | 2025-01-27 | 2025-04-27 | 91 | 3185409.03\nreturns | 4912 | 4912 | 4912 | 2025-01-27 | 2025-04-27 | 0 | 166049.12\nctl | 3560 | 3560 | 0 | 2025-01-27 | 2025-04-27 | 0 | 3011445.87\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:27",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost, f.quantity AS qty\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned, -r.quantity_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nmine AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales, SUM(n.net_sales - n.cost) AS gm,\n           SUM(CASE WHEN n.cost = 0 AND n.qty <> 0 THEN 1 ELSE 0 END) AS zero_cost_lines,\n           SUM(CASE WHEN n.cost IS NULL THEN 1 ELSE 0 END) AS null_cost_lines\n    FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date\n    WHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4\n    GROUP BY 1\n),\nctl AS (\n    SELECT r.store_id, SUM(r.net_sales) AS ctl_net\n    FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\n    WHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4 GROUP BY 1\n)\nSELECT cs.store_id, cs.store_name, m.net_sales, c.ctl_net, ROUND(m.net_sales - c.ctl_net, 2) AS diff, m.gm, m.zero_cost_lines, m.null_cost_lines\nFROM dim_store cs\nLEFT JOIN mine m ON m.store_id = cs.store_id\nLEFT JOIN ctl c ON c.store_id = cs.store_id\nWHERE cs.is_current AND cs.region = 'South'\nORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | store_name | net_sales | ctl_net | diff | gm | zero_cost_lines | null_cost_lines\n106 | Porvoo | 30140.14 | 30140.14 | 0.00 | 12871.87 | 0 | 0\n107 | Hyvinkää | 72588.63 | 72588.63 | 0.00 | 29087.30 | 0 | 0\n108 | Lahti | 114098.08 | 114098.08 | 0.00 | 46308.36 | 0 | 0\n109 | Hämeenlinna | 61579.44 | 61579.44 | 0.00 | 25461.72 | 0 | 0\n110 | Turku Kupittaa | 121982.77 | 121982.77 | 0.00 | 49521.30 | 0 | 0\n111 | Turku Härmälä | 54427.35 | 54427.35 | 0.00 | 22831.75 | 0 | 0\n112 | Raisio | 32088.17 | 32088.17 | 0.00 | 13310.51 | 0 | 0\n113 | Salo | 27487.59 | 27487.59 | 0.00 | 11889.36 | 0 | 0\n114 | Kouvola | 59789.82 | 59789.82 | 0.00 | 24430.94 | 0 | 0\n137 | Lohja | 19671.57 | 19671.57 | 0.00 | 8448.81 | 0 | 0\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:34",
+   "statement": "SELECT CASE WHEN abs(f.standard_cost - f.quantity * p.standard_unit_cost) < 0.02 THEN 'ok' ELSE 'mismatch' END AS cost_check,\n       CASE WHEN f.quantity < 0 THEN 'negqty' WHEN f.net_amount < 0 THEN 'negnet' ELSE 'normal' END AS shape,\n       count(*) AS n, sum(f.net_amount) AS net, sum(f.standard_cost) AS cost,\n       count(DISTINCT p.sku) AS skus, min(f.sale_date) AS d0, max(f.sale_date) AS d1\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND cs.region = 'South' AND p.category <> 'ZZ Test'\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "cost_check | shape | n | net | cost | skus | d0 | d1\nok | normal | 25785 | 621799.35 | 367235.20 | 2638 | 2025-01-27 | 2025-04-27\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:41",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.region AS region_was, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.region, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, SUM(n.net_sales - n.cost) AS gross_margin_as_was\nFROM net_lines n\nJOIN dim_date d     ON d.calendar_date = n.business_date\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4 AND n.region_was = 'South'\nGROUP BY 1,2 ORDER BY 3 DESC LIMIT 10\n",
+   "n": 6,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "sku | product_name | gross_margin_as_was\n103075 | Cushions & Throws Tuulikki 338 | 3866.86\n100955 | Interior Paint Norvik 298 | 3694.11\n101763 | Fixings & Fasteners Nordhem 594 | 3277.05\n103390 | Bedroom Peltola 793 | 3048.27\n100953 | Interior Paint Tuulikki 224 | 2611.47\n103062 | Cushions & Throws Kuusela 657 | 2247.58\n101398 | Power Tools Havu Pro 689 | 2181.77\n102538 | Cookware Nordhem 469 | 1693.80\n101369 | Power Tools Koivuranta 416 | 1519.19\n102468 | Plumbing Parts Ahvenisto 279 | 1476.60\n(10 rows)"
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t46-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T46",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "2d11f9a5dc3c7178a7c4ef3528c66096857a21d874fa8aa509170dfaa7053838",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:28:14",
+   "statement": "SELECT count(*) AS web_lines, count(DISTINCT f.sales_line_id) AS distinct_lines, count(DISTINCT (f.receipt_id, f.line_no)) AS distinct_receipt_lines,\n       min(f.sale_date) AS min_sale, max(f.sale_date) AS max_sale, sum(CASE WHEN o.web_order_id IS NULL THEN 1 ELSE 0 END) AS lines_no_order,\n       sum(CASE WHEN o.status IN ('delivered','collected') THEN 1 ELSE 0 END) AS dispatched_lines,\n       sum(CASE WHEN o.status NOT IN ('delivered','collected') THEN 1 ELSE 0 END) AS other_status_lines,\n       min(CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)) AS min_dispatch,\n       max(CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)) AS max_dispatch\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nLEFT JOIN fact_web_order o ON o.web_order_id = f.receipt_id\nWHERE s.store_id = 900\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "web_lines | distinct_lines | distinct_receipt_lines | min_sale | max_sale | lines_no_order | dispatched_lines | other_status_lines | min_dispatch | max_dispatch\n181322 | 181322 | 181322 | 2024-04-29 | 2026-10-03 | 0 | 181322 | 0 | 2024-04-29 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:28:20",
+   "statement": "WITH params AS (SELECT DATE '2025-11-03' AS start_date, DATE '2026-10-04' AS end_date),\nweb_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered','collected')\n),\nnet_lines AS (\n    SELECT p.sku, w.dispatch_date AS business_date, f.net_amount AS net_sales, f.quantity AS units\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT p.sku, r.return_date, -r.refund_net, -r.quantity_returned\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n),\nagg AS (\n    SELECT n.sku, SUM(n.net_sales) AS web_net_sales, SUM(n.units) AS net_units\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n)\nSELECT a.sku, cp.product_name, cp.category, cp.subcategory, ROUND(a.web_net_sales,2) AS web_net_sales, a.net_units,\n       RANK() OVER (ORDER BY a.web_net_sales DESC) AS rnk\nFROM agg a JOIN dim_product cp ON cp.sku = a.sku AND cp.is_current\nORDER BY a.web_net_sales DESC\nLIMIT 15\n",
+   "n": 2,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sku | product_name | category | subcategory | web_net_sales | net_units | rnk\n100955 | Interior Paint Norvik 298 | Paint & Decorating | Interior Paint | 14499.84 | 356 | 1\n103774 | Christmas Decorations Poutaranta Home 601 | Seasonal | Christmas Decorations | 13300.74 | 861 | 2\n103390 | Bedroom Peltola 793 | Furniture | Bedroom | 10907.95 | 29 | 3\n100529 | Garden Furniture Raudikko 536 | Garden | Garden Furniture | 10052.48 | 39 | 4\n103747 | Christmas Decorations Mäntylä 402 | Seasonal | Christmas Decorations | 9326.33 | 328 | 5\n103791 | Christmas Decorations Havu 430 | Seasonal | Christmas Decorations | 9209.38 | 475 | 6\n100573 | Garden Furniture Ahvenisto 564 | Garden | Garden Furniture | 7495.15 | 43 | 7\n100528 | Garden Furniture Norvik 499 | Garden | Garden Furniture | 7411.38 | 36 | 8\n103928 | Sauna & Winter Havu 699 | Seasonal | Sauna & Winter | 7130.21 | 120 | 9\n103415 | Home Office Peltola 918 | Furniture | Home Office | 6889.60 | 61 | 10\n103861 | Christmas Decorations Kuusela 620 | Seasonal | Christmas Decorations | 6679.65 | 339 | 11\n100624 | Barbecue & Grills Poutaranta Home 851 | Garden | Barbecue & Grills | 6526.14 | 26 | 12\n100607 | Barbecue & Grills Vesikko 222 | Garden | Barbecue & Grills | 6487.06 | 43 | 13\n101022 | Interior Paint Kultala 377 | Paint & Decorating | Interior Paint | 6444.60 | 120 | 14\n103313 | Living Room Tuulikki 344 | Furniture | Living Room | 6320.80 | 20 | 15\n(15 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:28:28",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain business_date,store_id --start 2025-11-03 --end 2026-10-04 --control --control-stores web --value-col web_net_sales",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 336 rows, 3 columns: business_date, store_id, web_net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (business_date, store_id): 336 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-11-03 to 2026-10-04 (336 days; fiscal: FY2026/27 P01, FY2025/26 P09, FY2026/27 P05, FY2026/27 P04, FY2026/27 P03, FY2026/27 P02, FY2025/26 P07, FY2025/26 P12, FY2026/27 P06, FY2025/26 P10, FY2025/26 P08, FY2025/26 P11).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 12 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] Result covers 2025-11-03 to 2026-10-04 on business_date (336 distinct dates).\n  [PASS] Every day of the requested range is present, none outside it.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared web_net_sales with rpt_daily_store_sales.net_sales, 2025-11-03 to 2026-10-04, stores: web, at level: business_date x store_id.\n  [INFO] Result total 2,150,090.07; control total 2,150,090.07; gap 0.00.\n  [PASS] No gap above 0.01 at level business_date x store_id.\n\n== Preview (first 10 rows) ==\n  business_date | store_id | web_net_sales\n  2025-11-03 | 900 | 10605.67"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:28:34",
+   "statement": "SELECT sku, product_key, product_name, category, subcategory, brand, own_label_flag, standard_unit_cost, listed_from, delisted_on, valid_from, valid_to, is_current\nFROM dim_product\nWHERE sku IN (100955,103774,103390,100529,103747,103791,100573,100528,103928,103415,103861)\nORDER BY sku, valid_from\n",
+   "n": 4,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "sku | product_key | product_name | category | subcategory | brand | own_label_flag | standard_unit_cost | listed_from | delisted_on | valid_from | valid_to | is_current\n100528 | 534 | Garden Furniture Norvik 499 | Garden | Garden Furniture | Norvik | false | 135.00 | 2019-01-01 | NULL | 2000-01-01 | 9999-12-31 | true\n100529 | 535 | Garden Furniture Raudikko 536 | Garden | Garden Furniture | Raudikko | false | 155.67 | 2019-01-01 | NULL | 2000-01-01 | 9999-12-31 | true\n100573 | 579 | Garden Furniture Ahvenisto 564 | Garden | Garden Furniture | Ahvenisto | false | 115.00 | 2025-09-01 | NULL | 2025-09-01 | 9999-12-31 | true\n100955 | 1029 | Interior Paint Norvik 298 | Paint & Decorating | Interior Paint | Norvik | false | 28.01 | 2019-01-01 | NULL | 2000-01-01 | 9999-12-31 | true\n103390 | 3487 | Bedroom Peltola 793 | Furniture | Bedroom | Peltola | false | 251.15 | 2019-01-01 | NULL | 2000-01-01 | 9999-12-31 | true\n103415 | 3512 | Home Office Peltola 918 | Furniture | Home Office | Peltola | false | 72.06 | 2019-01-01 | NULL | 2000-01-01 | 9999-12-31 | true\n103747 | 3847 | Christmas Decorations Mäntylä 402 | Seasonal | Christmas Decorations | Mäntylä | false | 14.15 | 2019-01-01 | 2026-06-01 | 2000-01-01 | 9999-12-31 | true\n103774 | 3874 | Christmas Decorations Poutaranta Home 601 | Seasonal | Christmas Decorations | Poutaranta Home | false | 6.11 | 2019-01-01 | NULL | 2000-01-01 | 9999-12-31 | true\n103791 | 3892 | Christmas Decorations Havu 430 | Seasonal | Christmas Decorations | Hav"
+  }
+ ]
+}

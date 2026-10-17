@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t30-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T30",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "65c3aa03d8d9ea9852a6b6da6d9511c3c62d8b572accf7e3d9aea4110a7d3176",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:05",
+   "statement": "SELECT tier, is_current, (valid_to = DATE '9999-12-31') AS open_ended, count(*) AS versions, count(DISTINCT member_id) AS members, min(valid_from) mn, max(valid_from) mx\nFROM dim_member GROUP BY ALL ORDER BY ALL\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tier | is_current | open_ended | versions | members | mn | mx\nBasic | false | false | 19343 | 17903 | 2019-01-01 | 2026-10-01\nBasic | true | true | 31229 | 31229 | 2019-01-01 | 2026-10-04\nGold | false | false | 2412 | 2233 | 2019-01-01 | 2026-09-30\nGold | true | true | 5791 | 5791 | 2019-01-02 | 2026-10-04\nSilver | false | false | 7559 | 7068 | 2019-01-01 | 2026-10-02\nSilver | true | true | 22980 | 22980 | 2019-01-02 | 2026-10-04\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:06",
+   "statement": "SELECT count(*) AS current_rows, count(DISTINCT member_id) AS current_members, count(*) FILTER (WHERE join_date > DATE '2026-10-07') AS future_joins, count(*) FILTER (WHERE tier IS NULL OR tier NOT IN ('Basic','Silver','Gold')) AS odd_tier, max(valid_from) AS latest_version, (SELECT max(sale_date) FROM fact_sales_line) AS last_sale\nFROM dim_member WHERE is_current\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "current_rows | current_members | future_joins | odd_tier | latest_version | last_sale\n60000 | 60000 | 0 | 0 | 2026-10-04 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:12",
+   "statement": "WITH asof AS (SELECT DATE '2026-10-04' AS d),\nactive AS (\n  SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m USING (member_key), asof\n  WHERE f.sale_date > asof.d - 364 AND f.sale_date <= asof.d)\nSELECT\n (SELECT count(*) FROM dim_member WHERE tier='Gold' AND valid_from <= DATE '2026-10-07' AND valid_to >= DATE '2026-10-07') AS gold_valid_on_date,\n (SELECT count(DISTINCT member_id) FROM dim_member WHERE tier='Gold' AND is_current) AS gold_current,\n (SELECT count(*) FROM dim_member WHERE is_current AND tier='Gold' AND member_id IN (SELECT member_id FROM dim_member WHERE NOT is_current AND valid_from >= (SELECT max(valid_from) FROM dim_member c WHERE c.member_id = dim_member.member_id AND c.is_current))) AS stale_current,\n (SELECT count(*) FROM dim_member m JOIN active a USING (member_id) WHERE m.is_current AND m.tier='Gold') AS gold_active_52w\n",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"asof\"\n\nLINE 1: WITH asof AS (SELECT DATE '2026-10-04' AS d),\n             ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:17",
+   "statement": "WITH active AS (\n  SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m USING (member_key)\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04')\nSELECT\n (SELECT count(*) FROM dim_member WHERE tier='Gold' AND valid_from <= DATE '2026-10-07' AND valid_to >= DATE '2026-10-07') AS gold_valid_on_date,\n (SELECT count(DISTINCT member_id) FROM dim_member WHERE tier='Gold' AND is_current) AS gold_current,\n (SELECT count(*) FROM dim_member c WHERE c.is_current AND EXISTS (SELECT 1 FROM dim_member o WHERE o.member_id=c.member_id AND NOT o.is_current AND o.valid_from > c.valid_from)) AS stale_current,\n (SELECT count(*) FROM dim_member m JOIN active a USING (member_id) WHERE m.is_current AND m.tier='Gold') AS gold_active_52w\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "gold_valid_on_date | gold_current | stale_current | gold_active_52w\n5791 | 5791 | 0 | 4827\n(1 row)"
+  }
+ ]
+}

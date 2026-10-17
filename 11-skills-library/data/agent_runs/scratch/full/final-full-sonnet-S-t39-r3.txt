@@ -1,0 +1,27 @@
+```json
+{
+  "sql": "SELECT count(*) AS web_orders FROM fact_web_order WHERE CAST(order_ts_utc + INTERVAL 2 HOUR AS DATE) = DATE '2025-12-01' AND status <> 'cancelled'",
+  "result": {
+    "columns": ["web_orders"],
+    "rows": [[326]]
+  },
+  "definitions_applied": [
+    "Web order = one row in fact_web_order (web_order_id equals receipt_id on the sales lines)",
+    "Order date = Helsinki local date (UTC+2 in December), which matches fact_sales_line.sale_date for web lines",
+    "Cancelled orders excluded (they have no sales lines)",
+    "Both web channels counted: home delivery (channel_id 2) and click and collect (channel_id 3)"
+  ],
+  "assumptions": [
+    "Cyber Monday is read as Monday 1 December 2025, as the request states.",
+    "'Number of web shop orders' is read as orders actually placed and not cancelled, so they tie to web sales lines. The count is 239 home delivery plus 87 click and collect.",
+    "Guest and logged-in orders are both included.",
+    "The day is the Helsinki calendar day, 1 Dec 00:00 to 24:00 local time, which is 30 Nov 22:00 to 1 Dec 22:00 UTC."
+  ],
+  "caveats": [
+    "Timestamps in fact_web_order are UTC. Counting by the UTC date would give 284 non-cancelled orders and miss 59 placed from 00:00 to 02:00 Helsinki time. It would also include 7 orders placed after 22:00 UTC, which fall on 2 Dec local time. I used the local date, as the sales lines do.",
+    "19 orders placed on 1 Dec (local) are cancelled and have no sales lines. They are excluded. Counting them would give 345.",
+    "The web orders table and the web sales lines agree for the day: the line counts match, order totals match the line gross amounts, and no non-cancelled order is missing its lines.",
+    "Older reporting views and the legacy channel code WB do not cover click-and-collect lines, because their channel_code is NULL. A filter on channel_code = 'WB' would miss the 87 click-and-collect orders."
+  ]
+}
+```

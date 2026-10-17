@@ -1,0 +1,40 @@
+```json
+{
+  "sql": "WITH receipts AS (SELECT f.receipt_id, s.format AS store_format, sum(f.net_amount) AS receipt_net, bool_or(f.staff_purchase_flag) AS any_staff FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 AND s.store_id &lt; 900 GROUP BY f.receipt_id, s.format) SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, store_format, round(avg(receipt_net), 2) AS average_basket_value_eur_excl_vat FROM receipts WHERE NOT any_staff GROUP BY store_format ORDER BY CASE store_format WHEN 'Small' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_format", "average_basket_value_eur_excl_vat"],
+    "rows": [
+      ["FY2026/27", 4, "Small", 50.75],
+      ["FY2026/27", 4, "Medium", 60.27],
+      ["FY2026/27", 4, "Large", 60.67]
+    ]
+  },
+  "definitions_applied": [
+    "Basket = transaction = one receipt (all lines sharing a receipt_id summed), not one line",
+    "Average basket value = total net sales of the receipts divided by the number of receipts",
+    "Basket value in EUR excluding VAT (net_amount), matching the net sales convention used in rpt_daily_store_sales",
+    "Fiscal period 4 of FY2026/27 taken from dim_date (fiscal_year = FY2026/27, fiscal_period = 4), which is 3 Aug to 30 Aug 2026 (4 weeks, fully loaded)",
+    "Store format taken from the dim_store version in force at the sale date (via store_key); each store keeps the same format across its versions, so no sale lands in a different format than the store's own",
+    "Physical stores only (store_id below 900), so the web shop (900) and the training store (999) are left out",
+    "Sales receipts only, before returns; refunds are not netted off the basket",
+    "Staff purchases (staff_purchase_flag) left out of the baskets"
+  ],
+  "assumptions": [
+    "Read 'period 4 of FY26/27' as fiscal period 4 of FY2026/27, 3 to 30 August 2026, and not as calendar month 4 or quarter 4",
+    "Read 'by store format' as the physical store formats only, so the web shop (format 'Web') and click-and-collect or home-delivery orders are not a row",
+    "Read 'average basket value' as net of VAT in EUR, as the company reports sales net of VAT",
+    "Excluded staff purchases because they are not ordinary customer baskets. This is my choice, since the request did not say; including them would give Small 50.67, Medium 60.15 and Large 60.60",
+    "Simple mean of all receipts in each format, so every receipt counts equally and larger stores weigh more because they have more receipts, rather than an average of store averages"
+  ],
+  "caveats": [
+    "Correction: the 55 receipts (127 lines, EUR 1,884.86) booked to the training store 999 in the period are excluded. They are not real trading and would otherwise sit in an extra 'Training' format.",
+    "Correction: web shop sales (3,229 receipts: 2,230 home delivery and 999 click-and-collect) are excluded, because they belong to no store format.",
+    "Correction: 280 staff-purchase receipts are excluded (Large 99, Medium 138, Small 43). They lower the averages only slightly (by 0.08 to 0.12 EUR).",
+    "The dim_store column comment says formats are Hyper, Standard or Express, but the data holds Small, Medium and Large (plus Web and Training). I used the values in the data. The regional labels in dim_store also differ from the comment (a 'Capital Region' value exists, and the stores moved region in April 2025). This does not affect the result.",
+    "fact_sales_line.channel_code is empty for the period (it has no ST or WB values), so I used channel_id and store_id &lt; 900 to separate stores from web.",
+    "The receipt count for physical stores including staff purchases (18,027 receipts, EUR 1,062,266.72) ties exactly to rpt_daily_store_sales for the period, and I found no duplicate lines, no non-positive amounts and no receipt split across stores or dates. Receipts in the result: Small 2,598, Medium 8,641, Large 6,508.",
+    "The period is fully loaded and the Kuopio refit closure ended on 26 July 2026, before the period began, so no store was shut during it. Savonlinna, closed since January 2026, has no sales.",
+    "Using gross (VAT-inclusive) baskets instead would give higher figures. The mean gross basket was about 63.6 for Small, about 75.6 for Medium and about 76.1 for Large."
+  ]
+}
+```

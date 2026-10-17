@@ -1,0 +1,33 @@
+Perfect. My query correctly uses the as-is hierarchy (current store versions), which is the company default. The Capital Region reorganization on 28 April 2025 is correctly reflected in the results. Now I'll compile the final answer as requested:
+
+```json
+{
+  "sql": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n),\nregional_sales AS (\n    SELECT cs.region, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 22\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY net_sales DESC) AS rank, region, ROUND(net_sales, 2) AS net_sales\nFROM regional_sales\nORDER BY rank;",
+  "result": {
+    "columns": ["rank", "region", "net_sales"],
+    "rows": [
+      [1, "West", 1815139.47],
+      [2, "South", 1309213.51],
+      [3, "East", 959424.31],
+      [4, "Capital Region", 948667.50],
+      [5, "North", 730386.24]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns, booked on sale date for stores and dispatch date for web",
+    "As-is hierarchy: regions from current store versions (reflects 28 April 2025 reorganisation with Capital Region)",
+    "Stores only: excludes store 999 (training store) and store 900 (web shop)",
+    "This year: fiscal year FY2026/27, weeks 1–22 (2026-05-04 to 2026-10-04)"
+  ],
+  "assumptions": [
+    "Five store regions: the five physical store regions (North, South, East, West, Capital Region), not including Online (web region)",
+    "How they are doing: interpreted as total net sales, the primary company performance metric",
+    "This year so far: current fiscal year to the date of request (2026-10-04), when warehouse was loaded through Sunday of week 22"
+  ],
+  "caveats": [
+    "Web shop excluded by request (store_id 900). Web net sales for this period would add approximately 1.1 million euros to company-wide totals.",
+    "Return cohort not fully complete: sales through 2026-10-04 are within 30 days of the data load date, so this cohort may see additional returns in the following weeks.",
+    "Warehouse loaded through 2026-10-04 (FY2026/27 week 22), covering 22 whole or partial fiscal weeks of the current fiscal year."
+  ]
+}
+```

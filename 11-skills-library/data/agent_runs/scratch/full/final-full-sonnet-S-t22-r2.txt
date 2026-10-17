@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH contacted AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = 19), sales AS (SELECT sum(f.net_amount) AS v FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key WHERE f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24' AND NOT f.staff_purchase_flag AND m.member_id IN (SELECT member_id FROM contacted)), refunds AS (SELECT sum(r.refund_net) AS v FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_member m ON m.member_key = f.member_key WHERE r.return_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24' AND NOT f.staff_purchase_flag AND m.member_id IN (SELECT member_id FROM contacted)) SELECT 'Spring Garden Launch 2026' AS campaign_name, 19 AS campaign_id, (SELECT count(*) FROM contacted) AS members_contacted, round((SELECT v FROM sales) - (SELECT v FROM refunds), 2) AS net_spend_eur",
+  "result": {
+    "columns": ["campaign_name", "campaign_id", "members_contacted", "net_spend_eur"],
+    "rows": [["Spring Garden Launch 2026", 19, 15001, 180806.69]]
+  },
+  "definitions_applied": [
+    "Contacted member: a distinct loyalty number (member_id) with at least one row in fact_campaign_exposure for campaign 19",
+    "Members identified by member_id, not member_key, because dim_member keeps one row per version and the contact and purchase rows can carry different keys",
+    "Spend is net sales: EUR excluding VAT (net_amount, after line discounts), less refunds (refund_net)",
+    "Staff purchases (staff_purchase_flag = true) excluded, along with refunds on those lines",
+    "Window 2026-05-04 to 2026-05-24 inclusive, on sale_date for sales and return_date for refunds (refunds count on the day booked)",
+    "All channels counted: stores, web home delivery and click-and-collect",
+    "The 2026 campaign is campaign_id 19; the 2024 and 2025 editions have the same name stem and were not used"
+  ],
+  "assumptions": [
+    "'Contacted' means a contact was made (a row in fact_campaign_exposure), whatever the channel and whether or not it was delivered. 14,814 of the 15,001 had at least one contact delivered.",
+    "'Spend' means net sales excluding VAT, after refunds. Marketing may prefer a different basis; see the caveats for the alternatives.",
+    "Spend covers every purchase made by the contacted members in the window, not only purchases of garden products or purchases attributed to the mailing.",
+    "The window 4 to 24 May 2026 matches the campaign window in dim_campaign. Both dates are included.",
+    "sale_date is taken as the local (Finnish) business date. It differs from the UTC date on some lines."
+  ],
+  "caveats": [
+    "fact_sales_line.channel_code is null for 2026 sales rows, although the column comment says ST/WB. I used channel_id and the store version (store 900 = web shop) instead. Filtering on channel_code would have dropped all of the 2026 spend.",
+    "dim_member has one row per member version (89,314 rows for 60,000 members). Joining on member_key would have missed purchases made under a different version, so I matched on member_id.",
+    "The mailing list size in dim_campaign is 16,624 including a holdout of 1,597, which implies about 15,027 contacted. The exposure table has 15,001 distinct members, which is 26 fewer. I reported the count actually contacted. I did not find the reason for the 26.",
+    "None of the 1,597 held-out members (campaign_holdout) appears in the contact data, so no holdout members are in the count or the spend.",
+    "Staff purchases excluded: they would add 2,540.79 of gross-of-refund net sales (191,576.08 with them, 189,035.29 without) from contacted members.",
+    "Refunds: 8,228.60 net, booked in the window against contacted members' non-staff purchases, was deducted. Net sales before refunds is 189,035.29. If Marketing wants sales before returns, that is the figure. Including VAT, sales before refunds are 236,735.14.",
+    "Only 2,626 of the 15,001 contacted members bought anything in the window. The spend is not attributed to the mailing: there is no comparison with the holdout group here, so it says nothing about the campaign's effect.",
+    "Checked and found clean for the window: no duplicate sales or return lines, no cancelled web orders, no sales on non-trading days, no orphan member keys, and gross amounts consistent with net plus VAT. Staging tables for the campaign contacts and sales lines hold no rows for these data."
+  ]
+}
+```

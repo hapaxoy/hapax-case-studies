@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t06-r5",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T06",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "f95a086f14d4417595fb36cefe2c4c0eaa7d8708d5b4c1ebdaddfaaca2c41fe7",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:53:14",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P02\n  fiscal_weeks                       5-8\n  start_date                         2025-05-26\n  end_date                           2025-06-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-06-22\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:50",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.format,\n       SUM(l.net_amount) AS sold_net,\n       COALESCE(SUM(r.refund_net), 0) AS returned_net,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct,\n       MAX(l.sale_date) + 30 <= (SELECT MAX(calendar_date) FROM dim_date) AS cohort_complete\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.format;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "format | sold_net | returned_net | return_rate_pct | cohort_complete\nLarge | 400763.11 | 17707.57 | 4.42 | true\nMedium | 552936.25 | 25030.11 | 4.53 | true\nSmall | 147668.20 | 6319.09 | 4.28 | true\nWeb | 183098.49 | 22388.29 | 12.23 | true\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:54:00",
+   "statement": "query-check/scripts/query_check.py --file q.sql --period FY2025/26 P2",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n[stderr]\n--period 'FY2025/26 P2' not found in ref_fiscal_calendar (format: 'FY2026/27 P05').\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:54:06",
+   "statement": "query-check/scripts/query_check.py --file q.sql --start 2025-05-26 --end 2025-06-22",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 4 rows, 5 columns: format, sold_net, returned_net, return_rate_pct, cohort_complete\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2025-05-26 to 2025-06-22 (28 days; fiscal: FY2025/26 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 7 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 13 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 4 rows) ==\n  format | sold_net | returned_net | return_rate_pct | cohort_complete\n  Large | 400763.11 | 17707.57 | 4.42 | True\n  Medium | 552936.25 | 25030.11 | 4.53 | True\n  Small | 147668.20 | 6319.09 | 4.28 | True\n  Web | 183098.49 | 22388.29 | 12.23 | True\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:54:17",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.format;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "format | return_rate_pct\nLarge | 4.42\nMedium | 4.53\nSmall | 4.28\nWeb | 12.23\n(4 rows)"
+  }
+ ]
+}

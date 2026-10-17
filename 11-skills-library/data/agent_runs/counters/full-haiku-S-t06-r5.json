@@ -1,0 +1,103 @@
+{
+ "run_id": "full-haiku-S-t06-r5",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T06",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "b04eb9d545a6b227061419805ffb1af8424178ae152c2fdb7ae9dfb287c5c060",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:37:54",
+   "statement": "SELECT DISTINCT fiscal_year \nFROM ref_fiscal_calendar \nORDER BY fiscal_year DESC \nLIMIT 5\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:37:58",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2025/26' AND fiscal_period = 2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2025/26 | 2 | FY2025/26 P02 | 2025-05-26 | 2025-06-22\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:04",
+   "statement": "SELECT \n  s.format,\n  SUM(f.quantity) AS units_sold,\n  COALESCE(SUM(r.quantity_returned), 0) AS units_returned,\n  ROUND(COALESCE(SUM(r.quantity_returned), 0) * 100.0 / NULLIF(SUM(f.quantity), 0), 2) AS return_rate_pct\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE f.sale_date >= '2025-05-26' AND f.sale_date <= '2025-06-22'\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | units_sold | units_returned | return_rate_pct\nLarge | 27468 | 652 | 2.37\nMedium | 36996 | 901 | 2.44\nSmall | 12232 | 292 | 2.39\nTraining | 195 | 0 | 0.0\nWeb | 9968 | 575 | 5.77\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:07",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY format\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:11",
+   "statement": "SELECT store_id, store_name, format, sqm, region\nFROM dim_store\nWHERE is_current = TRUE\nLIMIT 10\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | store_name | format | sqm | region\n101 | Helsinki Vuosaari | Medium | 4276 | Capital Region\n102 | Helsinki Pitäjänmäki | Large | 8381 | Capital Region\n103 | Espoo Lommila | Medium | 4827 | Capital Region\n104 | Vantaa Tammisto | Large | 7732 | Capital Region\n105 | Kerava | Small | 1312 | Capital Region\n106 | Porvoo | Small | 1468 | South\n107 | Hyvinkää | Medium | 3411 | South\n108 | Lahti | Large | 7036 | South\n109 | Hämeenlinna | Medium | 3740 | South\n110 | Turku Kupittaa | Large | 7844 | South\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:16",
+   "statement": "SELECT DISTINCT store_id, store_name, format\nFROM dim_store\nWHERE format = 'Training'\nAND is_current = TRUE\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | format\n999 | Training store | Training\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:21",
+   "statement": "SELECT \n  s.format,\n  COUNT(DISTINCT f.sales_line_id) AS sale_lines,\n  COUNT(DISTINCT r.return_line_id) AS return_lines,\n  SUM(f.quantity) AS units_sold,\n  SUM(r.quantity_returned) AS units_returned\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE f.sale_date >= '2025-05-26' AND f.sale_date <= '2025-06-22'\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | sale_lines | return_lines | units_sold | units_returned\nLarge | 16624 | 536 | 27468 | 652\nMedium | 22644 | 736 | 36996 | 901\nSmall | 7349 | 242 | 12232 | 292\nTraining | 126 | 0 | 195 | NULL\nWeb | 6351 | 478 | 9968 | 575\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:30",
+   "statement": "-- Final query: Return rate by store format for period 2 FY2025/26\nSELECT \n  s.format,\n  SUM(f.quantity) AS units_sold,\n  COALESCE(SUM(r.quantity_returned), 0) AS units_returned,\n  ROUND(COALESCE(SUM(r.quantity_returned), 0) * 100.0 / NULLIF(SUM(f.quantity), 0), 2) AS return_rate\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE f.sale_date >= '2025-05-26' AND f.sale_date <= '2025-06-22'\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 8,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | units_sold | units_returned | return_rate\nLarge | 27468 | 652 | 2.37\nMedium | 36996 | 901 | 2.44\nSmall | 12232 | 292 | 2.39\nTraining | 195 | 0 | 0.0\nWeb | 9968 | 575 | 5.77\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:33",
+   "statement": "-- Check for store closures during period 2\nSELECT closure_id, store_id, closure_type, closure_start_date, closure_end_date\nFROM ref_store_closure\nWHERE (closure_start_date <= '2025-06-22' AND closure_end_date >= '2025-05-26')\nORDER BY closure_start_date\n",
+   "n": 9,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "closure_id | store_id | closure_type | closure_start_date | closure_end_date\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:37",
+   "statement": "-- Check for data quality issues (negative quantities)\nSELECT \n  'Sales negative qty' AS issue_type,\n  COUNT(*) AS count\nFROM fact_sales_line\nWHERE sale_date >= '2025-05-26' AND sale_date <= '2025-06-22'\n  AND quantity < 0\nUNION ALL\nSELECT \n  'Returns negative qty' AS issue_type,\n  COUNT(*) AS count\nFROM fact_return_line\nWHERE return_date >= '2025-05-26' AND return_date <= '2025-06-22'\n  AND quantity_returned < 0\n",
+   "n": 10,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "issue_type | count\nSales negative qty | 0\nReturns negative qty | 0\n(2 rows)"
+  }
+ ]
+}

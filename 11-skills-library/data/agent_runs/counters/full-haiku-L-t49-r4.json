@@ -1,0 +1,85 @@
+{
+ "run_id": "full-haiku-L-t49-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T49",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "2856d014deb96064cf409274671282d53f5e4e5a5b7bedddda7ff4c586a65c96",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:58:29",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:58:46",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period\n)\nSELECT s.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900                         -- stores only: no web, no training store\n  AND NOT f.staff_purchase_flag                -- staff purchases are out of ATV\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY 1\nORDER BY atv DESC;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | receipts | net_sales_before_returns | atv\nLarge | 6508 | 394865.46 | 60.67\nMedium | 8641 | 520763.45 | 60.27\nSmall | 2598 | 131841.05 | 50.75\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:58:52",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nORDER BY format;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:58:58",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 4 columns: format, receipts, net_sales_before_returns, atv\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  format | receipts | net_sales_before_returns | atv\n  Large | 6508 | 394865.46 | 60.67\n  Medium | 8641 | 520763.45 | 60.27\n  Small | 2598 | 131841.05 | 50.75\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:59:03",
+   "statement": "query-check/scripts/query_check.py --file q.sql --control --period FY2026/27 P04",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 4 columns: format, receipts, net_sales_before_returns, atv\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2026-08-03 to 2026-08-30 (28 days; fiscal: FY2026/27 P04).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 9 rows in the range only in Helsinki time, 8 only in UTC; fact_sales_line.sale_ts_utc: 20 rows in the range only in Helsinki time, 14 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales_before_returns with rpt_daily_store_sales.net_sales_before_returns, 2026-08-03 to 2026-08-30, stores: all, at level: total.\n  [INFO] Result total 1,047,469.96; control total 1,269,805.17; gap -222,335.21.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 1,047,469.96 vs control 1,269,805.17 (gap -222,335.21). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (first 3 rows) ==\n  format | receipts | net"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:19",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period\n)\nSELECT \n    SUM(CASE WHEN f.staff_purchase_flag THEN f.net_amount ELSE 0 END) AS staff_net_sales,\n    SUM(CASE WHEN NOT f.staff_purchase_flag THEN f.net_amount ELSE 0 END) AS non_staff_net_sales\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period;\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "staff_net_sales | non_staff_net_sales\n14796.76 | 1047469.96\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:27",
+   "statement": "SELECT \n    SUM(net_sales_before_returns) AS control_net_sales_before_returns,\n    SUM(returns_net) AS control_returns_net,\n    SUM(net_sales) AS control_net_sales\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-08-03' AND '2026-08-30'\n  AND store_id < 900;\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "control_net_sales_before_returns | control_returns_net | control_net_sales\n1062266.72 | 51788.20 | 1010478.52\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:37",
+   "statement": "SELECT \n    SUM(net_sales_before_returns) AS control_total,\n    SUM(CASE WHEN store_id < 900 THEN net_sales_before_returns ELSE 0 END) AS physical_stores,\n    SUM(CASE WHEN store_id >= 900 THEN net_sales_before_returns ELSE 0 END) AS web_and_training\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-08-03' AND '2026-08-30';\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "control_total | physical_stores | web_and_training\n1269805.17 | 1062266.72 | 207538.45\n(1 row)"
+  }
+ ]
+}

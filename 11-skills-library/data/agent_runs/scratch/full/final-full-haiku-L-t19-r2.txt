@@ -1,0 +1,42 @@
+Perfect. My query uses "as-is" reporting (the default), which restates history on the current hierarchy. The Capital Region is shown for all years, even though those stores were in the South region in FY2024/25. This is the correct approach per company definition.
+
+Now I'll provide the final answer in the requested JSON format:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS ty_year, 'FY2024/25' AS ly_year,\n           27 AS first_week, 39 AS last_week                -- Q3 = weeks 27-39\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: stores on the sale date, web on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nquarterly AS (\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND params.last_week\n    GROUP BY 1, 2\n)\nSELECT ty.region, ty.net_sales AS last_year, ly.net_sales AS prior_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct\nFROM quarterly ty\nCROSS JOIN params\nJOIN quarterly ly ON ly.region = ty.region AND ly.fiscal_year = params.ly_year\nWHERE ty.fiscal_year = params.ty_year\nORDER BY CASE ty.region WHEN 'Capital Region' THEN 1 WHEN 'South' THEN 2 WHEN 'West' THEN 3 WHEN 'North' THEN 4 WHEN 'Online' THEN 5 WHEN 'East' THEN 6 END",
+  "result": {
+    "columns": ["region", "last_year", "prior_year", "growth_pct"],
+    "rows": [
+      ["Capital Region", 527026.01, 525151.30, 0.4],
+      ["South", 729021.20, 710020.17, 2.7],
+      ["West", 997953.07, 952479.50, 4.8],
+      ["North", 413618.24, 387519.62, 6.7],
+      ["Online", 580450.93, 447645.43, 29.7],
+      ["East", 597583.01, 588069.69, 1.6]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns; returns reduce net sales on their return date",
+    "Net sales scope: store 999 (training store) and category ZZ Test excluded",
+    "Web recognition: web sales recognized on dispatch date in Helsinki time",
+    "Hierarchy: as-is reporting (current store region for all years)",
+    "Store scope: physical stores plus web shop as own line",
+    "Fiscal calendar: Q3 = periods 7-9, fiscal weeks 27-39"
+  ],
+  "assumptions": [
+    "Q3 last year interpreted as FY2025/26 Q3 (fiscal weeks 27-39, 2025-10-27 to 2026-01-25)",
+    "Q3 the year before interpreted as FY2024/25 Q3 (fiscal weeks 27-39, 2024-10-28 to 2025-01-26)",
+    "As-is reporting used (Capital Region current hierarchy applied to all years)",
+    "Growth percentage calculated as (last_year / prior_year - 1) * 100",
+    "Web shop shown as Online region as requested"
+  ],
+  "caveats": [
+    "Capital Region as-is includes 5 stores that were in South region in FY2024/25; this is the intended as-is restatement",
+    "Kouvola store moved from East to South region on 28 April 2025; shown as South for all history in as-is reporting",
+    "Web returns booked to store 900; all web returns included in Online region",
+    "Both years' totals verified against rpt_daily_store_sales control total (FY2025/26 Q3: 3,845,652.46; FY2024/25 Q3: 3,610,885.71)",
+    "All figures in EUR, net of VAT"
+  ]
+}
+```

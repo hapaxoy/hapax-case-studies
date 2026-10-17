@@ -1,0 +1,26 @@
+```json
+{
+  "sql": "SELECT count(*) AS web_orders_placed FROM fact_web_order WHERE CAST((order_ts_utc AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Helsinki' AS DATE) = DATE '2025-12-01'",
+  "result": {
+    "columns": ["web_orders_placed"],
+    "rows": [[345]]
+  },
+  "definitions_applied": [
+    "Web order = one row in fact_web_order (web_order_id is unique, no duplicates)",
+    "Order date = calendar date of order_ts_utc converted from UTC to Europe/Helsinki local time, the same convention the warehouse uses for sale_date on sales lines",
+    "Orders placed = all statuses counted, including cancelled",
+    "Cyber Monday 2025 = Monday 1 December 2025 (dim_date confirms it is a normal trading day)"
+  ],
+  "assumptions": [
+    "'Placed' means every order that was submitted on the day, whatever its later status: 239 delivered, 87 collected and 19 cancelled.",
+    "Orders from guest and logged-in customers, home delivery and click-and-collect, are all included.",
+    "'1 December' means the Helsinki calendar day, 00:00 to 24:00 local time (UTC+2 in December). That is 30 Nov 22:00 UTC to 1 Dec 22:00 UTC."
+  ],
+  "caveats": [
+    "Timestamps are stored in UTC. Cutting at the UTC date gives only 291 orders, which would miss 54 orders placed between 00:00 and 02:00 Helsinki time and add 0 wrong ones. I corrected for this by converting to Helsinki time.",
+    "The 345 includes 19 cancelled orders. Excluding them gives 326, which matches the orders that have sales lines in fact_sales_line (cancelled orders have none). Use 326 if you want orders that actually went through.",
+    "The 345 orders come only from fact_web_order, so the sales-line channel migration on 3 Nov 2025 (channel_code ST/WB replaced by channel_id 1/2/3) does not affect the count. The 326 non-cancelled orders all have sales lines dated 2025-12-01, and their line counts match line_count.",
+    "stg_web_order_load holds no orders in this window and nothing there that is not already in fact_web_order, so staging had no effect."
+  ]
+}
+```

@@ -1,0 +1,43 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.region, s.store_id, p.category, f.gross_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE f.sale_date BETWEEN DATE '2024-07-01' AND DATE '2024-10-31') SELECT region, SUM(CASE WHEN business_date BETWEEN DATE '2024-08-01' AND DATE '2024-08-31' THEN gross_amount END) AS august_2024_gross_sales_incl_vat, SUM(CASE WHEN business_date BETWEEN DATE '2024-09-01' AND DATE '2024-09-30' THEN gross_amount END) AS september_2024_gross_sales_incl_vat FROM lines WHERE NOT (store_id = 999 OR category = 'ZZ Test') GROUP BY region ORDER BY region",
+  "result": {
+    "columns": ["region", "august_2024_gross_sales_incl_vat", "september_2024_gross_sales_incl_vat"],
+    "rows": [
+      ["East", 296762.31, 249751.64],
+      ["North", 175960.85, 149625.27],
+      ["Online", 173563.99, 160307.64],
+      ["South", 489776.38, 445837.96],
+      ["West", 402582.35, 363697.29]
+    ]
+  },
+  "definitions_applied": [
+    "Gross sales as the sum of gross_amount on sales lines (each line carries its own VAT rate: 24% to 31 Aug 2024, 25.5% from 1 Sep 2024 for standard-rate goods, with 14% and 10% unchanged)",
+    "Before returns: fact_return_line is not used",
+    "As-was regions: the region on the dim_store version the fact line points to (store_key), which gives four regions plus Online in 2024",
+    "Web sales recognised on the Helsinki dispatch date, not the order date",
+    "Cancelled and processing web orders left out because they have no sales lines or dispatch date",
+    "Web shop (store 900) shown as its own region, Online",
+    "Store 999 and category ZZ Test left out",
+    "Calendar months, 1 to 31 Aug 2024 and 1 to 30 Sep 2024, as the request names months",
+    "Control total: net sales before returns by store and day for the same lines matched rpt_daily_store_sales on all 2,335 store-day cells, with no differences",
+    "Deprecated objects and channel_code not used"
+  ],
+  "assumptions": [
+    "August and September 2024 are read as calendar months, not fiscal periods, because this is a VAT filing and the request names the months",
+    "As-was means the region as it stood on the transaction date. This is as the requester asked ('as they were at the time, as in the old reports'), which differs from the company default of as-is",
+    "Web orders are dated by Helsinki dispatch date, the company rule for web sales, even though this is a VAT filing. An order placed in late July and dispatched in August is in August, and an order placed on 30 Sep and dispatched in October is not in September",
+    "Gross sales means the gross_amount of sold lines, including staff purchases, which the net sales definition also includes",
+    "Online is listed as its own row because web is not part of any physical region",
+    "Figures are in EUR including VAT, rounded to 2 decimals"
+  ],
+  "caveats": [
+    "Correction: store 999 and ZZ Test lines are excluded. This removes 7,645.77 EUR of gross sales across Aug and Sep 2024 in total. If Finance's VAT filing must cover these lines, they would need to be added back",
+    "Correction: web sales are dated on the Helsinki dispatch date rather than the order date. Using the order date would move some web amounts between August, September and the neighbouring months",
+    "The September figures mix VAT rates (25.5% on standard goods from 1 Sep, 24% on August standard goods), as the lines carry. Web lines dated by dispatch carry the rate applied at order time, so a web order placed in late August and dispatched in September keeps 24%. Finance should check this is the treatment wanted for VAT timing",
+    "No returns or refunds are deducted, as requested. Refunds booked in these months are not shown, and the dictionary does not say how returns enter a figure including VAT",
+    "As-was regions are the four old regions (East, North, South, West) plus Online. Stores that later moved to the Capital Region (101 to 105) appear under South, and Kouvola (114) appears under East, as they were in 2024. The new stores Tampere Lamminpää (136, West, opened 2 Sep 2024) and Lohja (137, South, opened 4 Nov 2024) have sales only from their opening, so Lohja contributes nothing in Aug or Sep 2024",
+    "No duplicate sales lines, missing store or product versions or version-date mismatches were found in the range used"
+  ]
+}
+```

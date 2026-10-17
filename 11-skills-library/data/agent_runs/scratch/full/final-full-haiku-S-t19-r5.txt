@@ -1,0 +1,36 @@
+Based on my analysis of the Tuomimetsä warehouse, here is the answer to Antti's request:
+
+```json
+{
+  "sql": "WITH sales_data AS (\n  SELECT \n    CASE \n      WHEN s.region = 'Online' THEN 'Web'\n      ELSE s.region \n    END as region,\n    d.fiscal_year,\n    SUM(f.net_amount) as gross_sales\n  FROM fact_sales_line f\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  JOIN dim_store s ON f.store_key = s.store_key\n  WHERE d.fiscal_quarter = 3 \n    AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND s.region != 'Head office'\n  GROUP BY region, d.fiscal_year\n),\nreturns_data AS (\n  SELECT \n    CASE \n      WHEN s.region = 'Online' THEN 'Web'\n      ELSE s.region \n    END as region,\n    d.fiscal_year,\n    SUM(f.refund_net) as returns\n  FROM fact_return_line f\n  JOIN dim_date d ON f.return_date = d.calendar_date\n  JOIN dim_store s ON f.store_key = s.store_key\n  WHERE d.fiscal_quarter = 3 \n    AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND s.region != 'Head office'\n  GROUP BY region, d.fiscal_year\n),\ncombined_data AS (\n  SELECT \n    COALESCE(s.region, r.region) as region,\n    COALESCE(s.fiscal_year, r.fiscal_year) as fiscal_year,\n    COALESCE(s.gross_sales, 0) - COALESCE(r.returns, 0) as net_sales\n  FROM sales_data s\n  FULL OUTER JOIN returns_data r \n    ON s.region = r.region AND s.fiscal_year = r.fiscal_year\n)\nSELECT \n  region,\n  MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) as fy2025_26_q3,\n  MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END) as fy2024_25_q3,\n  ROUND(\n    (MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) - \n     MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END)) /\n    NULLIF(MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END), 0) * 100, \n    2\n  ) as growth_percentage\nFROM combined_data\nGROUP BY region\nORDER BY region",
+  "result": {
+    "columns": ["region", "fy2025_26_q3_net_sales", "fy2024_25_q3_net_sales", "growth_percentage"],
+    "rows": [
+      ["Capital Region", 527026.01, null, null],
+      ["East", 597583.01, 659319.32, -9.36],
+      ["North", 413618.24, 387519.62, 6.73],
+      ["South", 729021.20, 1163921.84, -37.37],
+      ["Web", 577058.73, 450387.89, 28.12],
+      ["West", 997953.07, 952479.50, 4.77]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: sum of fact_sales_line.net_amount (EUR excluding VAT, after line discounts) minus fact_return_line.refund_net, matching rpt_daily_store_sales definition",
+    "Fiscal quarters: Q3 defined by dim_date fiscal_quarter = 3 (FY2024/25 Oct 28–Jan 26, FY2025/26 Oct 27–Jan 25)",
+    "Regional classification: store region from dim_store, with Online region (store 900) relabeled as Web",
+    "Regional scope: excludes Head office (training store, pseudo-location)"
+  ],
+  "assumptions": [
+    "Last year = Q3 FY2025/26 (Oct 27, 2025 – Jan 25, 2026); earlier year = Q3 FY2024/25 (Oct 28, 2024 – Jan 26, 2025)",
+    "Web shop defined as the Online region (store 900), aggregated across click-and-collect and web home delivery channels",
+    "Returns linked to sales by matching return_date to the fiscal quarter; a return in Q3 applies to Q3 net sales regardless of original sale date",
+    "Growth percentage calculated as (FY2025/26 – FY2024/25) / FY2024/25 × 100, expressed as a percentage point"
+  ],
+  "caveats": [
+    "Capital Region: opened April 28, 2025, so no comparable Q3 FY2024/25 data. The FY2025/26 figure is Q3 sales only, not a year-over-year comparison.",
+    "South region shows a significant 37.4% decline (EUR 434,900 decrease), the largest regional movement in either direction. This warrants further investigation.",
+    "Web sales grew 28.1%, the strongest regional performance. This includes click-and-collect and home delivery fulfillment routed through store 900.",
+    "Total Q3 net sales across all regions: FY2025/26 EUR 3,842,260; FY2024/25 EUR 3,613,628 (6.3% overall growth)"
+  ]
+}
+```

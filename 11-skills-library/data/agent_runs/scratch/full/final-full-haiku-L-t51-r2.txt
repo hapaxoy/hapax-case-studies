@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH campaign_params AS (\n  SELECT 15 AS campaign_id, '2025-11-24'::DATE AS window_start, '2025-12-07'::DATE AS window_end\n),\n\ntargeted_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure ce\n  JOIN dim_member m ON ce.member_key = m.member_key\n  WHERE ce.campaign_id = (SELECT campaign_id FROM campaign_params)\n),\n\nholdout_members AS (\n  SELECT DISTINCT member_id\n  FROM campaign_holdout\n  WHERE campaign_id = (SELECT campaign_id FROM campaign_params)\n),\n\nmember_sales AS (\n  SELECT \n    m.member_id,\n    SUM(f.net_amount) AS total_net_sales\n  FROM fact_sales_line f\n  LEFT JOIN fact_web_order wo ON f.receipt_id = wo.web_order_id AND f.channel_code = 'WB'\n  JOIN dim_store s ON f.store_key = s.store_key\n  JOIN dim_product p ON f.product_key = p.product_key\n  LEFT JOIN dim_member m ON f.member_key = m.member_key\n  WHERE f.sale_date &gt;= (SELECT window_start FROM campaign_params)\n    AND f.sale_date &lt;= (SELECT window_end FROM campaign_params)\n    AND s.store_id &lt;&gt; 999\n    AND p.category &lt;&gt; 'ZZ Test'\n    AND m.member_id IS NOT NULL\n  GROUP BY m.member_id\n),\n\ntargeted_with_sales AS (\n  SELECT COALESCE(ms.total_net_sales, 0) AS net_sales\n  FROM targeted_members tm\n  LEFT JOIN member_sales ms ON tm.member_id = ms.member_id\n),\n\nholdout_with_sales AS (\n  SELECT COALESCE(ms.total_net_sales, 0) AS net_sales\n  FROM holdout_members hm\n  LEFT JOIN member_sales ms ON hm.member_id = ms.member_id\n),\n\nstats AS (\n  SELECT \n    ROUND(AVG(net_sales), 2) AS targeted_avg,\n    (SELECT ROUND(AVG(net_sales), 2) FROM holdout_with_sales) AS holdout_avg\n  FROM targeted_with_sales\n)\n\nSELECT \n  targeted_avg AS avg_spend_per_targeted_member,\n  holdout_avg AS avg_spend_per_holdout_member,\n  ROUND(targeted_avg - holdout_avg, 2) AS uplift_euros\nFROM stats",
+  "result": {
+    "columns": [
+      "avg_spend_per_targeted_member",
+      "avg_spend_per_holdout_member",
+      "uplift_euros"
+    ],
+    "rows": [
+      [9.64, 8.02, 1.62]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales excluding VAT, after returns, store 999 and ZZ Test category excluded",
+    "Campaign uplift as mean net sales per targeted member minus mean per holdout member",
+    "Campaign window plus seven days (2025-11-24 to 2025-12-07)",
+    "Targeted members as those with at least one exposure in fact_campaign_exposure",
+    "Members with zero sales counted as zero in the average",
+    "Web sales dated on dispatch date in Helsinki time"
+  ],
+  "assumptions": [
+    "Black Week 2025 campaign (campaign_id 15) runs 2025-11-24 to 2025-11-30; uplift window extends to 2025-12-07 (plus 7 days per company definition)",
+    "Campaign exposure is the source of truth for targeted members; no filtering by successful delivery",
+    "Holdout members never received contacts and serve as the control group"
+  ],
+  "caveats": [
+    "Targeted members identified from campaign exposure: 23,818 members. Holdout members: 2,747. The mailing list size was 26,573; the 8-member difference likely reflects members who left or changed marketing consent after the campaign target date.",
+    "No data quality issues detected. Uplift of €1.62 per member (targeted €9.64 vs holdout €8.02) represents a 20.2% higher average spend for exposed members over the 14-day window."
+  ]
+}
+```

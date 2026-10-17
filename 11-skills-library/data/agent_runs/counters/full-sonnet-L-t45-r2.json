@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t45-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T45",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "bb2a1fbc55fca1d1c7f701e0dfbdbf86603d9eb491ced0b19c292dd1d20e23ac",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:02:48",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE '%tampere%' OR store_name ILIKE '%tampere%' OR store_id >= 900 ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n21 | 115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n23 | 117 | Tampere Kaleva | Tampere | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n42 | 136 | Tampere Lamminpää | Tampere | West | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n46 | 900 | Tuomimetsä web shop | Tampere | Online | Web | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n47 | 999 | Training store | Tampere | Head office | Training | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:03",
+   "statement": "SELECT m.home_store_id, count(*) AS rows_current, count(DISTINCT m.member_id) AS members, min(m.join_date) AS first_join, max(m.join_date) AS last_join, count(*) FILTER (WHERE m.valid_to <> DATE '9999-12-31') AS bad_valid_to\nFROM dim_member m\nWHERE m.is_current AND (m.home_store_id IN (115,116,117,136,900,999) OR m.home_store_id NOT IN (SELECT store_id FROM dim_store))\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "home_store_id | rows_current | members | first_join | last_join | bad_valid_to\n115 | 2788 | 2788 | 2019-01-02 | 2026-10-02 | 0\n116 | 1721 | 1721 | 2019-01-02 | 2026-10-02 | 0\n117 | 1692 | 1692 | 2019-01-02 | 2026-10-04 | 0\n136 | 974 | 974 | 2019-01-12 | 2026-10-04 | 0\n900 | 12028 | 12028 | 2019-01-01 | 2026-10-04 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:05",
+   "statement": "SELECT count(*) AS version_rows, count(DISTINCT member_id) AS members, count(*) FILTER (WHERE is_current) AS current_rows, count(DISTINCT member_id) FILTER (WHERE is_current) AS current_members, count(*) FILTER (WHERE join_date IS NULL) AS null_join, max(join_date) AS latest_join, (SELECT max(sale_date) FROM fact_sales_line) AS latest_sale\nFROM dim_member\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "version_rows | members | current_rows | current_members | null_join | latest_join | latest_sale\n89314 | 60000 | 60000 | 60000 | 0 | 2026-10-04 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:16",
+   "statement": "WITH tampere_members AS (\n  SELECT DISTINCT m.member_id\n  FROM dim_member AS m\n  JOIN dim_store AS s ON s.store_id = m.home_store_id AND s.is_current\n  WHERE m.is_current AND s.city = 'Tampere' AND s.store_id < 900\n),\nactive AS (\n  SELECT DISTINCT dm.member_id\n  FROM fact_sales_line AS f\n  JOIN dim_member AS dm ON dm.member_key = f.member_key\n  JOIN dim_store AS st ON st.store_key = f.store_key\n  JOIN dim_product AS p ON p.product_key = f.product_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n    AND st.store_id <> 999 AND p.category <> 'ZZ Test'\n),\never AS (\n  SELECT count(DISTINCT m.member_id) AS n\n  FROM dim_member AS m JOIN dim_store s ON s.store_id = m.home_store_id AND s.is_current\n  WHERE s.city = 'Tampere' AND s.store_id < 900\n)\nSELECT (SELECT count(*) FROM tampere_members) AS tampere_members,\n       (SELECT count(*) FROM tampere_members t JOIN active a USING (member_id)) AS tampere_active_52w,\n       (SELECT n FROM ever) AS tampere_any_version\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "tampere_members | tampere_active_52w | tampere_any_version\n7175 | 4441 | 7515\n(1 row)"
+  }
+ ]
+}

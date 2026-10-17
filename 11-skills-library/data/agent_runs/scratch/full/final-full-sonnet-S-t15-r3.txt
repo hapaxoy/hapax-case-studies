@@ -1,0 +1,21 @@
+```json
+{
+  "sql": "SELECT count(*) AS web_orders FROM fact_web_order WHERE CAST(timezone('Europe/Helsinki', timezone('UTC', order_ts_utc)) AS DATE) = DATE '2025-12-01'",
+  "result": {"columns": ["web_orders"], "rows": [[345]]},
+  "definitions_applied": [
+    "A web order is one row in fact_web_order, counted by web_order_id. I found no duplicate IDs.",
+    "Order date is the order timestamp converted from UTC to Finnish local time (Europe/Helsinki). This matches how sale_date on the sales lines is assigned.",
+    "Orders are counted as placed, so every status counts (delivered, collected, cancelled)."
+  ],
+  "assumptions": [
+    "Cyber Monday 2025 is Monday 1 December 2025, as the request says. I read 'placed on' as 1 December in Finnish local time (EET, UTC+2), since the stores and the e-commerce team work in Finnish time.",
+    "Cancelled orders are included because they were still placed. Excluding them gives 326.",
+    "Both fulfilment types (home delivery and click-and-collect) and both login states (logged in and guest) are included, since the request did not limit the count."
+  ],
+  "caveats": [
+    "Correction: order_ts_utc is stored in UTC, and a plain filter on the UTC date gives 291 orders. Converting to Finnish time moves 54 orders into the day, including 58 orders placed in the first local hour, 00:00 to 00:59. The local-time figure is 345.",
+    "The 345 breaks down as 239 home delivery, 87 click-and-collect and 19 cancelled. The 326 non-cancelled orders each have matching sales lines dated 1 December. The 19 cancelled orders have no sales lines, so a count based on sales lines would miss them.",
+    "The sales table's channel_code column is null from 3 November 2025 (web-platform migration). Counting from fact_sales_line WHERE channel_code = 'WB' would therefore miss the day entirely, and I did not use it. I counted from fact_web_order, which is unaffected."
+  ]
+}
+```

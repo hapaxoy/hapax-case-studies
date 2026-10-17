@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "SELECT p.sku, p.product_name, SUM(f.quantity) AS units_sold FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id = 102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' GROUP BY p.sku, p.product_name ORDER BY units_sold DESC, p.sku LIMIT 3",
+  "result": {
+    "columns": ["sku", "product_name", "units_sold"],
+    "rows": [
+      [101624, "Fixings &amp; Fasteners Raudikko 251", 52],
+      [101778, "Fixings &amp; Fasteners Nordhem 349", 44],
+      [102244, "Batteries &amp; Bulbs Havu Pro 791", 42]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal period 5 of FY2026/27 taken from ref_fiscal_calendar: 2026-08-31 to 2026-09-27, four weeks (fiscal weeks 18 to 21), fully loaded",
+    "Store identified by store_id 102 (Helsinki Pitäjänmäki), so both store versions (store_key 3 and 4, before and after the 28 April 2025 region change) would count; only version 4 has sales in this period",
+    "Products grouped by sku (stable article number) rather than product_key, so product versions do not split a product's units",
+    "Units sold means the sum of quantity on fact_sales_line, by sale_date",
+    "Store sales only: this store has no web lines, and web orders are not attributed to a store"
+  ],
+  "assumptions": [
+    "'This year' is read as the current fiscal year, FY2026/27 (the request is dated 2026-10-07), so 'period 5' is FY2026/27 P05, not calendar-year May and not the previous fiscal year's P05",
+    "'Top products' is read at SKU level (article), not subcategory or brand",
+    "Units sold is gross of returns. Returned units are not deducted, because 'units sold' is a sales measure; the top-3 returns in the period were 0, 0 and 1 units, so netting would not change the ranking",
+    "Staff purchases are included, because the request does not exclude them. This matters only for the third place: SKU 102244 has 2 of its 42 units flagged as staff purchases. Excluding staff purchases gives 40 units, and the top 3 and their order stay the same",
+    "A product's name is the name on its current dim_product row. Each SKU has a single version in the period"
+  ],
+  "caveats": [
+    "No data problem needed correcting. Checks run: no duplicate sales_line_id or (receipt_id, line_no) among the 2,121 lines for the store in the period; sales on all 28 days with every day a trading day; no refit closure recorded for store 102; the 3,740 units total matches rpt_daily_store_sales for the same store and dates; all lines carry one store version (store_key 4)",
+    "The staging table stg_sales_line_load holds only 3 to 4 October 2026 lines, outside this period and already in the fact table, so it has no effect",
+    "The store's region changed from South to Capital Region on 2025-04-28. This does not affect a single-store answer but would matter for region roll-ups across that date",
+    "The margin between 3rd place (42 units) and 4th (SKU 102233, 30 units) is 12 units, so the top 3 is not close. The gap between 2nd (44) and 3rd (42) is only 2 units, so their order is sensitive to treatment of staff purchases and returns in principle. In practice staff purchases (-2) leave it at 44 vs 40 and a 1-unit return leaves it at 44 vs 41, so the order holds either way",
+    "Period 6 of FY2026/27 is not fully loaded in the warehouse, but period 5 is, so the answer is final"
+  ]
+}
+```

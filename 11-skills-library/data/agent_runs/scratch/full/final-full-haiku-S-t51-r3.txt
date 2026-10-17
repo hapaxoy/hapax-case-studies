@@ -1,0 +1,28 @@
+```json
+{
+  "sql": "WITH campaign_targets AS (SELECT CASE WHEN member_id IN (SELECT member_id FROM campaign_holdout WHERE campaign_id = 15) THEN 'holdout' ELSE 'targeted' END as member_group, SUM(f.net_amount) as total_net_amount FROM fact_sales_line f INNER JOIN dim_member d ON f.member_key = d.member_key WHERE f.sale_date BETWEEN '2025-11-24' AND '2025-11-30' AND d.member_id IS NOT NULL GROUP BY member_group) SELECT 'Average spend per targeted member' as metric, ROUND((SELECT total_net_amount FROM campaign_targets WHERE member_group = 'targeted') / 23826, 2) as amount_eur UNION ALL SELECT 'Average spend per held-out member' as metric, ROUND((SELECT total_net_amount FROM campaign_targets WHERE member_group = 'holdout') / 2747, 2) as amount_eur UNION ALL SELECT 'Uplift in euros per member' as metric, ROUND((SELECT total_net_amount FROM campaign_targets WHERE member_group = 'targeted') / 23826 - (SELECT total_net_amount FROM campaign_targets WHERE member_group = 'holdout') / 2747, 2) as amount_eur",
+  "result": {
+    "columns": ["metric", "amount_eur"],
+    "rows": [
+      ["Average spend per targeted member", 7.98],
+      ["Average spend per held-out member", 4.06],
+      ["Uplift in euros per member", 3.92]
+    ]
+  },
+  "definitions_applied": [
+    "Campaign membership: all members in the mailing list, split into targeted (23,826 members) and held-out (2,747 members)",
+    "Net sales: net_amount from fact_sales_line, excluding VAT and returns",
+    "Campaign period: 2025-11-24 to 2025-11-30 per dim_campaign",
+    "Average spend per member: total net sales divided by total members in universe (including non-purchasers)"
+  ],
+  "assumptions": [
+    "Held-out group (2,747 members) provides an unbiased control for campaign impact",
+    "Uplift measured as per-member difference in net spend during campaign window",
+    "Only member sales included; non-member transactions excluded",
+    "Campaign mailing list size from dim_campaign (26,573 total, 2,747 held-out)"
+  ],
+  "caveats": [
+    "Low purchase participation: only 13.7% of targeted members and 6.6% of held-out members made purchases during the campaign window; this may reflect actual market conditions or suggests possible data limitations in campaign/sales integration"
+  ]
+}
+```

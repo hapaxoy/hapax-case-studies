@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "SELECT cp.subcategory AS subcategory, SUM(r.quantity_returned) AS units_returned FROM fact_return_line r JOIN dim_product p ON p.product_key = r.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_store s ON s.store_key = r.store_key JOIN dim_date d ON d.calendar_date = r.return_date WHERE cp.subcategory = 'Garden Furniture' AND cp.category &lt;&gt; 'ZZ Test' AND s.store_id &lt;&gt; 999 AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 GROUP BY 1",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "subcategory", "units_returned"],
+    "rows": [["FY2026/27", 4, "Garden Furniture", 92]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 4 of FY2026/27 is 3 August to 30 August 2026, fiscal weeks 14 to 17, fully loaded",
+    "Returns dated on their own return date (fact_return_line.return_date), not the date of the original sale",
+    "Units returned is the sum of quantity_returned, counted per return line",
+    "Product hierarchy as-is: Garden Furniture is the subcategory of that name, read from the current dim_product version joined on sku and is_current",
+    "Store 999 and category ZZ Test excluded (no rows were affected)",
+    "Web returns included: they are booked to the web shop (store 900) and counted like store returns",
+    "Did not use rpt.v_daily_sales, staging, backup, tmp or old tables"
+  ],
+  "assumptions": [
+    "'This year' is read as the current fiscal year, FY2026/27, as the request was received on 5 October 2026. 'Period 4' is therefore FY2026/27 P4, which is fully loaded and complete.",
+    "'Handed back and booked as returned' is read as return lines dated by return_date, which is the date the return was booked. It is not read as the date of the original sale.",
+    "'Garden Furniture' is read as the dim_product subcategory of that name, which sits under the Garden category. It is not read as the whole Garden category, and it is not the Furniture category or the Bathroom Furniture subcategory.",
+    "Units are the sum of quantity_returned across all channels, stores and web. The request gave no breakdown, so one total is given."
+  ],
+  "caveats": [
+    "Of the 92 units, 34 are web returns booked to the web shop (store 900) and 58 are returns in physical stores.",
+    "Checks on the 92 return lines found no data problems. All return_line_ids are unique, and each line matches a sales line with the same article. No line returns more than was sold, no return is dated before its sale, no sales line is returned twice, and every line has a quantity of 1. Weekly units were 28, 16, 22 and 26 for fiscal weeks 14 to 17, with returns on every week.",
+    "The result is the same whether Garden Furniture is taken from the product version on the return date or from the current version, so as-is and as-was agree for this subcategory.",
+    "Returns arrive up to 30 days after a sale, so these units relate to sales made before and during P4. This figure is not the P4 sales-cohort return count, which would be a different number and would not be complete until about five weeks after the period ended."
+  ]
+}
+```

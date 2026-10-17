@@ -1,0 +1,43 @@
+```json
+{
+  "sql": "WITH per AS (SELECT period_start_date ps, period_end_date pe FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=5), sales AS (SELECT p.sku, sum(f.net_amount) gross_net FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key JOIN dim_store s ON s.store_key = f.store_key JOIN per ON f.sale_date BETWEEN per.ps AND per.pe WHERE s.store_id <> 999 GROUP BY p.sku), refunds AS (SELECT p.sku, sum(r.refund_net) refund_net FROM fact_return_line r JOIN dim_product p ON p.product_key = r.product_key JOIN dim_store s ON s.store_key = r.store_key JOIN per ON r.return_date BETWEEN per.ps AND per.pe WHERE s.store_id <> 999 GROUP BY p.sku), names AS (SELECT sku, arg_max(product_name, valid_from) product_name FROM dim_product GROUP BY sku) SELECT rank() OVER (ORDER BY sales.gross_net - coalesce(refunds.refund_net,0) DESC) AS rank, sales.sku, names.product_name, round(sales.gross_net - coalesce(refunds.refund_net,0), 2) AS net_sales FROM sales LEFT JOIN refunds USING (sku) JOIN names USING (sku) ORDER BY net_sales DESC LIMIT 10",
+  "result": {
+    "columns": ["rank", "sku", "product_name", "net_sales"],
+    "rows": [
+      [1, 100955, "Interior Paint Norvik 298", 9361.97],
+      [2, 100927, "Outdoor Lighting Kultala 862", 7476.52],
+      [3, 103415, "Home Office Peltola 918", 7465.18],
+      [4, 103434, "Home Office Tuulikki 821", 5584.57],
+      [5, 103329, "Living Room Havu Pro 936", 5410.67],
+      [6, 102116, "Smart Home Tuulikki 855", 5409.16],
+      [7, 101411, "Power Tools Nordhem 370", 5111.97],
+      [8, 101398, "Power Tools Havu Pro 689", 5042.32],
+      [9, 101375, "Power Tools Selkämaa 638", 4713.40],
+      [10, 101022, "Interior Paint Kultala 377", 4688.75]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = line value in EUR excluding VAT (net_amount) minus refunds excluding VAT (refund_net), the same net-of-returns basis as rpt_daily_store_sales.net_sales",
+    "Returns are booked on the return date, as in rpt_daily_store_sales. A refund made in the period for a sale from an earlier period is deducted",
+    "Products are aggregated by SKU across all product versions, not by product_key",
+    "Sales channel taken from channel_id, with store, web home delivery and click and collect all included. channel_code is empty for this period",
+    "Fiscal calendar from ref_fiscal_calendar"
+  ],
+  "assumptions": [
+    "'Last period' means fiscal period 5 of FY2026/27, 2026-08-31 to 2026-09-27. It is the latest fully loaded period at the request date of 2026-10-08. Period 6 started 2026-09-28 and is still partial (fully_loaded = false), so I did not use it",
+    "'Best-selling' means highest net sales value in EUR excluding VAT. The request did not say whether to rank by value or by units. A ranking by units would give a very different top 10, led by low-priced items such as fixings and cushions",
+    "All channels are included (stores, web home delivery, click and collect), since the request says 'our' products without limiting the channel",
+    "Staff purchases are kept in. They are genuine sales and the company's own daily report includes them",
+    "Product names are shown as per the latest product version. SKU is the identifier"
+  ],
+  "caveats": [
+    "Correction: store 999 'Training store' (139 sales lines, EUR 2,690.92 net in the period) is a test location, not real trading, so I left it out of both sales and refunds. It sits in rpt_daily_store_sales and the rpt.v_daily_sales view, so those reports are overstated by that amount and by any refunds booked there. It does not change which 10 products make the list. Smart Home Tuulikki 855 would be about EUR 46 higher with it",
+    "Correction: fact_sales_line.channel_code is NULL for every line in this period (it is only filled for the legacy ST/WB codes), so I used channel_id instead. Filtering on channel_code would silently drop all sales",
+    "Returns change the order. Ranked on sales before returns, Home Office Peltola 918 is 2nd (EUR 8,627.98 sold, EUR 1,162.80 refunded across 10 units) and Outdoor Lighting Kultala 862 is 3rd. After returns they swap places and are 2 EUR apart. Living Room Havu Pro 936 and Power Tools Nordhem 370 also move up and Smart Home Tuulikki 855 moves down. The same 10 products appear either way",
+    "Excluding staff purchases (715 lines, EUR 15,448 in the period) would not change the top 10 membership. It would lower the values of several products, for example Interior Paint Norvik 298 by about EUR 214 before returns",
+    "The refunds are matched to products by the return date and the product on the return line. Refunds in the period for goods sold before 31 August are included, so net sales can include refunds for earlier sales",
+    "I checked sales lines for the period and found no duplicate line ids, no non-positive quantities or amounts, and no sales lines without a product. The VAT arithmetic reconciles to within rounding",
+    "I did not use rpt.v_daily_sales or the bak_/stg_/tmp_/_old tables"
+  ]
+}
+```

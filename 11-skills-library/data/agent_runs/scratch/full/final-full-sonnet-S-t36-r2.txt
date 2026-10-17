@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH sales AS (SELECT d.fiscal_year, d.fiscal_period, f.net_amount AS sales_net, 0.0 AS refund_net FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE p.category = 'Garden' AND s.store_id &lt;&gt; 999 AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 7 AND 12), rets AS (SELECT d.fiscal_year, d.fiscal_period, 0.0 AS sales_net, x.refund_net AS refund_net FROM fact_return_line x JOIN dim_product p ON p.product_key = x.product_key JOIN dim_store s ON s.store_key = x.store_key JOIN dim_date d ON d.calendar_date = x.return_date WHERE p.category = 'Garden' AND s.store_id &lt;&gt; 999 AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 7 AND 12), u AS (SELECT * FROM sales UNION ALL SELECT * FROM rets) SELECT fiscal_year, fiscal_period, round(sum(sales_net) - sum(refund_net), 2) AS net_sales FROM u GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "net_sales"],
+    "rows": [
+      ["FY2024/25", 7, 56334.42],
+      ["FY2024/25", 8, 56462.85],
+      ["FY2024/25", 9, 63420.22],
+      ["FY2024/25", 10, 59222.23],
+      ["FY2024/25", 11, 109386.69],
+      ["FY2024/25", 12, 310092.16]
+    ]
+  },
+  "definitions_applied": [
+    "Old category set-up: Garden as it stood at the time of sale. The sales and returns tables carry the product version valid on the transaction date (product_key), so Garden here includes the 70 Outdoor Lighting SKUs that were moved to Electrical on 2025-10-27",
+    "Net sales = net sales value excluding VAT (net_amount) less refunds excluding VAT (refund_net), the same net-of-returns definition as rpt_daily_store_sales",
+    "Returns are booked in the period of the return date, not the period of the original sale",
+    "Fiscal calendar: FY2024/25 periods 7 to 12 taken from dim_date and checked against ref_fiscal_calendar. These run 2024-10-28 to 2025-04-27, with 4, 4, 5, 4, 4 and 5 weeks. All are marked fully loaded",
+    "Channels: stores and the web shop (store_id 900) are both included",
+    "Training store 999 and the ZZ Test articles are excluded as non-trading"
+  ],
+  "assumptions": [
+    "Net sales means after returns (net of refunds), excluding VAT, in EUR. This is how the team's daily store report defines it. Before returns, the six periods would be 62425.14, 59488.98, 67917.63, 61765.26, 115075.23 and 324866.02",
+    "'Garden' means the whole old Garden category: Barbecue &amp; Grills, Edible Plants &amp; Seeds, Garden Furniture, Garden Tools, Outdoor Lighting, Plants &amp; Flowers, Pots &amp; Planters and Soil &amp; Fertiliser",
+    "All sales channels are in scope (stores and web), since the request names no channel or region",
+    "Staff purchases are included. The team's daily report includes them, so I kept them in. Over P7 to P12 they come to about 7503 EUR before returns",
+    "'The old way' is read as the category set-up used at the time, which is the version-at-sale-date category, not the current one",
+    "Returns of Garden items are counted at the Garden category they carried on the return date. Product keys on returns and sales lines point to the same SKUs, and all were Garden in this window"
+  ],
+  "caveats": [
+    "The Outdoor Lighting move: from 2025-10-27 those SKUs sit in Electrical, so a current-category query would drop about 94.8k EUR of Garden sales from these six periods (sales before returns, whole window). I did not use that mapping, so the figures keep Outdoor Lighting inside Garden, as reported then",
+    "Training store 999 (about 10 Garden lines plus test articles) is excluded. Its Garden lines were worth about 1175 EUR in the window. The test articles (category ZZ Test) are outside Garden anyway",
+    "sales.channel_id is NULL for this window because it is only populated from the web migration, so I did not use it. Web lines are identified by store 900 and channel_code WB",
+    "rpt_daily_store_sales does not reproduce the fact table for the web shop (store 900). Its daily web figures differ from fact_sales_line by up to several thousand EUR per day, with a Sunday dip. The 40 physical stores match exactly. I built the figures from the fact tables, not that report",
+    "Store regions were restated on 2025-04-28 (after P12) and Kouvola moved from East to South. No region breakdown was requested, so this has no effect on the figures",
+    "No duplicate sales or return lines, orphan keys, negative amounts or VAT mismatches were found in the window",
+    "P12 is the spring peak (5 weeks, about 310k EUR) and P7 to P10 sit around 56k to 63k, so the profile is strongly seasonal"
+  ]
+}
+```

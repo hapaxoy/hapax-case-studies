@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')) SELECT d.fiscal_year, d.fiscal_period, ROUND(SUM(f.gross_amount), 2) AS web_sales_incl_vat FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN web_dispatch w ON w.web_order_id = f.receipt_id JOIN dim_date d ON d.calendar_date = w.dispatch_date WHERE s.store_id = 900 AND p.category <> 'ZZ Test' AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period IN (4, 5, 6) GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_sales_incl_vat"],
+    "rows": [
+      ["FY2024/25", 4, 156427.22],
+      ["FY2024/25", 5, 153246.24],
+      ["FY2024/25", 6, 192906.29]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales recognised on the Helsinki dispatch date (fact_web_order joined on receipt_id = web_order_id), not the order date",
+    "Web identified by store_id 900, not channel_code",
+    "Cancelled and processing orders excluded (they have no sales lines or dispatch)",
+    "Including VAT: sum of gross_amount from the lines, using each line's own VAT rate",
+    "Before returns: no refunds deducted",
+    "Category ZZ Test excluded, store 999 excluded",
+    "Fiscal calendar from dim_date: FY2024/25 P4 = 29 Jul to 25 Aug 2024, P5 = 26 Aug to 22 Sep 2024, P6 = 23 Sep to 27 Oct 2024 (5 weeks)",
+    "Control total against rpt_daily_store_sales (store 900, net_sales_before_returns)"
+  ],
+  "assumptions": [
+    "Q2 of FY24/25 read as FY2024/25 Q2, fiscal periods 4 to 6, as the request states the periods",
+    "Web sales taken as all web shop lines including click-and-collect, since click-and-collect counts as web",
+    "Figures are for the web shop as a whole (store 900), one figure per period, with no breakdown"
+  ],
+  "caveats": [
+    "Excluding ZZ Test test articles lowers the totals slightly: gross including them would be 156,435.28 (P4, 8.06 more) and 153,250.01 (P5, 3.77 more). P6 had none.",
+    "Figures are before returns, as requested. Refunds are not included, so these are not net of returns. Booked web returns were about 11.0k, 10.8k and 14.2k EUR excluding VAT in P4, P5 and P6 (from rpt_daily_store_sales).",
+    "Figures include VAT at each line's own rate. The general rate rose from 24% to 25.5% on 1 September 2024, so the standard rate is 24% for part of P5 (before 1 September) and 25.5% afterwards. The reduced rates (14%, 10%) were unchanged. Line gross amounts match net x (1 + VAT rate) for every web line checked.",
+    "Dating is by Helsinki dispatch date, so an order placed late in one period and dispatched in the next counts in the later period.",
+    "Checks that passed: the net equivalents (126,242.65, 122,660.57 and 153,786.32 EUR) agree exactly with net_sales_before_returns for store 900 in rpt_daily_store_sales. There are no duplicate sales lines, and line totals agree with fact_web_order totals and line counts. I did not use rpt.v_daily_sales or any channel_code logic."
+  ]
+}
+```

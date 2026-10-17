@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-S-t17-r5",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T17",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "367e56dd23a2fc5ed46f23cc3654eae10c5d589ffd92f6bcef91fcbebc77abcf",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:29",
+   "statement": "SELECT DISTINCT fiscal_year\nFROM dim_date\nORDER BY fiscal_year DESC\nLIMIT 10\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:33",
+   "statement": "SELECT fiscal_year, fiscal_quarter, MIN(period_start_date) as q_start, MAX(period_end_date) as q_end\nFROM ref_fiscal_calendar\nGROUP BY fiscal_year, fiscal_quarter\nORDER BY fiscal_year, fiscal_quarter\n",
+   "n": 2,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "fiscal_year | fiscal_quarter | q_start | q_end\nFY2024/25 | 1 | 2024-04-29 | 2024-07-28\nFY2024/25 | 2 | 2024-07-29 | 2024-10-27\nFY2024/25 | 3 | 2024-10-28 | 2025-01-26\nFY2024/25 | 4 | 2025-01-27 | 2025-04-27\nFY2025/26 | 1 | 2025-04-28 | 2025-07-27\nFY2025/26 | 2 | 2025-07-28 | 2025-10-26\nFY2025/26 | 3 | 2025-10-27 | 2026-01-25\nFY2025/26 | 4 | 2026-01-26 | 2026-05-03\nFY2026/27 | 1 | 2026-05-04 | 2026-08-02\nFY2026/27 | 2 | 2026-08-03 | 2026-11-01\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:38",
+   "statement": "SELECT DISTINCT category, COUNT(*) as product_count\nFROM dim_product\nWHERE is_current = TRUE\nGROUP BY category\nORDER BY category\n",
+   "n": 3,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "category | product_count\nBathroom & Plumbing | 278\nCleaning & Household | 285\nElectrical | 477\nFurniture | 239\nGarden | 868\nHome Textiles & Decor | 370\nKitchen & Dining | 316\nPaint & Decorating | 385\nSeasonal | 254\nTools & Hardware | 516\nZZ Test | 12\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:41",
+   "statement": "SELECT DISTINCT subcategory\nFROM dim_product\nWHERE category = 'Garden' AND is_current = TRUE\nORDER BY subcategory\n",
+   "n": 4,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "subcategory\nBarbecue & Grills\nEdible Plants & Seeds\nGarden Furniture\nGarden Tools\nOutdoor Lighting\nPlants & Flowers\nPots & Planters\nSoil & Fertiliser\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:47",
+   "statement": "SELECT \n  p.subcategory,\n  SUM(f.quantity) as units_sold,\n  COALESCE(SUM(r.quantity_returned), 0) as units_returned,\n  ROUND(100.0 * COALESCE(SUM(r.quantity_returned), 0) / SUM(f.quantity), 2) as return_rate_pct\nFROM fact_sales_line f\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE p.category = 'Garden'\n  AND d.fiscal_year = 'FY2025/26'\n  AND d.fiscal_quarter = 1\nGROUP BY p.subcategory\nORDER BY p.subcategory\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "subcategory | units_sold | units_returned | return_rate_pct\nBarbecue & Grills | 2057 | 133 | 6.47\nEdible Plants & Seeds | 22461 | 222 | 0.99\nGarden Furniture | 2915 | 370 | 12.69\nGarden Tools | 10562 | 548 | 5.19\nOutdoor Lighting | 1757 | 127 | 7.23\nPlants & Flowers | 53086 | 1444 | 2.72\nPots & Planters | 12265 | 477 | 3.89\nSoil & Fertiliser | 20017 | 343 | 1.71\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:54",
+   "statement": "-- Check date range of Q1 FY2025/26 to verify data coverage\nSELECT MIN(calendar_date) as period_start, MAX(calendar_date) as period_end, COUNT(*) as days_in_quarter\nFROM dim_date\nWHERE fiscal_year = 'FY2025/26' AND fiscal_quarter = 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "period_start | period_end | days_in_quarter\n2025-04-28 | 2025-07-27 | 91\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:59",
+   "statement": "-- Check if all quarters in FY2025/26 are fully loaded\nSELECT fiscal_period, fiscal_period_label, fully_loaded\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2025/26'\nORDER BY fiscal_period\n",
+   "n": 7,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "fiscal_period | fiscal_period_label | fully_loaded\n1 | FY2025/26 P01 | true\n2 | FY2025/26 P02 | true\n3 | FY2025/26 P03 | true\n4 | FY2025/26 P04 | true\n5 | FY2025/26 P05 | true\n6 | FY2025/26 P06 | true\n7 | FY2025/26 P07 | true\n8 | FY2025/26 P08 | true\n9 | FY2025/26 P09 | true\n10 | FY2025/26 P10 | true\n11 | FY2025/26 P11 | true\n12 | FY2025/26 P12 | true\n(12 rows)"
+  }
+ ]
+}

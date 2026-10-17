@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH per AS (SELECT * FROM (VALUES ('FY2024/25',DATE '2024-11-25',DATE '2024-12-22'),('FY2025/26',DATE '2025-11-24',DATE '2025-12-21')) t(fy,s,e)), cur AS (SELECT sku, category AS cur_category FROM dim_product WHERE is_current), sales AS (SELECT per.fy, c.cur_category AS category, f.net_amount AS amt FROM fact_sales_line f JOIN per ON f.sale_date BETWEEN per.s AND per.e JOIN dim_store st ON st.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN cur c ON c.sku=p.sku WHERE st.store_id<>999 AND c.cur_category IN ('Garden','Electrical')), rets AS (SELECT per.fy, c.cur_category AS category, -r.refund_net AS amt FROM fact_return_line r JOIN per ON r.return_date BETWEEN per.s AND per.e JOIN dim_store st ON st.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key JOIN cur c ON c.sku=p.sku WHERE st.store_id<>999 AND c.cur_category IN ('Garden','Electrical')), u AS (SELECT * FROM sales UNION ALL SELECT * FROM rets) SELECT category, 8 AS fiscal_period, round(sum(CASE WHEN fy='FY2024/25' THEN amt END),2) AS net_sales_fy2024_25, round(sum(CASE WHEN fy='FY2025/26' THEN amt END),2) AS net_sales_fy2025_26, round(100*(sum(CASE WHEN fy='FY2025/26' THEN amt END)/sum(CASE WHEN fy='FY2024/25' THEN amt END)-1),2) AS growth_pct FROM u GROUP BY category ORDER BY category",
+  "result": {
+    "columns": ["category", "fiscal_period", "net_sales_fy2024_25", "net_sales_fy2025_26", "growth_pct"],
+    "rows": [
+      ["Electrical", 8, 162500.27, 171286.19, 5.41],
+      ["Garden", 8, 37122.52, 36665.72, -1.23]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = line net_amount (EUR excluding VAT, after line discounts) less refund_net on returns",
+    "Returns are deducted in the period of the return date, not the original sale date",
+    "Fiscal period 8 taken from ref_fiscal_calendar: FY2024/25 P08 is 2024-11-25 to 2024-12-22 and FY2025/26 P08 is 2025-11-24 to 2025-12-21, both 4 weeks",
+    "Stores and the web shop (store 900) both count, so web home delivery and click-and-collect are included",
+    "Staff purchases are included, matching how rpt_daily_store_sales is built",
+    "Training store (store_id 999) is excluded, as in rpt_daily_store_sales",
+    "Test articles (category ZZ Test) are excluded",
+    "Growth % = (FY2025/26 / FY2024/25 - 1) x 100"
+  ],
+  "assumptions": [
+    "'Last year' means the last completed fiscal year, FY2025/26. On the request date (5 Oct 2026) FY2026/27 is still in progress and has not reached period 8. 'The year before' is FY2024/25.",
+    "'Period' means a fiscal period (1 to 12) from the company fiscal calendar, not a calendar month.",
+    "Net sales covers all channels and all stores, with no like-for-like store filter, because none was requested.",
+    "Net sales is after returns, as in the Data & Analytics daily store sales report.",
+    "Each article is classified by the category on its current dim_product version, for both years. Garden and Electrical are therefore the same product sets in both years (see caveats)."
+  ],
+  "caveats": [
+    "CORRECTION: Outdoor Lighting (68 current SKUs) moved from Garden to Electrical in dim_product on 2025-10-27. Joining sales through the stored product_key puts it in Garden for FY2024/25 P08 and in Electrical for FY2025/26 P08. That would make Garden look about 35% down and Electrical about 20% up, both wrong. I restated FY2024/25 to the current classification, so Outdoor Lighting sits in Electrical in both years. Roughly EUR 19.3k of FY2024/25 P08 net sales moved from Garden to Electrical. On the restated basis Electrical is +5.41% and Garden is -1.23%.",
+    "If you want the old classification (Outdoor Lighting in Garden) for both years, the figures will differ. Electrical would be lower and Garden higher by the Outdoor Lighting amount in each year.",
+    "channel_code is NULL on all sales lines from 2025-11-03 onwards (the web-platform migration moved to channel_id), so I did not filter or split by channel_code. Stores and the web shop are separated by store_id instead (900 is the web shop).",
+    "Training store (999) sales and ZZ Test articles are in fact_sales_line and were removed. They are small, a few hundred EUR per period.",
+    "rpt_daily_store_sales matches the fact tables exactly for physical stores, but its store 900 (web) figures do not match fact_sales_line day by day. They are shifted between days, with swings of up to about EUR 12k a day. I used the fact tables, so the figures here will not match that report's web rows.",
+    "Fiscal periods 8 are 4 weeks in both years, so no week adjustment was needed. No store-closure or refit adjustment was made, so planned closures in ref_store_closure may affect the comparison between years.",
+    "The prior-year figure (FY2024/25) is built from the same product hierarchy. No sales lines were missing, duplicated or cancelled in these periods: web orders in them are all delivered or collected, and sales_line_id and (receipt_id, line_no) are unique."
+  ]
+}
+```

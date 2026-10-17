@@ -1,0 +1,33 @@
+```json
+{
+  "sql": "WITH sales_data AS (\n  WITH sales_by_week AS (\n    SELECT \n      d.fiscal_year,\n      d.fiscal_week,\n      SUM(fsl.net_amount) AS sales_amount\n    FROM fact_sales_line fsl\n    INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n    WHERE d.fiscal_week BETWEEN 5 AND 8 \n      AND d.fiscal_year IN ('FY2025/26', 'FY2026/27')\n    GROUP BY d.fiscal_year, d.fiscal_week\n  ),\n  returns_by_week AS (\n    SELECT \n      d.fiscal_year,\n      d.fiscal_week,\n      SUM(frl.refund_net) AS returns_amount\n    FROM fact_return_line frl\n    INNER JOIN dim_date d ON frl.return_date = d.calendar_date\n    WHERE d.fiscal_week BETWEEN 5 AND 8 \n      AND d.fiscal_year IN ('FY2025/26', 'FY2026/27')\n    GROUP BY d.fiscal_year, d.fiscal_week\n  )\n  SELECT \n    COALESCE(s.fiscal_year, r.fiscal_year) AS fiscal_year,\n    COALESCE(s.fiscal_week, r.fiscal_week) AS fiscal_week,\n    COALESCE(s.sales_amount, 0) - COALESCE(r.returns_amount, 0) AS net_sales\n  FROM sales_by_week s\n  FULL OUTER JOIN returns_by_week r \n    ON s.fiscal_year = r.fiscal_year AND s.fiscal_week = r.fiscal_week\n)\nSELECT \n  this_year.fiscal_week,\n  ROUND(this_year.net_sales, 2) AS sales_2026_27,\n  ROUND(last_year.net_sales, 2) AS sales_2025_26,\n  ROUND((this_year.net_sales - last_year.net_sales) / last_year.net_sales * 100, 1) AS growth_pct\nFROM sales_data this_year\nLEFT JOIN sales_data last_year \n  ON this_year.fiscal_week = last_year.fiscal_week \n  AND this_year.fiscal_year = 'FY2026/27'\n  AND last_year.fiscal_year = 'FY2025/26'\nWHERE this_year.fiscal_year = 'FY2026/27'\nORDER BY this_year.fiscal_week",
+  "result": {
+    "columns": [
+      "fiscal_week",
+      "sales_fy2026_27",
+      "sales_fy2025_26",
+      "growth_pct"
+    ],
+    "rows": [
+      [5, 347040.04, 328962.75, 5.5],
+      [6, 363144.71, 331904.13, 9.4],
+      [7, 240770.33, 326802.63, -26.3],
+      [8, 347374.23, 225488.52, 54.1]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: sum of line net amounts minus refunds, EUR excluding VAT",
+    "Fiscal week boundaries from dim_date calendar (fiscal weeks 5-8 = period 2)",
+    "Returns: refund amounts processed in the same fiscal week as the sale week"
+  ],
+  "assumptions": [
+    "This year = FY2026/27, Last year = FY2025/26",
+    "Total company sales = all channels (store and web) combined",
+    "Growth percentage = (FY2026/27 - FY2025/26) / FY2025/26 * 100"
+  ],
+  "caveats": [
+    "Store closure: Kuopio (store 125) was closed for refit from 2026-06-15 to 2026-07-26, spanning most of fiscal week 7 (2026-06-15 to 2026-06-21). The -26.3% decline in week 7 this year is partly attributable to this closure and is not a like-for-like comparison.",
+    "No store closures occurred during period 2 of FY2025/26, so the year-on-year comparison for week 7 is affected by this planned maintenance."
+  ]
+}
+```

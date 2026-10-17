@@ -1,0 +1,27 @@
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS period\n)\nSELECT cs.format,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS average_basket_value\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id &lt; 900\n  AND NOT f.staff_purchase_flag\n  AND p.category &lt;&gt; 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.period\nGROUP BY 1\nORDER BY average_basket_value DESC;",
+  "result": {
+    "columns": ["format", "average_basket_value"],
+    "rows": [
+      ["Large", 60.67],
+      ["Medium", 60.27],
+      ["Small", 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV (average transaction value) = net sales before returns / number of sales receipts",
+    "ATV is a store measure: physical stores only (store_id &lt; 900), staff purchases excluded, test articles excluded",
+    "Fiscal period 4 of FY2026/27 (2026-08-03 to 2026-08-30, fiscal weeks 14-17)"
+  ],
+  "assumptions": [
+    "FY26/27 period 4 interpreted as fiscal period 4 of fiscal year FY2026/27",
+    "Store format grouped by current version (dim_store.is_current = true)"
+  ],
+  "caveats": [
+    "Staff purchases totalling EUR 14,796.76 are excluded from ATV per company definition; this explains the difference from the rpt_daily_store_sales control total",
+    "Query validated against control total; all differences are explained by the ATV definition exclusions",
+    "Data complete through 2026-08-30"
+  ]
+}
+```

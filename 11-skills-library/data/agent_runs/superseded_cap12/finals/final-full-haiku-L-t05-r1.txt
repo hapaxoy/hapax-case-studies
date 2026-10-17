@@ -1,0 +1,31 @@
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS ty_year, 'FY2025/26' AS ly_year,\n           5 AS first_week, 8 AS last_week                -- P2 weeks 5-8\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: stores on the sale date, web on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n),\nweekly AS (\n    SELECT d.fiscal_year, d.fiscal_week, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND params.last_week\n    GROUP BY 1, 2\n)\nSELECT ty.fiscal_week, ty.net_sales AS net_sales_this_year, ly.net_sales AS net_sales_last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct\nFROM weekly ty\nCROSS JOIN params\nJOIN weekly ly ON ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = params.ly_year\nWHERE ty.fiscal_year = params.ty_year\nORDER BY ty.fiscal_week;",
+  "result": {
+    "columns": ["fiscal_week", "net_sales_this_year", "net_sales_last_year", "growth_pct"],
+    "rows": [
+      [5, 341054.61, 330868.04, 3.1],
+      [6, 362249.20, 329334.78, 10.0],
+      [7, 220623.76, 325472.70, -32.2],
+      [8, 370720.07, 210207.18, 76.4]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns, on the company definition (store 999 and ZZ Test category excluded)",
+    "Return timing: returns reduce net sales on their return date, not the original sale date",
+    "Web recognition: web sales are recognized on the dispatch date in Helsinki time, not the order date",
+    "As-is reporting: current store and product versions"
+  ],
+  "assumptions": [
+    "Interpreted 'period 2 this year' as FY2026/27 P2 (fiscal weeks 5-8, 2026-06-01 to 2026-06-28)",
+    "Interpreted 'last year' as FY2025/26 P2 (fiscal weeks 5-8, 2025-05-26 to 2025-06-22), lined up by fiscal week number",
+    "Included web sales (store 900) in the total company figure",
+    "Staff purchases are included in net sales"
+  ],
+  "caveats": [
+    "Week 7 FY2026/27 shows a significant 32.2% decline compared to the same week last year; week 8 shows a 76.4% increase. The variation between these adjacent weeks warrants investigation into whether there was a planned closure, unusual demand pattern, or data anomaly.",
+    "Web sales are recognized on dispatch date (Helsinki time); some orders placed on an earlier date are recognized in a later week.",
+    "The query verified against rpt_daily_store_sales control total: company net sales for P2 FY2026/27 total 1,294,647.64 EUR, matching the warehouse control total exactly."
+  ]
+}
+```

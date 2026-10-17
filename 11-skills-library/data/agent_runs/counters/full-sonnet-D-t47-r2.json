@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t47-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T47",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "88f04f6f023380135a0268a2ceed8c2e2a9785889f4ad9b9e4d0738c841dbbf1",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:40",
+   "statement": "SELECT tier, is_current, count(*) AS versions, count(DISTINCT member_id) AS members, count(DISTINCT member_key) AS keys,\n  min(valid_from) AS minvf, max(valid_to) AS maxvt, sum(CASE WHEN valid_to = DATE '9999-12-31' THEN 1 ELSE 0 END) AS open_ended\nFROM dim_member GROUP BY ALL ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tier | is_current | versions | members | keys | minvf | maxvt | open_ended\nBasic | false | 19343 | 17903 | 19343 | 2019-01-01 | 2026-10-02 | 0\nBasic | true | 31229 | 31229 | 31229 | 2019-01-01 | 9999-12-31 | 31229\nGold | false | 2412 | 2233 | 2412 | 2019-01-01 | 2026-10-02 | 0\nGold | true | 5791 | 5791 | 5791 | 2019-01-02 | 9999-12-31 | 5791\nSilver | false | 7559 | 7068 | 7559 | 2019-01-01 | 2026-10-02 | 0\nSilver | true | 22980 | 22980 | 22980 | 2019-01-02 | 9999-12-31 | 22980\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:44",
+   "statement": "SELECT 'members with >1 current' AS chk, count(*) AS n FROM (SELECT member_id FROM dim_member WHERE is_current GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'members with 0 current', count(*) FROM (SELECT member_id FROM dim_member GROUP BY 1 HAVING sum(CASE WHEN is_current THEN 1 ELSE 0 END)=0)\nUNION ALL SELECT 'members with >1 open-ended', count(*) FROM (SELECT member_id FROM dim_member WHERE valid_to=DATE '9999-12-31' GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'is_current but valid_to not open', count(*) FROM dim_member WHERE is_current AND valid_to<>DATE '9999-12-31'\nUNION ALL SELECT 'open-ended but not current', count(*) FROM dim_member WHERE NOT is_current AND valid_to=DATE '9999-12-31'\nUNION ALL SELECT 'dup member_key', count(*) FROM (SELECT member_key FROM dim_member GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'null tier current', count(*) FROM dim_member WHERE is_current AND tier IS NULL\nUNION ALL SELECT 'total distinct members', count(DISTINCT member_id) FROM dim_member\nUNION ALL SELECT 'latest valid_from', max(CAST(valid_from AS BIGINT)) FROM dim_member\nUNION ALL SELECT 'gold current by version-date valid today (2026-10-08)', count(DISTINCT member_id) FROM dim_member WHERE tier='Gold' AND valid_from<=DATE '2026-10-08' AND valid_to>=DATE '2026-10-08'\n",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Conversion Error: Unimplemented type for cast (DATE -> BIGINT) when casting from source column valid_from\n\nLINE 9: UNION ALL SELECT 'latest valid_from', max(CAST(valid_from AS BIGINT)) FROM dim_member\n                                                  ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:51",
+   "statement": "SELECT 'members with >1 current' AS chk, count(*) AS n FROM (SELECT member_id FROM dim_member WHERE is_current GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'members with 0 current', count(*) FROM (SELECT member_id FROM dim_member GROUP BY 1 HAVING sum(CASE WHEN is_current THEN 1 ELSE 0 END)=0)\nUNION ALL SELECT 'is_current but valid_to not open', count(*) FROM dim_member WHERE is_current AND valid_to<>DATE '9999-12-31'\nUNION ALL SELECT 'open-ended but not current', count(*) FROM dim_member WHERE NOT is_current AND valid_to=DATE '9999-12-31'\nUNION ALL SELECT 'dup member_key', count(*) FROM (SELECT member_key FROM dim_member GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'tier outside list', count(*) FROM dim_member WHERE tier NOT IN ('Basic','Silver','Gold') OR tier IS NULL\nUNION ALL SELECT 'total distinct members', count(DISTINCT member_id) FROM dim_member\nUNION ALL SELECT 'overlapping versions', count(*) FROM dim_member a JOIN dim_member b ON a.member_id=b.member_id AND a.member_key<b.member_key AND a.valid_from<=b.valid_to AND b.valid_from<=a.valid_to\nUNION ALL SELECT 'current with valid_from > 2026-10-08', count(*) FROM dim_member WHERE is_current AND valid_from>DATE '2026-10-08'\nUNION ALL SELECT 'gold valid on 2026-10-08 distinct', count(DISTINCT member_id) FROM dim_member WHERE tier='Gold' AND valid_from<=DATE '2026-10-08' AND valid_to>=DATE '2026-10-08'\nUNION ALL SELECT 'stg_member_updates rows', count(*) FROM stg_member_updates\n",
+   "n": 3,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "chk | n\nmembers with >1 current | 0\nmembers with 0 current | 0\nis_current but valid_to not open | 0\nopen-ended but not current | 0\ndup member_key | 0\ntier outside list | 0\ntotal distinct members | 60000\noverlapping versions | 0\ncurrent with valid_from > 2026-10-08 | 0\ngold valid on 2026-10-08 distinct | 5791\nstg_member_updates rows | 4061\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:55",
+   "statement": "SELECT tier, COUNT(DISTINCT member_id) AS members\nFROM dim_member\nWHERE is_current AND tier = 'Gold'\nGROUP BY tier\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "tier | members\nGold | 5791\n(1 row)"
+  }
+ ]
+}

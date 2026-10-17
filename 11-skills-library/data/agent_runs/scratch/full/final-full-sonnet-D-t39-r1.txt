@@ -1,0 +1,29 @@
+```json
+{
+  "sql": "SELECT COUNT(*) AS web_orders\nFROM fact_web_order o\nWHERE CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n  AND o.status &lt;&gt; 'cancelled'\n  AND NOT EXISTS (\n    SELECT 1 FROM fact_sales_line f\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    WHERE f.receipt_id = o.web_order_id AND (p.category = 'ZZ Test' OR s.store_id = 999)\n  );",
+  "result": {
+    "columns": ["web_orders"],
+    "rows": [[326]]
+  },
+  "definitions_applied": [
+    "Web orders counted from fact_web_order on the Helsinki order date",
+    "Cancelled orders excluded, processing orders would be included",
+    "Day boundary at Helsinki midnight, converted from order_ts_utc",
+    "Click-and-collect counted as web",
+    "Test orders (store 999 / category ZZ Test) filtered out",
+    "Did not use channel_code, because the web platform migration on 3 November 2025 left it empty"
+  ],
+  "assumptions": [
+    "Cyber Monday is Monday 1 December 2025, as the request states.",
+    "'Web shop orders' means all non-cancelled orders in fact_web_order, home delivery and click-and-collect together.",
+    "Orders are dated by the day they were placed, not the day they were dispatched, as the company definition for order counts says."
+  ],
+  "caveats": [
+    "Dating by UTC date would have given 267 orders. The Helsinki date (UTC+2 in December) is what gives 326.",
+    "19 orders placed on 1 December 2025 were cancelled and are not counted (345 orders in total on the day, including those cancelled).",
+    "No orders placed that day were still in processing status, and none were test orders, so the test-order filter did not change the total.",
+    "The figure includes both delivered (239) and collected click-and-collect (87) orders.",
+    "fact_web_order has one row per order ID (94,876 rows, all distinct), so the count has no duplicates."
+  ]
+}
+```

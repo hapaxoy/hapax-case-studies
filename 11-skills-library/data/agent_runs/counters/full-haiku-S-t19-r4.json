@@ -1,0 +1,175 @@
+{
+ "run_id": "full-haiku-S-t19-r4",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T19",
+ "budget": 30,
+ "used": 18,
+ "refused": 0,
+ "packet_sha256": "f6d5e57ee712a03a9be78690948f687d356fe259412b46b51718599bf7c21f3f",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:35:50",
+   "statement": "SELECT DISTINCT fiscal_year FROM dim_date ORDER BY fiscal_year DESC LIMIT 10;\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:35:54",
+   "statement": "SELECT fiscal_year, fiscal_quarter, MIN(calendar_date) as start_date, MAX(calendar_date) as end_date\nFROM dim_date\nWHERE fiscal_year IN ('FY2025/26', 'FY2024/25')\nGROUP BY fiscal_year, fiscal_quarter\nORDER BY fiscal_year, fiscal_quarter;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_quarter | start_date | end_date\nFY2024/25 | 1 | 2024-04-29 | 2024-07-28\nFY2024/25 | 2 | 2024-07-29 | 2024-10-27\nFY2024/25 | 3 | 2024-10-28 | 2025-01-26\nFY2024/25 | 4 | 2025-01-27 | 2025-04-27\nFY2025/26 | 1 | 2025-04-28 | 2025-07-27\nFY2025/26 | 2 | 2025-07-28 | 2025-10-26\nFY2025/26 | 3 | 2025-10-27 | 2026-01-25\nFY2025/26 | 4 | 2026-01-26 | 2026-05-03\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:35:58",
+   "statement": "SELECT DISTINCT region FROM dim_store WHERE is_current = TRUE ORDER BY region;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region\nCapital Region\nEast\nHead office\nNorth\nOnline\nSouth\nWest\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:04",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  CASE \n    WHEN fsl.channel_code = 'WB' THEN 'Web shop'\n    ELSE s.region \n  END as region,\n  SUM(fsl.net_amount - COALESCE(frl.refund_net, 0)) as net_sales\nFROM fact_sales_line fsl\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nLEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\nLEFT JOIN dim_store s ON fsl.store_key = s.store_key\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND fsl.channel_code IN ('ST', 'WB')\n  AND (fsl.channel_code = 'WB' OR s.store_id < 900)\nGROUP BY d.fiscal_year, d.fiscal_quarter, CASE WHEN fsl.channel_code = 'WB' THEN 'Web shop' ELSE s.region END\nORDER BY d.fiscal_year DESC, region;\n",
+   "n": 4,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "fiscal_year | fiscal_quarter | region | net_sales\nFY2025/26 | 3 | Capital Region | 43046.41\nFY2025/26 | 3 | East | 44274.39\nFY2025/26 | 3 | North | 29224.52\nFY2025/26 | 3 | South | 52837.43\nFY2025/26 | 3 | Web shop | 34335.23\nFY2025/26 | 3 | West | 65955.58\nFY2024/25 | 3 | East | 661861.64\nFY2024/25 | 3 | North | 388267.14\nFY2024/25 | 3 | South | 1168043.08\nFY2024/25 | 3 | Web shop | 440057.54\nFY2024/25 | 3 | West | 956762.36\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:08",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  COUNT(*) as line_count,\n  SUM(fsl.net_amount) as total_net_amount\nFROM fact_sales_line fsl\nLEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND fsl.channel_code IN ('ST', 'WB')\nGROUP BY d.fiscal_year, d.fiscal_quarter\nORDER BY d.fiscal_year DESC;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_quarter | line_count | total_net_amount\nFY2025/26 | 3 | 11521 | 284552.71\nFY2024/25 | 3 | 156764 | 3794497.96\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:13",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  SUM(fsl.net_amount) as sales_net,\n  SUM(COALESCE(frl.refund_net, 0)) as returns_net,\n  SUM(fsl.net_amount) - SUM(COALESCE(frl.refund_net, 0)) as net_after_returns\nFROM fact_sales_line fsl\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nLEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND fsl.channel_code IN ('ST', 'WB')\nGROUP BY d.fiscal_year, d.fiscal_quarter\nORDER BY d.fiscal_year DESC;\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_quarter | sales_net | returns_net | net_after_returns\nFY2025/26 | 3 | 284552.71 | 13927.52 | 270625.19\nFY2024/25 | 3 | 3794497.96 | 173026.80 | 3621471.16\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:18",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  COUNT(DISTINCT rds.business_date) as trading_days,\n  SUM(rds.net_sales) as total_net_sales\nFROM rpt_daily_store_sales rds\nLEFT JOIN dim_date d ON rds.business_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\nGROUP BY d.fiscal_year, d.fiscal_quarter\nORDER BY d.fiscal_year DESC;\n",
+   "n": 7,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_quarter | trading_days | total_net_sales\nFY2025/26 | 3 | 91 | 3845652.46\nFY2024/25 | 3 | 91 | 3610885.71\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:23",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  s.region,\n  SUM(rds.net_sales) as net_sales\nFROM rpt_daily_store_sales rds\nLEFT JOIN dim_store s ON rds.store_id = s.store_id AND d.calendar_date >= s.valid_from AND d.calendar_date <= s.valid_to\nLEFT JOIN dim_date d ON rds.business_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND rds.store_id < 900\nGROUP BY d.fiscal_year, d.fiscal_quarter, s.region\nORDER BY d.fiscal_year DESC, s.region;\n",
+   "n": 8,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Referenced table \"d\" not found!\nCandidate tables: \"rds\"\n\nLINE 7: LEFT JOIN dim_store s ON rds.store_id = s.store_id AND d.calendar_date >= s.valid_from AND d.calendar_date <= s...\n                                                               ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:26",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  s.region,\n  SUM(rds.net_sales) as net_sales\nFROM rpt_daily_store_sales rds\nLEFT JOIN dim_date d ON rds.business_date = d.calendar_date\nLEFT JOIN dim_store s ON rds.store_id = s.store_id AND d.calendar_date >= s.valid_from AND d.calendar_date <= s.valid_to\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND rds.store_id < 900\nGROUP BY d.fiscal_year, d.fiscal_quarter, s.region\nORDER BY d.fiscal_year DESC, s.region;\n",
+   "n": 9,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "fiscal_year | fiscal_quarter | region | net_sales\nFY2025/26 | 3 | Capital Region | 527026.01\nFY2025/26 | 3 | East | 597583.01\nFY2025/26 | 3 | North | 413618.24\nFY2025/26 | 3 | South | 729021.20\nFY2025/26 | 3 | West | 997953.07\nFY2024/25 | 3 | East | 659319.32\nFY2024/25 | 3 | North | 387519.62\nFY2024/25 | 3 | South | 1163921.84\nFY2024/25 | 3 | West | 952479.50\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:31",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  'Web shop' as region,\n  SUM(fsl.net_amount - COALESCE(frl.refund_net, 0)) as net_sales\nFROM fact_sales_line fsl\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nLEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND fsl.channel_code = 'WB'\nGROUP BY d.fiscal_year, d.fiscal_quarter\nORDER BY d.fiscal_year DESC;\n",
+   "n": 10,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_quarter | region | net_sales\nFY2025/26 | 3 | Web shop | 34335.23\nFY2024/25 | 3 | Web shop | 440057.54\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:37",
+   "statement": "WITH store_sales AS (\n  SELECT \n    d.fiscal_year,\n    s.region,\n    SUM(rds.net_sales) as net_sales\n  FROM rpt_daily_store_sales rds\n  LEFT JOIN dim_date d ON rds.business_date = d.calendar_date\n  LEFT JOIN dim_store s ON rds.store_id = s.store_id AND d.calendar_date >= s.valid_from AND d.calendar_date <= s.valid_to\n  WHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND d.fiscal_quarter = 3\n    AND rds.store_id < 900\n  GROUP BY d.fiscal_year, s.region\n),\nweb_sales AS (\n  SELECT \n    d.fiscal_year,\n    'Web shop' as region,\n    SUM(fsl.net_amount - COALESCE(frl.refund_net, 0)) as net_sales\n  FROM fact_sales_line fsl\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  LEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND d.fiscal_quarter = 3\n    AND fsl.channel_code = 'WB'\n  GROUP BY d.fiscal_year\n),\ncombined_sales AS (\n  SELECT fiscal_year, region, net_sales FROM store_sales\n  UNION ALL\n  SELECT fiscal_year, region, net_sales FROM web_sales\n),\npivoted AS (\n  SELECT \n    region,\n    SUM(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales ELSE 0 END) as last_year_sales,\n    SUM(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales ELSE 0 END) as prior_year_sales\n  FROM combined_sales\n  GROUP BY region\n)\nSELECT \n  region,\n  last_year_sales,\n  prior_year_sales,\n  CASE \n    WHEN prior_year_sales != 0 THEN ROUND((last_year_sales - prior_year_sales) / prior_year_sales * 100, 2)\n    ELSE NULL\n  END as growth_percentage\nFROM pivoted\nORDER BY region;\n",
+   "n": 11,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | last_year_sales | prior_year_sales | growth_percentage\nCapital Region | 527026.01 | 0.00 | NULL\nEast | 597583.01 | 659319.32 | -9.36\nNorth | 413618.24 | 387519.62 | 6.73\nSouth | 729021.20 | 1163921.84 | -37.37\nWeb shop | 34335.23 | 440057.54 | -92.2\nWest | 997953.07 | 952479.50 | 4.77\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:42",
+   "statement": "SELECT DISTINCT region, MIN(valid_from) as first_date, MAX(valid_to) as last_date\nFROM dim_store\nWHERE region IS NOT NULL\nGROUP BY region\nORDER BY region;\n",
+   "n": 12,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region | first_date | last_date\nCapital Region | 2025-04-28 | 9999-12-31\nEast | 2000-01-01 | 9999-12-31\nHead office | 2000-01-01 | 9999-12-31\nNorth | 2000-01-01 | 9999-12-31\nOnline | 2000-01-01 | 9999-12-31\nSouth | 2000-01-01 | 9999-12-31\nWest | 2000-01-01 | 9999-12-31\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:47",
+   "statement": "SELECT DISTINCT store_id, store_name, region\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY store_id;\n",
+   "n": 13,
+   "ok": true,
+   "rows": 41,
+   "output_preview": "store_id | store_name | region\n101 | Helsinki Vuosaari | Capital Region\n102 | Helsinki Pitäjänmäki | Capital Region\n103 | Espoo Lommila | Capital Region\n104 | Vantaa Tammisto | Capital Region\n105 | Kerava | Capital Region\n106 | Porvoo | South\n107 | Hyvinkää | South\n108 | Lahti | South\n109 | Hämeenlinna | South\n110 | Turku Kupittaa | South\n111 | Turku Härmälä | South\n112 | Raisio | South\n113 | Salo | South\n114 | Kouvola | South\n115 | Tampere Hervanta | West\n116 | Tampere Lielahti | West\n117 | Tampere Kaleva | West\n118 | Nokia | West\n119 | Pori | West\n120 | Rauma | West\n121 | Vaasa | West\n122 | Seinäjoki | West\n123 | Kokkola | West\n124 | Jyväskylä Palokka | East\n125 | Kuopio | East\n126 | Joensuu | East\n127 | Mikkeli | East\n128 | Lappeenranta | East\n129 | Savonlinna | East\n130 | Kotka | East\n131 | Oulu Kaakkuri | North\n132 | Oulu Linnanmaa | North\n133 | Kemi | North\n134 | Rovaniemi | North\n135 | Kajaani | North\n136 | Tampere Lamminpää | West\n137 | Lohja | South\n138 | Iisalmi | East\n139 | Raahe | North\n900 | Tuomimetsä web shop | Online\n999 | Training store | Head office\n(41 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:53",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  fsl.channel_code,\n  s.store_id,\n  s.region,\n  COUNT(*) as line_count,\n  SUM(fsl.net_amount) as total_net\nFROM fact_sales_line fsl\nLEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\nLEFT JOIN dim_store s ON fsl.store_key = s.store_key AND d.calendar_date >= s.valid_from AND d.calendar_date <= s.valid_to\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND fsl.channel_code = 'WB'\nGROUP BY d.fiscal_year, d.fiscal_quarter, fsl.channel_code, s.store_id, s.region\nORDER BY d.fiscal_year DESC;\n",
+   "n": 14,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_quarter | channel_code | store_id | region | line_count | total_net\nFY2025/26 | 3 | WB | 900 | Online | 1426 | 38287.09\nFY2024/25 | 3 | WB | 900 | Online | 18192 | 487738.80\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:59",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  SUM(fsl.net_amount) as sales_net,\n  SUM(COALESCE(frl.refund_net, 0)) as returns_net,\n  SUM(fsl.net_amount) - SUM(COALESCE(frl.refund_net, 0)) as net_after_returns\nFROM fact_sales_line fsl\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nLEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND fsl.channel_code = 'WB'\nGROUP BY d.fiscal_year, d.fiscal_quarter\nORDER BY d.fiscal_year DESC;\n",
+   "n": 15,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_quarter | sales_net | returns_net | net_after_returns\nFY2025/26 | 3 | 38287.09 | 3951.86 | 34335.23\nFY2024/25 | 3 | 487738.80 | 47681.26 | 440057.54\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:37:06",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  'Store sales from fact_sales_line' as source,\n  SUM(CASE WHEN fsl.channel_code = 'ST' THEN fsl.net_amount ELSE 0 END) as sales_net,\n  SUM(CASE WHEN fsl.channel_code = 'ST' THEN COALESCE(frl.refund_net, 0) ELSE 0 END) as returns_net,\n  SUM(CASE WHEN fsl.channel_code = 'ST' THEN fsl.net_amount - COALESCE(frl.refund_net, 0) ELSE 0 END) as net_after_returns\nFROM fact_sales_line fsl\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nLEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND fsl.channel_code = 'ST'\nGROUP BY d.fiscal_year, d.fiscal_quarter\nUNION ALL\nSELECT \n  d.fiscal_year,\n  d.fiscal_quarter,\n  'Store sales from rpt_daily_store_sales' as source,\n  0 as sales_net,\n  0 as returns_net,\n  SUM(rds.net_sales) as net_after_returns\nFROM rpt_daily_store_sales rds\nLEFT JOIN dim_date d ON rds.business_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND d.fiscal_quarter = 3\n  AND rds.store_id < 900\nGROUP BY d.fiscal_year, d.fiscal_quarter\nORDER BY d.fiscal_year DESC, source;\n",
+   "n": 16,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_quarter | source | sales_net | returns_net | net_after_returns\nFY2025/26 | 3 | Store sales from fact_sales_line | 246265.62 | 9975.66 | 236289.96\nFY2025/26 | 3 | Store sales from rpt_daily_store_sales | 0.00 | 0.00 | 3265201.53\nFY2024/25 | 3 | Store sales from fact_sales_line | 3306759.16 | 125345.54 | 3181413.62\nFY2024/25 | 3 | Store sales from rpt_daily_store_sales | 0.00 | 0.00 | 3163240.28\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:37:12",
+   "statement": "SELECT \n  fiscal_year,\n  fiscal_period,\n  fiscal_quarter,\n  fiscal_period_label,\n  fully_loaded,\n  period_start_date,\n  period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year IN ('FY2025/26', 'FY2024/25')\nORDER BY fiscal_year DESC, fiscal_period DESC;\n",
+   "n": 17,
+   "ok": true,
+   "rows": 24,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_quarter | fiscal_period_label | fully_loaded | period_start_date | period_end_date\nFY2025/26 | 12 | 4 | FY2025/26 P12 | true | 2026-03-23 | 2026-05-03\nFY2025/26 | 11 | 4 | FY2025/26 P11 | true | 2026-02-23 | 2026-03-22\nFY2025/26 | 10 | 4 | FY2025/26 P10 | true | 2026-01-26 | 2026-02-22\nFY2025/26 | 9 | 3 | FY2025/26 P09 | true | 2025-12-22 | 2026-01-25\nFY2025/26 | 8 | 3 | FY2025/26 P08 | true | 2025-11-24 | 2025-12-21\nFY2025/26 | 7 | 3 | FY2025/26 P07 | true | 2025-10-27 | 2025-11-23\nFY2025/26 | 6 | 2 | FY2025/26 P06 | true | 2025-09-22 | 2025-10-26\nFY2025/26 | 5 | 2 | FY2025/26 P05 | true | 2025-08-25 | 2025-09-21\nFY2025/26 | 4 | 2 | FY2025/26 P04 | true | 2025-07-28 | 2025-08-24\nFY2025/26 | 3 | 1 | FY2025/26 P03 | true | 2025-06-23 | 2025-07-27\nFY2025/26 | 2 | 1 | FY2025/26 P02 | true | 2025-05-26 | 2025-06-22\nFY2025/26 | 1 | 1 | FY2025/26 P01 | true | 2025-04-28 | 2025-05-25\nFY2024/25 | 12 | 4 | FY2024/25 P12 | true | 2025-03-24 | 2025-04-27\nFY2024/25 | 11 | 4 | FY2024/25 P11 | true | 2025-02-24 | 2025-03-23\nFY2024/25 | 10 | 4 | FY2024/25 P10 | true | 2025-01-27 | 2025-02-23\nFY2024/25 | 9 | 3 | FY2024/25 P09 | true | 2024-12-23 | 2025-01-26\nFY2024/25 | 8 | 3 | FY2024/25 P08 | true | 2024-11-25 | 2024-12-22\nFY2024/25 | 7 | 3 | FY2024/25 P07 | true | 2024-10-28 | 2024-11-24\nFY2024/25 | 6 | 2 | FY2024/25 P06 | true | 2024-09-23 | 2024-10-27\nFY2024/25 | 5 | 2 | FY2024/25 P05 | true | 2024-08-26 | 2024-09-22\nFY2024/25 | 4 | 2 | FY2024/25 P04 "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:37:23",
+   "statement": "WITH store_sales AS (\n  SELECT \n    d.fiscal_year,\n    s.region,\n    SUM(rds.net_sales) as net_sales\n  FROM rpt_daily_store_sales rds\n  LEFT JOIN dim_date d ON rds.business_date = d.calendar_date\n  LEFT JOIN dim_store s ON rds.store_id = s.store_id AND d.calendar_date >= s.valid_from AND d.calendar_date <= s.valid_to\n  WHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND d.fiscal_quarter = 3\n    AND rds.store_id < 900\n  GROUP BY d.fiscal_year, s.region\n),\nweb_sales AS (\n  SELECT \n    d.fiscal_year,\n    'Web shop' as region,\n    SUM(fsl.net_amount - COALESCE(frl.refund_net, 0)) as net_sales\n  FROM fact_sales_line fsl\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  LEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND d.fiscal_quarter = 3\n    AND fsl.channel_code = 'WB'\n  GROUP BY d.fiscal_year\n),\ncombined_sales AS (\n  SELECT fiscal_year, region, net_sales FROM store_sales\n  UNION ALL\n  SELECT fiscal_year, region, net_sales FROM web_sales\n),\npivoted AS (\n  SELECT \n    region,\n    SUM(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales ELSE 0 END) as fy2525_sales,\n    SUM(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales ELSE 0 END) as fy2425_sales\n  FROM combined_sales\n  GROUP BY region\n)\nSELECT \n  region,\n  ROUND(fy2525_sales, 2) as q3_fy2525_net_sales,\n  ROUND(fy2425_sales, 2) as q3_fy2425_net_sales,\n  CASE \n    WHEN fy2425_sales != 0 THEN ROUND((fy2525_sales - fy2425_sales) / fy2425_sales * 100, 1)\n    ELSE NULL\n  END as growth_percentage\nFROM pivoted\nORDER BY region;\n",
+   "n": 18,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | q3_fy2525_net_sales | q3_fy2425_net_sales | growth_percentage\nCapital Region | 527026.01 | 0.00 | NULL\nEast | 597583.01 | 659319.32 | -9.4\nNorth | 413618.24 | 387519.62 | 6.7\nSouth | 729021.20 | 1163921.84 | -37.4\nWeb shop | 34335.23 | 440057.54 | -92.2\nWest | 997953.07 | 952479.50 | 4.8\n(6 rows)"
+  }
+ ]
+}

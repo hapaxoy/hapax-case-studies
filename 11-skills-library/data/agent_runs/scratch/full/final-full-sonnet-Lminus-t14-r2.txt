@@ -1,0 +1,44 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2025-04-28' AS start_date, DATE '2026-05-03' AS end_date), sales_dedup AS (SELECT * FROM (SELECT f.*, ROW_NUMBER() OVER (PARTITION BY f.receipt_id, f.line_no ORDER BY f.etl_loaded_at, f.sales_line_id) AS rn FROM fact_sales_line f) WHERE rn = 1), net_lines AS (SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales FROM sales_dedup f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'), store_sales AS (SELECT n.store_id, SUM(n.net_sales) AS net_sales FROM net_lines n CROSS JOIN params WHERE n.business_date BETWEEN params.start_date AND params.end_date GROUP BY 1) SELECT RANK() OVER (ORDER BY ss.net_sales DESC) AS rank, cs.store_id, cs.store_name, ss.net_sales FROM store_sales ss JOIN dim_store cs ON cs.store_id = ss.store_id AND cs.is_current ORDER BY rank LIMIT 10",
+  "result": {
+    "columns": ["rank", "store_id", "store_name", "net_sales"],
+    "rows": [
+      [1, 115, "Tampere Hervanta", 804120.83],
+      [2, 102, "Helsinki Pitäjänmäki", 679651.94],
+      [3, 131, "Oulu Kaakkuri", 555975.03],
+      [4, 108, "Lahti", 543956.58],
+      [5, 110, "Turku Kupittaa", 539965.78],
+      [6, 104, "Vantaa Tammisto", 531924.70],
+      [7, 125, "Kuopio", 512757.62],
+      [8, 116, "Tampere Lielahti", 506894.85],
+      [9, 117, "Tampere Kaleva", 474881.34],
+      [10, 118, "Nokia", 415258.62]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Returns reduce net sales on their own return date",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included in net sales",
+    "Store scope: physical stores only (store_id below 900), web shop 900 not ranked",
+    "As-is store attributes (current dim_store version)",
+    "Fiscal year FY2025/26 (28 Apr 2025 to 3 May 2026, 53 weeks, week 53 included because there is no comparison)",
+    "Control total check against rpt_daily_store_sales",
+    "Deduplication on receipt_id + line_no"
+  ],
+  "assumptions": [
+    "The request does not define 'biggest' and the metric dictionary has no definition for it, so I read it as highest net sales. Store area (sqm) is the other possible reading.",
+    "The request gives no period. I used the last completed fiscal year, FY2025/26, with week 53 included, as past unqualified requests did. The latest completed period alone (FY2026/27 P05) would be a short window distorted by Kuopio's refit.",
+    "Net sales are total sales over the year, not per trading day, so stores that traded for only part of the year are ranked on what they sold. Savonlinna, which closed on 25 Jan 2026, is not in the top 10 either way.",
+    "Stores are ranked on physical-store net sales only. Store 900 (web shop) is not a store for this purpose."
+  ],
+  "caveats": [
+    "Correction: for Tampere Lielahti (store 116), every sales line from 15 to 21 September 2025 is loaded twice. That is 836 rows with different sales_line_id and etl_loaded_at but the same receipt_id and line_no, worth 20,781.06 net. I kept one copy of each. This lowered Lielahti from 517,285.38 to 506,894.85, a drop of 10,390.53, and moved it from 7th to 8th place behind Kuopio. No other store or week has duplicated lines.",
+    "After the correction, all 10 stores match rpt_daily_store_sales exactly for the year. The top 10 is the same set of stores with or without the correction, and only the 7th and 8th places swap.",
+    "If 'biggest' means sales area, the answer differs. The top 10 by sqm are Helsinki Pitäjänmäki 8,381, Turku Kupittaa 7,844, Kuopio 7,814, Vantaa Tammisto 7,732, Oulu Kaakkuri 7,613, Lahti 7,036, Tampere Lielahti 6,761, Tampere Hervanta 6,705, Espoo Lommila 4,827 and Lappeenranta 4,738. By sales, Tampere Kaleva and Nokia (both Medium format) make the top 10 instead of Espoo Lommila and Lappeenranta. I did not run a separate query for the sqm list. It comes from the dim_store listing.",
+    "Pori had a five-week refit closure (8 Sep to 12 Oct 2025) in FY2025/26. It ranks 15th by sales, so the closure does not affect the top 10.",
+    "Net sales are excluding VAT and in EUR."
+  ]
+}
+```

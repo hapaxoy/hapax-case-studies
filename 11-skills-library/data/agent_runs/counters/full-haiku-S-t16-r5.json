@@ -1,0 +1,85 @@
+{
+ "run_id": "full-haiku-S-t16-r5",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T16",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "8fa7ec8368d95670bf18b351323bc1b4b11ad890b541915824d3aa6f2eaa9398",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:53",
+   "statement": "SELECT DISTINCT fiscal_year \nFROM dim_date \nWHERE calendar_date >= '2023-01-01'\nORDER BY fiscal_year DESC\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:58",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  COUNT(DISTINCT wo.web_order_id) as orders,\n  COUNT(DISTINCT CASE WHEN wo.fulfilment_type = 'click_and_collect' THEN wo.web_order_id END) as click_and_collect_orders,\n  COUNT(DISTINCT CASE WHEN wo.fulfilment_type = 'home_delivery' THEN wo.web_order_id END) as home_delivery_orders\nFROM fact_web_order wo\nJOIN dim_date d ON DATE(wo.order_ts_utc) = d.calendar_date\nWHERE d.fiscal_period IN (9, 10)\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_year DESC, d.fiscal_period DESC\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | orders | click_and_collect_orders | home_delivery_orders\nFY2025/26 | 10 | 2449 | 734 | 1715\nFY2025/26 | 9 | 3997 | 1167 | 2830\nFY2024/25 | 10 | 2012 | 506 | 1506\nFY2024/25 | 9 | 3090 | 750 | 2340\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:05",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  SUM(CASE WHEN wo.fulfilment_type = 'click_and_collect' THEN wo.order_total_gross ELSE 0 END) as click_and_collect_value,\n  SUM(CASE WHEN wo.fulfilment_type = 'home_delivery' THEN wo.order_total_gross ELSE 0 END) as home_delivery_value,\n  SUM(wo.order_total_gross) as total_web_sales\nFROM fact_web_order wo\nJOIN dim_date d ON DATE(wo.order_ts_utc) = d.calendar_date\nWHERE d.fiscal_period IN (9, 10)\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_year DESC, d.fiscal_period DESC\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | click_and_collect_value | home_delivery_value | total_web_sales\nFY2025/26 | 10 | 53595.00 | 123708.64 | 177303.64\nFY2025/26 | 9 | 82306.96 | 195261.99 | 277568.95\nFY2024/25 | 10 | 37647.44 | 109297.44 | 146944.88\nFY2024/25 | 9 | 50086.12 | 160053.87 | 210139.99\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:09",
+   "statement": "SELECT \n  status,\n  COUNT(DISTINCT web_order_id) as order_count,\n  SUM(order_total_gross) as total_value\nFROM fact_web_order\nWHERE web_order_id IS NOT NULL\nGROUP BY status\nORDER BY order_count DESC\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "status | order_count | total_value\ndelivered | 66238 | 4806252.34\ncollected | 24514 | 1778190.46\ncancelled | 3828 | 270601.68\nprocessing | 296 | 20675.55\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:13",
+   "statement": "SELECT \n  fulfilment_type,\n  status,\n  COUNT(*) as count\nFROM fact_web_order\nGROUP BY fulfilment_type, status\nORDER BY fulfilment_type, status\n",
+   "n": 5,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "fulfilment_type | status | count\nclick_and_collect | cancelled | 1062\nclick_and_collect | collected | 24514\nclick_and_collect | processing | 78\nhome_delivery | cancelled | 2766\nhome_delivery | delivered | 66238\nhome_delivery | processing | 218\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:19",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  wo.fulfilment_type,\n  COUNT(DISTINCT wo.web_order_id) as order_count,\n  SUM(wo.order_total_gross) as sales_value\nFROM fact_web_order wo\nJOIN dim_date d ON DATE(wo.order_ts_utc) = d.calendar_date\nWHERE d.fiscal_year = 'FY2025/26'\n  AND d.fiscal_period IN (9, 10)\n  AND wo.status IN ('delivered', 'collected')\nGROUP BY d.fiscal_year, d.fiscal_period, wo.fulfilment_type\nORDER BY d.fiscal_period DESC, wo.fulfilment_type\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | fulfilment_type | order_count | sales_value\nFY2025/26 | 10 | click_and_collect | 707 | 52004.37\nFY2025/26 | 10 | home_delivery | 1641 | 118856.21\nFY2025/26 | 9 | click_and_collect | 1123 | 78902.91\nFY2025/26 | 9 | home_delivery | 2699 | 185504.50\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:26",
+   "statement": "SELECT \n  d.fiscal_year,\n  ROUND(SUM(CASE WHEN wo.fulfilment_type = 'click_and_collect' THEN wo.order_total_gross ELSE 0 END) * 100.0 / SUM(wo.order_total_gross), 2) as click_and_collect_share_pct\nFROM fact_web_order wo\nJOIN dim_date d ON DATE(wo.order_ts_utc) = d.calendar_date\nWHERE d.fiscal_year = 'FY2025/26'\n  AND d.fiscal_period IN (9, 10)\n  AND wo.status IN ('delivered', 'collected')\nGROUP BY d.fiscal_year\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | click_and_collect_share_pct\nFY2025/26 | 30.08\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:31",
+   "statement": "WITH web_sales_by_fulfilment AS (\n  SELECT \n    d.fiscal_year,\n    wo.fulfilment_type,\n    SUM(wo.order_total_gross) as sales_value\n  FROM fact_web_order wo\n  JOIN dim_date d ON DATE(wo.order_ts_utc) = d.calendar_date\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period IN (9, 10)\n    AND wo.status IN ('delivered', 'collected')\n  GROUP BY d.fiscal_year, wo.fulfilment_type\n)\nSELECT \n  fiscal_year,\n  ROUND(\n    SUM(CASE WHEN fulfilment_type = 'click_and_collect' THEN sales_value ELSE 0 END) * 100.0 / \n    SUM(sales_value), \n    2\n  ) as click_and_collect_share_pct\nFROM web_sales_by_fulfilment\nGROUP BY fiscal_year\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | click_and_collect_share_pct\nFY2025/26 | 30.08\n(1 row)"
+  }
+ ]
+}

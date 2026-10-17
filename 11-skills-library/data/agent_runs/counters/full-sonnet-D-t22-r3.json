@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-D-t22-r3",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T22",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "5f2d665acbb35c627c105d1bee7663c35ebad313830dac3bf5edb008efd16905",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:10:39",
+   "statement": "SELECT c.*, (SELECT count(*) FROM campaign_holdout h WHERE h.campaign_id=c.campaign_id) AS holdout_rows,\n (SELECT count(DISTINCT m.member_id) FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=c.campaign_id) AS contacted_members,\n (SELECT count(*) FROM fact_campaign_exposure e WHERE e.campaign_id=c.campaign_id) AS exposure_rows,\n (SELECT count(*) FROM stg_campaign_contact_load e WHERE e.campaign_id=c.campaign_id) AS stg_rows\nFROM dim_campaign c WHERE campaign_name ILIKE '%garden%' OR campaign_name ILIKE '%spring%'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | channels | target_group | holdout_pct | mailing_list_size | holdout_size | holdout_rows | contacted_members | exposure_rows | stg_rows\n1 | Spring Garden Launch 2024 | 2024-05-06 | 2024-05-26 | email+sms | All members with marketing consent at the campaign start | 0.100 | 7918 | 841 | 841 | 7077 | 14947 | 0\n9 | Spring Garden Launch 2025 | 2025-05-05 | 2025-05-25 | email+sms | All members with marketing consent at the campaign start | 0.100 | 12203 | 1204 | 1204 | 10985 | 23026 | 0\n12 | Garden Clearance 2025 | 2025-08-18 | 2025-09-07 | email+push | All members with marketing consent at the campaign start | 0.100 | 13813 | 1369 | 1369 | 12431 | 26011 | 0\n19 | Spring Garden Launch 2026 | 2026-05-04 | 2026-05-24 | email+sms | All members with marketing consent at the campaign start | 0.100 | 16624 | 1597 | 1597 | 15001 | 31685 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:10:45",
+   "statement": "WITH e AS (\n SELECT e.*, m.member_id, m.marketing_consent, m.valid_from, m.valid_to,\n   CAST(timezone('Europe/Helsinki', e.contact_ts_utc AT TIME ZONE 'UTC') AS DATE) AS contact_date\n FROM fact_campaign_exposure e LEFT JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=19)\nSELECT count(*) rows_, count(DISTINCT member_id) members, count(DISTINCT exposure_id) ids,\n count(*) FILTER (WHERE member_id IS NULL) no_member,\n count(DISTINCT member_id) FILTER (WHERE delivered) delivered_members,\n count(DISTINCT member_id) FILTER (WHERE member_id IN (SELECT member_id FROM campaign_holdout WHERE campaign_id=19)) in_holdout,\n count(*) FILTER (WHERE NOT marketing_consent) no_consent_rows,\n count(DISTINCT member_id) FILTER (WHERE NOT marketing_consent) no_consent_members,\n min(contact_date) mind, max(contact_date) maxd,\n count(*) FILTER (WHERE contact_date NOT BETWEEN valid_from AND valid_to) outside_validity,\n count(*) FILTER (WHERE contact_date < DATE '2026-05-04' OR contact_date > DATE '2026-05-24') outside_window,\n (SELECT count(*) FROM (SELECT campaign_id, member_id FROM campaign_holdout GROUP BY 1,2 HAVING count(*)>1)) dup_holdout\nFROM e\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_ | members | ids | no_member | delivered_members | in_holdout | no_consent_rows | no_consent_members | mind | maxd | outside_validity | outside_window | dup_holdout\n31685 | 15001 | 31685 | 0 | 14814 | 0 | 0 | 0 | 2026-05-04 | 2026-05-24 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:10:54",
+   "statement": "WITH targeted AS (\n SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=19),\nwd AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n FROM fact_web_order WHERE status IN ('delivered','collected')),\nlines AS (\n SELECT f.sales_line_id, f.receipt_id, f.line_no, COALESCE(w.dispatch_date, f.sale_date) AS bdate, s.store_id, m.member_id, f.net_amount, f.gross_amount, f.etl_loaded_at\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n JOIN dim_member m ON m.member_key=f.member_key\n LEFT JOIN wd w ON w.web_order_id=f.receipt_id\n WHERE s.store_id<>999 AND p.category<>'ZZ Test')\nSELECT count(*) n_lines, count(DISTINCT sales_line_id) ids, count(DISTINCT (receipt_id,line_no)) rl,\n count(DISTINCT member_id) buyers, sum(net_amount) net, sum(gross_amount) gross,\n sum(net_amount) FILTER (WHERE store_id=900) web_net,\n count(*) FILTER (WHERE store_id=900) web_lines,\n min(etl_loaded_at), max(etl_loaded_at)\nFROM lines WHERE member_id IN (SELECT member_id FROM targeted) AND bdate BETWEEN DATE '2026-05-04' AND DATE '2026-05-24'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n_lines | ids | rl | buyers | net | gross | web_net | web_lines | min(etl_loaded_at) | max(etl_loaded_at)\n8080 | 8080 | 8080 | 2605 | 190687.59 | 238805.59 | 35168.92 | 1258 | 2026-05-01T01:00:00 | 2026-05-25T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:11:03",
+   "statement": "WITH targeted AS (\n SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=19),\nwd AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n FROM fact_web_order WHERE status IN ('delivered','collected'))\nSELECT s.store_id=900 AS is_web, w.web_order_id IS NULL AS no_dispatch, f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24' AS sale_in_window,\n COALESCE(w.dispatch_date, f.sale_date) BETWEEN DATE '2026-05-04' AND DATE '2026-05-24' AS bdate_in_window,\n count(*) n, sum(f.net_amount) net, min(f.net_amount) minnet, count(*) FILTER (WHERE f.quantity<=0) nonpos_qty,\n count(*) FILTER (WHERE f.channel_code='WB') wb\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_member m ON m.member_key=f.member_key LEFT JOIN wd w ON w.web_order_id=f.receipt_id\nWHERE s.store_id<>999 AND p.category<>'ZZ Test' AND m.member_id IN (SELECT member_id FROM targeted)\n AND (f.sale_date BETWEEN DATE '2026-05-01' AND DATE '2026-05-27' OR w.dispatch_date BETWEEN DATE '2026-05-01' AND DATE '2026-05-27')\nGROUP BY 1,2,3,4 ORDER BY 1,2,3,4\n",
+   "n": 4,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "is_web | no_dispatch | sale_in_window | bdate_in_window | n | net | minnet | nonpos_qty | wb\nfalse | true | false | false | 1490 | 33588.77 | 1.25 | 0 | 0\nfalse | true | true | true | 6822 | 155518.67 | 0.61 | 0 | 0\ntrue | false | false | false | 276 | 8023.92 | 1.15 | 0 | 0\ntrue | false | false | true | 120 | 3044.06 | 1.64 | 0 | 0\ntrue | false | true | false | 182 | 3932.55 | 1.13 | 0 | 0\ntrue | false | true | true | 1138 | 32124.86 | 1.01 | 0 | 0\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:11:12",
+   "statement": "WITH targeted AS (\n SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=19),\nwd AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n FROM fact_web_order WHERE status IN ('delivered','collected')),\nspend AS (\n SELECT SUM(f.net_amount) AS net_spend\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n JOIN dim_member m ON m.member_key=f.member_key LEFT JOIN wd w ON w.web_order_id=f.receipt_id\n WHERE s.store_id<>999 AND p.category<>'ZZ Test' AND m.member_id IN (SELECT member_id FROM targeted)\n   AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN DATE '2026-05-04' AND DATE '2026-05-24')\nSELECT 19 AS campaign_id, 'Spring Garden Launch 2026' AS campaign_name, (SELECT count(*) FROM targeted) AS members_contacted, ROUND(net_spend,2) AS net_spend_eur FROM spend\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "campaign_id | campaign_name | members_contacted | net_spend_eur\n19 | Spring Garden Launch 2026 | 15001 | 190687.59\n(1 row)"
+  }
+ ]
+}

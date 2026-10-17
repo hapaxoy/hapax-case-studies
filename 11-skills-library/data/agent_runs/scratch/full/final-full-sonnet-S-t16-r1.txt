@@ -1,0 +1,29 @@
+```json
+{
+  "sql": "WITH web AS (SELECT f.net_amount, o.fulfilment_type FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id = f.receipt_id JOIN dim_date d ON d.calendar_date = f.sale_date WHERE f.channel_id IN (2, 3) AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (9, 10)) SELECT 'FY2025/26' AS fiscal_year, 'P9-P10' AS periods, round(100.0 * sum(net_amount) FILTER (WHERE fulfilment_type = 'click_and_collect') / sum(net_amount), 2) AS click_and_collect_share_pct FROM web",
+  "result": {
+    "columns": ["fiscal_year", "periods", "click_and_collect_share_pct"],
+    "rows": [["FY2025/26", "P9-P10", 30.02]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2025/26 periods 9 and 10 run 2025-12-22 to 2026-02-22 (5 + 4 weeks), taken from dim_date and ref_fiscal_calendar",
+    "Web sales: sales lines with channel_id 2 or 3 (web home delivery and click and collect, channel_group = web), using the post-migration channel key",
+    "Click and collect identified by fact_web_order.fulfilment_type, joined on receipt_id = web_order_id",
+    "Sales value is net_amount, which is EUR excluding VAT and after line discounts",
+    "Cancelled web orders are excluded, because they have no sales lines (all web lines in the window belong to delivered or collected orders)",
+    "sale_date is the Helsinki local date and was used as the date of sale"
+  ],
+  "assumptions": [
+    "'Last year' means the last completed fiscal year, FY2025/26. The request is dated 2026-10-06, which falls in FY2026/27 P06.",
+    "'Periods 9 and 10' are fiscal periods 9 and 10 combined, giving one share for the two periods. No per-period breakdown was requested.",
+    "'Share of web sales' means share of sales value (EUR excl. VAT, before returns), not share of order count. For reference, by order count it is 1,830 of 6,178 orders, or 29.6%.",
+    "Returns are not netted off. If refunds were deducted the share would be about 30.1% (C&amp;C refunds 12,279.65 and home delivery refunds 29,810.74, both excl. VAT)."
+  ],
+  "caveats": [
+    "Channel mis-coding corrected: from 2026-01-12 to 2026-02-08 the sales lines of 758 click-and-collect orders (1,473 lines, EUR 43,819.29 net) carry channel_id 2 (Web home delivery) instead of 3 (Click and collect). Counting by channel_id alone would give a share of only 17.3% (60,496.25 of 347,431.30). I classified by fulfilment_type from fact_web_order, which gives 104,315.54 net for click and collect out of 347,431.30 total web net, or 30.02%. The corrected figure agrees with the order-level gross totals in fact_web_order (130,883.27 for click and collect, 304,910.64 for home delivery).",
+    "Before the web-platform migration on 2025-11-03, lines carry channel_code (WB) and no channel_id. This does not affect periods 9 and 10, which fall after the migration.",
+    "The mis-coding looks like a source-system or ETL issue in the channel mapping, and it should be fixed upstream. Any other report that splits web sales by channel_id for 12 Jan to 8 Feb 2026 will understate click and collect.",
+    "The gross-basis share (including VAT) is 30.03%, so the choice of net or gross basis does not change the result."
+  ]
+}
+```

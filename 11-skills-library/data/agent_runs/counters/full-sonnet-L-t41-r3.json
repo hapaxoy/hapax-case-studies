@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t41-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T41",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "cf650af5544c5e9a1bd6ddcf15954ad137bd5371da5dbaef8916fd10ded23c55",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:36",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id, valid_from,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from) AS vn\n  FROM dim_member)\nSELECT join_date, COUNT(*) AS rows_all, COUNT(DISTINCT member_id) AS distinct_members,\n       SUM(CASE WHEN vn=1 THEN 1 ELSE 0 END) AS first_versions,\n       SUM(CASE WHEN home_store_id=900 THEN 1 ELSE 0 END) AS online_rows\nFROM fv WHERE join_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-08'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "join_date | rows_all | distinct_members | first_versions | online_rows\n2026-09-28 | 33 | 33 | 33 | 5\n2026-09-29 | 33 | 33 | 33 | 4\n2026-09-30 | 31 | 31 | 31 | 3\n2026-10-01 | 36 | 36 | 36 | 6\n2026-10-02 | 40 | 40 | 40 | 11\n2026-10-03 | 29 | 29 | 29 | 9\n2026-10-04 | 40 | 40 | 40 | 12\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:45",
+   "statement": "SELECT\n (SELECT COUNT(DISTINCT member_id) FROM dim_member WHERE join_date = DATE '2026-10-03') AS distinct_ids_join_oct3,\n (SELECT COUNT(*) FROM dim_member WHERE join_date = DATE '2026-10-03') AS rows_join_oct3,\n (SELECT COUNT(*) FROM (SELECT member_id FROM dim_member GROUP BY member_id HAVING COUNT(DISTINCT join_date) > 1)) AS ids_with_changing_join_date,\n (SELECT COUNT(*) FROM dim_member WHERE join_date = DATE '2026-10-03' AND valid_from <> join_date) AS oct3_rows_valid_from_ne_join,\n (SELECT COUNT(*) FROM dim_member WHERE join_date = DATE '2026-10-03' AND is_current) AS current_rows,\n (SELECT COUNT(*) FROM (SELECT member_id FROM dim_member GROUP BY member_id, valid_from HAVING COUNT(*)>1)) AS dup_id_validfrom,\n (SELECT COUNT(*) FROM stg_member_updates WHERE join_date = DATE '2026-10-03') AS stg_rows_oct3,\n (SELECT COUNT(*) FROM dim_member m JOIN dim_date d ON d.calendar_date=m.join_date WHERE m.join_date = DATE '2026-10-03' AND d.is_trading_day) AS trading_day_flag\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "distinct_ids_join_oct3 | rows_join_oct3 | ids_with_changing_join_date | oct3_rows_valid_from_ne_join | current_rows | dup_id_validfrom | stg_rows_oct3 | trading_day_flag\n29 | 29 | 0 | 0 | 29 | 0 | 29 | 29\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:37:49",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain member_id",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 29 rows, 1 columns: member_id\n\n== Duplicate keys ==\n  [PASS] Unique at grain (member_id): 29 keys.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  member_id\n  70055960\n  70056348\n  70047633\n  70049788\n  70010402\n  70032718\n  70009784\n  70021262\n  70033184\n  70004508\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

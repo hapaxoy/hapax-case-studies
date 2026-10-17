@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t10-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T10",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "8235175e2788244f1437e01d8302604575f08366418b29c336b024b4c74801d6",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:37",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE store_name ILIKE '%Hyvink%' OR city ILIKE '%Hyvink%' OR store_name ILIKE '%Hyvinge%' ORDER BY store_key\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n12 | 107 | Hyvinkää | Hyvinkää | South | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:39",
+   "statement": "SELECT category, subcategory, count(DISTINCT sku) skus, count(*) versions, min(valid_from), max(valid_to) FROM dim_product WHERE category ILIKE '%clean%' OR subcategory ILIKE '%clean%' GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "category | subcategory | skus | versions | min(valid_from) | max(valid_to)\nCleaning & Household | Cleaning Products | 131 | 131 | 2000-01-01 | 9999-12-31\nCleaning & Household | Laundry & Ironing | 62 | 63 | 2000-01-01 | 9999-12-31\nCleaning & Household | Storage Boxes | 92 | 94 | 2000-01-01 | 9999-12-31\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:40",
+   "statement": "SELECT fiscal_year, fiscal_period, min(calendar_date), max(calendar_date), count(*) FROM dim_date WHERE calendar_date BETWEEN '2026-08-01' AND '2026-10-05' GROUP BY 1,2 ORDER BY 3\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | min(calendar_date) | max(calendar_date) | count_star()\nFY2026/27 | 3 | 2026-08-01 | 2026-08-02 | 2\nFY2026/27 | 4 | 2026-08-03 | 2026-08-30 | 28\nFY2026/27 | 5 | 2026-08-31 | 2026-09-27 | 28\nFY2026/27 | 6 | 2026-09-28 | 2026-10-04 | 7\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:46",
+   "statement": "SELECT count(*) AS lines, count(DISTINCT sales_line_id) AS distinct_lines, count(DISTINCT (receipt_id, line_no)) AS distinct_rl,\n       sum(f.quantity) AS units, sum(CASE WHEN f.staff_purchase_flag THEN f.quantity ELSE 0 END) AS staff_units,\n       sum(CASE WHEN f.quantity<=0 THEN 1 ELSE 0 END) AS nonpos_lines, min(f.sale_date), max(f.sale_date), sum(f.net_amount) AS net,\n       count(DISTINCT f.channel_code) AS chans\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE s.store_id = 107 AND p.subcategory = 'Cleaning Products' AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 5\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | distinct_lines | distinct_rl | units | staff_units | nonpos_lines | min(f.sale_date) | max(f.sale_date) | net | chans\n63 | 63 | 63 | 136 | 4 | 0 | 2026-08-31 | 2026-09-27 | 560.58 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:49",
+   "statement": "SELECT 'returns' AS what, count(*) AS n, sum(r.quantity_returned) AS units, sum(r.refund_net) AS net\nFROM fact_return_line r\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key\nJOIN dim_date d ON d.calendar_date = r.return_date\nWHERE s.store_id = 107 AND p.subcategory = 'Cleaning Products' AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 5\nUNION ALL\nSELECT 'rpt_control_all_products', count(*), sum(units_sold), sum(net_sales_before_returns) FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date WHERE r.store_id=107 AND d.fiscal_year='FY2026/27' AND d.fiscal_period=5\nUNION ALL\nSELECT 'fact_all_products', count(*), sum(f.quantity), sum(f.net_amount) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN dim_date d ON d.calendar_date=f.sale_date WHERE s.store_id=107 AND p.category<>'ZZ Test' AND d.fiscal_year='FY2026/27' AND d.fiscal_period=5\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "what | n | units | net\nreturns | 0 | NULL | NULL\nrpt_control_all_products | 28 | 1626 | 27297.68\nfact_all_products | 978 | 1626 | 27297.68\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:55",
+   "statement": "SELECT cs.store_id, cs.store_name, d.fiscal_year, d.fiscal_period, cp.category, cp.subcategory, SUM(f.quantity) AS units_sold\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nJOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE cs.store_id = 107 AND cp.subcategory = 'Cleaning Products' AND cp.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 5\nGROUP BY ALL\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | fiscal_year | fiscal_period | category | subcategory | units_sold\n107 | Hyvinkää | FY2026/27 | 5 | Cleaning & Household | Cleaning Products | 136\n(1 row)"
+  }
+ ]
+}

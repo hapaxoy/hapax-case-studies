@@ -1,0 +1,85 @@
+{
+ "run_id": "full-sonnet-Lminus-t51-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T51",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "9d46172ceb104374ce25916ddd677e54a3a782299f215bce91f67f298adea7a9",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:11:26",
+   "statement": "SELECT c.*, (SELECT COUNT(*) FROM campaign_holdout h WHERE h.campaign_id=c.campaign_id) AS holdout_rows, (SELECT COUNT(DISTINCT h.member_id) FROM campaign_holdout h WHERE h.campaign_id=c.campaign_id) AS holdout_distinct, (SELECT COUNT(*) FROM fact_campaign_exposure e WHERE e.campaign_id=c.campaign_id) AS exp_rows FROM dim_campaign c ORDER BY start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 23,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | channels | target_group | holdout_pct | mailing_list_size | holdout_size | holdout_rows | holdout_distinct | exp_rows\n1 | Spring Garden Launch 2024 | 2024-05-06 | 2024-05-26 | email+sms | All members with marketing consent at the campaign start | 0.100 | 7918 | 841 | 841 | 841 | 14947\n2 | Midsummer Terrace 2024 | 2024-06-10 | 2024-06-23 | email | Silver and Gold tier members with marketing consent at the campaign start | 0.100 | 2557 | 281 | 281 | 281 | 4812\n3 | Back to School Home Office 2024 | 2024-08-12 | 2024-09-01 | email+push | All members with marketing consent at the campaign start | 0.100 | 9258 | 941 | 941 | 941 | 17318\n4 | Autumn Refresh Paint 2024 | 2024-09-16 | 2024-10-06 | email | All members with marketing consent at the campaign start | 0.100 | 9876 | 1033 | 1033 | 1033 | 18575\n5 | Black Week 2024 | 2024-11-25 | 2024-12-01 | email+sms+push | All members with marketing consent at the campaign start | 0.100 | 18693 | 1928 | 1928 | 1928 | 35191\n6 | Christmas Last Orders 2024 | 2024-12-09 | 2024-12-22 | email+sms | Silver and Gold tier members with marketing consent at the campaign start | 0.100 | 3544 | 359 | 359 | 359 | 6700\n7 | New Year Storage Sale | 2025-01-06 | 2025-01-26 | email | All members with marketing consent at the campaign start | 0.100 | 11160 | 1064 | 1064 | 1064 | 21184\n8 | Sauna and Winter Warmers 2025 | 2025-02-03 | 2025-02-23 | email | Members with marketing consent whose home store is in t"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:11:35",
+   "statement": "WITH params AS (SELECT 15 AS campaign_id),\ncampaign AS (\n    SELECT c.campaign_id, c.campaign_name, c.start_date, c.end_date + 7 AS window_end\n    FROM dim_campaign c JOIN params ON params.campaign_id = c.campaign_id\n),\ntargeted AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    JOIN params ON params.campaign_id = e.campaign_id\n),\nholdout AS (\n    SELECT DISTINCT h.member_id\n    FROM campaign_holdout h\n    JOIN params ON params.campaign_id = h.campaign_id\n),\nmembers AS (\n    SELECT member_id, 'targeted' AS member_group FROM targeted\n    UNION ALL\n    SELECT member_id, 'holdout' FROM holdout\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nmember_sales AS (\n    SELECT m.member_id, SUM(f.net_amount) AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_member m  ON m.member_key = f.member_key\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign.start_date AND campaign.window_end\n    GROUP BY 1\n),\nby_group AS (\n    SELECT mb.member_group, COUNT(*) AS members, AVG(COALESCE(ms.net_sales, 0)) AS mean_net_sales\n    FROM members mb\n    LEFT JOIN member_sales ms ON ms.member_id = mb.member_id\n    GROUP BY 1\n)\nSELECT member_group, members, ROUND(mean_net_sales, 2) AS mean_net_sales_per_member\nFROM by_group\nUNION ALL\nSELECT 'uplift (targeted - holdout)', NULL,\n       ROUND(MAX(CASE WHEN member_group = 'targeted' THEN mean_net_sales END)\n           - MAX(CASE WHEN member_group = 'holdout' THEN mean_net_sales END), 2)\nFROM by_group\nUNION ALL\nSELECT 'check: members in both groups', (SELECT COUNT(*) FROM targeted JOIN holdout USING (member_id)), NULL\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "member_group | members | mean_net_sales_per_member\nholdout | 2747 | 7.94\ntargeted | 23818 | 9.34\nuplift (targeted - holdout) | NULL | 1.41\ncheck: members in both groups | 0 | NULL\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:11:40",
+   "statement": "SELECT sale_date, COUNT(*) AS n, COUNT(DISTINCT sales_line_id) AS dist_lines, COUNT(DISTINCT receipt_id||'-'||line_no) AS dist_rl, COUNT(member_key) AS member_lines, SUM(net_amount) AS net, MIN(etl_loaded_at) AS min_load, MAX(etl_loaded_at) AS max_load\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-11-20' AND DATE '2025-12-09' GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "sale_date | n | dist_lines | dist_rl | member_lines | net | min_load | max_load\n2025-11-20 | 1888 | 1888 | 1888 | 1031 | 47667.90 | 2025-11-21T01:00:00 | 2025-11-21T01:00:00\n2025-11-21 | 2301 | 2301 | 2301 | 1240 | 58624.51 | 2025-11-22T01:00:00 | 2025-11-22T01:00:00\n2025-11-22 | 2399 | 2399 | 2399 | 1234 | 58338.60 | 2025-11-23T01:00:00 | 2025-11-23T01:00:00\n2025-11-23 | 1482 | 1482 | 1482 | 857 | 37902.73 | 2025-11-24T01:00:00 | 2025-11-24T01:00:00\n2025-11-24 | 1679 | 1679 | 1679 | 886 | 37746.51 | 2025-11-25T01:00:00 | 2025-11-25T01:00:00\n2025-11-25 | 1788 | 1788 | 1788 | 1041 | 41143.74 | 2025-11-26T01:00:00 | 2025-11-26T01:00:00\n2025-11-26 | 1765 | 1765 | 1765 | 1030 | 39771.65 | 2025-11-27T01:00:00 | 2025-11-27T01:00:00\n2025-11-27 | 1934 | 1934 | 1934 | 1161 | 44369.09 | 2025-11-28T01:00:00 | 2025-11-28T01:00:00\n2025-11-28 | 3739 | 3739 | 3739 | 2196 | 85973.10 | 2025-11-29T01:00:00 | 2025-11-29T01:00:00\n2025-11-29 | 2788 | 2788 | 2788 | 1618 | 63719.01 | 2025-11-30T01:00:00 | 2025-11-30T01:00:00\n2025-11-30 | 1492 | 1492 | 1492 | 846 | 34251.54 | 2025-12-01T01:00:00 | 2025-12-01T01:00:00\n2025-12-01 | 2403 | 2403 | 2403 | 1391 | 54865.79 | 2025-12-02T01:00:00 | 2025-12-02T01:00:00\n2025-12-02 | 2241 | 2241 | 2241 | 1396 | 51773.92 | 2025-12-03T01:00:00 | 2025-12-03T01:00:00\n2025-12-03 | 2319 | 2319 | 2319 | 1410 | 57027.91 | 2025-12-04T01:00:00 | 2025-12-04T01:00:00\n2025-12-04 | 2401 | 2401 | 2401 | 1430 | 58713.32 | 2025-12-05T01:00:00 | 2025-12-05T01:00:00\n2025-12-05 | "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:11:54",
+   "statement": "SELECT 'exposure rows' AS k, COUNT(*) AS v FROM fact_campaign_exposure WHERE campaign_id=15\nUNION ALL SELECT 'distinct exposure_id', COUNT(DISTINCT exposure_id) FROM fact_campaign_exposure WHERE campaign_id=15\nUNION ALL SELECT 'orphan member_key in exposure', COUNT(*) FROM fact_campaign_exposure e WHERE campaign_id=15 AND NOT EXISTS (SELECT 1 FROM dim_member m WHERE m.member_key=e.member_key)\nUNION ALL SELECT 'distinct member_key', COUNT(DISTINCT member_key) FROM fact_campaign_exposure WHERE campaign_id=15\nUNION ALL SELECT 'delivered false rows', COUNT(*) FROM fact_campaign_exposure WHERE campaign_id=15 AND NOT delivered\nUNION ALL SELECT 'members with only undelivered', COUNT(*) FROM (SELECT m.member_id FROM fact_campaign_exposure e JOIN dim_member m USING(member_key) WHERE campaign_id=15 GROUP BY 1 HAVING SUM(CASE WHEN delivered THEN 1 ELSE 0 END)=0)\nUNION ALL SELECT 'contact before 2025-11-24 (Helsinki)', COUNT(*) FROM fact_campaign_exposure WHERE campaign_id=15 AND CAST(timezone('Europe/Helsinki', contact_ts_utc AT TIME ZONE 'UTC') AS DATE) < DATE '2025-11-24'\nUNION ALL SELECT 'contact after 2025-11-30', COUNT(*) FROM fact_campaign_exposure WHERE campaign_id=15 AND CAST(timezone('Europe/Helsinki', contact_ts_utc AT TIME ZONE 'UTC') AS DATE) > DATE '2025-11-30'\nUNION ALL SELECT 'targeted w/o consent on version', COUNT(DISTINCT m.member_id) FROM fact_campaign_exposure e JOIN dim_member m USING(member_key) WHERE campaign_id=15 AND NOT m.marketing_consent\nUNION ALL SELECT 'targeted joined after 2025-11-30', COUNT(DISTINCT m.member_id) FROM fact_campaign_exposure e JOIN dim_member m USING(member_key) WHERE campaign_id=15 AND m.join_date > DATE '2025-11-24'\nUNION ALL SELECT 'holdout not in dim_member', COUNT(*) FROM campaign_holdout h WHERE campaign_id=15 AND NOT EXISTS (SELECT 1 FROM dim_member m WHERE m.member_id=h.member_id)\nUNION ALL SELECT 'holdout w/o consent now', COUNT(*) FROM campaign_holdout h WHERE campaign_id=15 AND EXISTS (SELECT 1 FROM dim_member m WHERE m.member_id=h.member_id AND m.valid_from<=DATE '2025-11-24' AND m.valid_to>=DATE '2025-11-24' AND NOT m.marketing_consent)\nUNION ALL SELECT 'sales member_key orphans in window', COUNT(*) FROM fact_sales_line f WHERE member_key IS NOT NULL AND sale_date BETWEEN DATE '2025-11-20' AND DATE '2025-12-09' AND NOT EXISTS (SELECT 1 FROM dim_member m WHERE m.member_key=f.member_key)\n",
+   "n": 4,
+   "ok": true,
+   "rows": 13,
+   "output_preview": "k | v\nexposure rows | 50043\ndistinct exposure_id | 50043\norphan member_key in exposure | 0\ndistinct member_key | 23844\ndelivered false rows | 1951\nmembers with only undelivered | 270\ncontact before 2025-11-24 (Helsinki) | 0\ncontact after 2025-11-30 | 0\ntargeted w/o consent on version | 0\ntargeted joined after 2025-11-30 | 0\nholdout not in dim_member | 0\nholdout w/o consent now | 0\nsales member_key orphans in window | 0\n(13 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:12:03",
+   "statement": "SELECT s.store_id = 900 AS is_web_store, f.channel_code, w.status, w.login_state,\n  CASE WHEN f.member_key IS NULL THEN 'nonmember' ELSE 'member' END AS mem,\n  COUNT(*) AS lines, SUM(f.net_amount) AS net,\n  MIN(f.sale_date) AS min_sale, MAX(f.sale_date) AS max_sale,\n  SUM(CASE WHEN w.dispatch_ts_utc IS NULL THEN 1 ELSE 0 END) AS no_dispatch\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nLEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id\nWHERE f.sale_date BETWEEN DATE '2025-11-20' AND DATE '2025-12-09'\n  AND (s.store_id=900 OR f.channel_code='WB' OR w.web_order_id IS NOT NULL)\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "is_web_store | channel_code | status | login_state | mem | lines | net | min_sale | max_sale | no_dispatch\ntrue | NULL | collected | guest | nonmember | 514 | 12527.03 | 2025-11-20 | 2025-12-09 | 0\ntrue | NULL | collected | logged_in | member | 1142 | 30041.70 | 2025-11-20 | 2025-12-09 | 0\ntrue | NULL | delivered | guest | nonmember | 1384 | 35536.51 | 2025-11-20 | 2025-12-09 | 0\ntrue | NULL | delivered | logged_in | member | 3134 | 81587.81 | 2025-11-20 | 2025-12-09 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:12:12",
+   "statement": "WITH elig AS (\n  SELECT DISTINCT member_id FROM dim_member\n  WHERE marketing_consent AND valid_from <= DATE '2025-11-24' AND valid_to >= DATE '2025-11-24' AND join_date <= DATE '2025-11-24'\n),\ntg AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m USING(member_key) WHERE e.campaign_id=15),\nho AS (SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id=15)\nSELECT (SELECT COUNT(*) FROM elig) AS eligible,\n (SELECT COUNT(*) FROM elig WHERE member_id NOT IN (SELECT member_id FROM tg) AND member_id NOT IN (SELECT member_id FROM ho)) AS eligible_in_neither,\n (SELECT COUNT(*) FROM tg WHERE member_id NOT IN (SELECT member_id FROM elig)) AS targeted_not_eligible,\n (SELECT COUNT(*) FROM ho WHERE member_id NOT IN (SELECT member_id FROM elig)) AS holdout_not_eligible,\n (SELECT COUNT(*) FROM tg) AS targeted, (SELECT COUNT(*) FROM ho) AS holdout\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "eligible | eligible_in_neither | targeted_not_eligible | holdout_not_eligible | targeted | holdout\n33080 | 6515 | 0 | 0 | 23818 | 2747\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:12:25",
+   "statement": "WITH web_dispatch AS (\n  SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n  FROM fact_web_order WHERE status IN ('delivered','collected')\n),\nlines AS (\n  SELECT COALESCE(w.dispatch_date, f.sale_date) AS d, s.store_id, f.net_amount\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  LEFT JOIN web_dispatch w ON w.web_order_id=f.receipt_id\n  WHERE s.store_id<>999 AND p.category<>'ZZ Test'\n),\nmine AS (SELECT d, store_id, SUM(net_amount) AS v FROM lines WHERE d BETWEEN DATE '2025-11-24' AND DATE '2025-12-07' GROUP BY 1,2),\nctl AS (SELECT business_date AS d, store_id, SUM(net_sales_before_returns) AS c FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2025-11-24' AND DATE '2025-12-07' AND store_id<>999 GROUP BY 1,2)\nSELECT (SELECT SUM(v) FROM mine) AS mine_total, (SELECT SUM(c) FROM ctl) AS control_total,\n (SELECT COUNT(*) FROM mine FULL JOIN ctl USING(d, store_id) WHERE ABS(COALESCE(v,0)-COALESCE(c,0))>0.01) AS mismatched_store_days\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mine_total | control_total | mismatched_store_days\n683404.54 | 683404.54 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:12:33",
+   "statement": "WITH campaign AS (\n    SELECT campaign_id, campaign_name, start_date, end_date + 7 AS window_end\n    FROM dim_campaign WHERE campaign_id = 15\n),\ntargeted AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    WHERE e.campaign_id = 15\n),\nholdout AS (\n    SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id = 15\n),\nmembers AS (\n    SELECT member_id, 'targeted' AS member_group FROM targeted\n    UNION ALL\n    SELECT member_id, 'holdout' FROM holdout\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nmember_sales AS (\n    SELECT m.member_id, SUM(f.net_amount) AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_member m  ON m.member_key = f.member_key\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign.start_date AND campaign.window_end\n    GROUP BY 1\n),\nby_group AS (\n    SELECT mb.member_group, AVG(COALESCE(ms.net_sales, 0)) AS mean_net_sales\n    FROM members mb LEFT JOIN member_sales ms ON ms.member_id = mb.member_id\n    GROUP BY 1\n)\nSELECT c.campaign_id, c.campaign_name,\n       ROUND(MAX(CASE WHEN member_group = 'targeted' THEN mean_net_sales END), 2) AS avg_spend_per_targeted_member,\n       ROUND(MAX(CASE WHEN member_group = 'holdout' THEN mean_net_sales END), 2) AS avg_spend_per_holdout_member,\n       ROUND(MAX(CASE WHEN member_group = 'targeted' THEN mean_net_sales END)\n           - MAX(CASE WHEN member_group = 'holdout' THEN mean_net_sales END), 2) AS uplift_eur\nFROM by_group CROSS JOIN campaign c\nGROUP BY c.campaign_id, c.campaign_name\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "campaign_id | campaign_name | avg_spend_per_targeted_member | avg_spend_per_holdout_member | uplift_eur\n15 | Black Week 2025 | 9.34 | 7.94 | 1.41\n(1 row)"
+  }
+ ]
+}

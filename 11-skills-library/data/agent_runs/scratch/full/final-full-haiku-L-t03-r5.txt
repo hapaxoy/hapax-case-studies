@@ -1,0 +1,30 @@
+Perfect! The query passes all checks. Now let me format the final response as required:
+
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nstore_data AS (\n    SELECT COUNT(DISTINCT f.receipt_id) AS receipts,\n           SUM(f.net_amount) AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_date d ON d.calendar_date = f.sale_date\n    WHERE s.store_id &lt; 900\n      AND NOT f.staff_purchase_flag\n      AND p.category &lt;&gt; 'ZZ Test'\n      AND d.fiscal_year = 'FY2026/27'\n      AND d.fiscal_week BETWEEN 1 AND 13\n),\nweb_data AS (\n    SELECT COUNT(DISTINCT wd.web_order_id) AS orders,\n           SUM(f.net_amount) AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch wd ON wd.web_order_id = f.receipt_id\n    JOIN dim_date d ON d.calendar_date = wd.dispatch_date\n    WHERE s.store_id = 900\n      AND p.category &lt;&gt; 'ZZ Test'\n      AND d.fiscal_year = 'FY2026/27'\n      AND d.fiscal_week BETWEEN 1 AND 13\n)\nSELECT \n    'FY2026/27' AS fiscal_year,\n    'P01-P03' AS periods,\n    ROUND((sd.net_sales + wd.net_sales) / (sd.receipts + wd.orders), 2) AS atv\nFROM store_data sd\nCROSS JOIN web_data wd",
+  "result": {
+    "columns": ["fiscal_year", "periods", "atv"],
+    "rows": [["FY2026/27", "P01-P03", 56.14]]
+  },
+  "definitions_applied": [
+    "ATV as net sales before returns divided by transaction count (modified from company definition)",
+    "Exclusions: staff purchases, store 999 (training store), test articles (category ZZ Test)",
+    "Web orders included in ATV calculation (deviates from company standard which excludes them)",
+    "Net sales and web orders both aligned to dispatch date in Helsinki time",
+    "Web orders: only delivered or collected orders counted; cancelled and processing orders excluded"
+  ],
+  "assumptions": [
+    "Periods 1 to 3 this year interpreted as FY2026/27 P01-P03 (most recent completed periods per established pattern: REQ-D03, REQ-D06, REQ-D12)",
+    "Web orders should be in it too: interpreted as including web orders in the ATV denominator, overriding the company definition which excludes web orders",
+    "Web revenue and orders both counted by dispatch_date (when delivered or collected), ensuring revenue and transaction counts align to the same period",
+    "Request received 2026-10-05; warehouse loaded through 2026-08-02 (end of P03), so the period is fully complete"
+  ],
+  "caveats": [
+    "This result deviates from the company ATV definition, which excludes web orders. The standard store-only ATV for the same period is €55.52 (€3,719,186.33 ÷ 66,984 receipts).",
+    "Web is included: 13,004 orders contributing €771,530.75 in net sales.",
+    "Timing: web revenue is recognized on dispatch date (Helsinki time), not order date. A small portion of orders placed in P1-P3 may dispatch into P4 or later, and vice versa.",
+    "No data problems detected. Query validated for deprecated objects, house rules, and row count."
+  ]
+}
+```

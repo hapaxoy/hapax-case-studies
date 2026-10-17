@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t49-r5",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T49",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "15592044ec0de691f6adc881705232cc468182b3b38b17ff53accf2ae483cfcc",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:00",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2026/27'\nORDER BY fiscal_period\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2026/27 | 1 | FY2026/27 P01 | 2026-05-04 | 2026-05-31\nFY2026/27 | 2 | FY2026/27 P02 | 2026-06-01 | 2026-06-28\nFY2026/27 | 3 | FY2026/27 P03 | 2026-06-29 | 2026-08-02\nFY2026/27 | 4 | FY2026/27 P04 | 2026-08-03 | 2026-08-30\nFY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27\nFY2026/27 | 6 | FY2026/27 P06 | 2026-09-28 | 2026-11-01\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:08",
+   "statement": "-- Check what store formats exist and their counts\nSELECT format, COUNT(DISTINCT store_key) as store_count\nFROM dim_store\nWHERE is_current = TRUE\nGROUP BY format\nORDER BY format\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | store_count\nLarge | 8\nMedium | 18\nSmall | 13\nTraining | 1\nWeb | 1\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:17",
+   "statement": "-- Calculate average basket value (receipt total) by store format for period 4 FY2026/27\n-- Period 4 is 2026-08-03 to 2026-08-30\nWITH period_sales AS (\n  SELECT \n    f.receipt_id,\n    f.store_key,\n    s.format,\n    SUM(f.net_amount) as receipt_total\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  WHERE f.sale_date >= '2026-08-03' \n    AND f.sale_date <= '2026-08-30'\n  GROUP BY f.receipt_id, f.store_key, s.format\n)\nSELECT \n  format,\n  COUNT(DISTINCT receipt_id) as receipt_count,\n  ROUND(AVG(receipt_total), 2) as avg_basket_value\nFROM period_sales\nGROUP BY format\nORDER BY format\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | receipt_count | avg_basket_value\nLarge | 6607 | 60.6\nMedium | 8779 | 60.15\nSmall | 2641 | 50.67\nTraining | 55 | 34.27\nWeb | 3229 | 64.76\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:22",
+   "statement": "-- Check the stores and their formats more carefully\nSELECT \n  store_key,\n  store_id,\n  store_name,\n  format,\n  is_current,\n  valid_from,\n  valid_to\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY format, store_id\n",
+   "n": 4,
+   "ok": true,
+   "rows": 41,
+   "output_preview": "store_key | store_id | store_name | format | is_current | valid_from | valid_to\n4 | 102 | Helsinki Pitäjänmäki | Large | true | 2025-04-28 | 9999-12-31\n8 | 104 | Vantaa Tammisto | Large | true | 2025-04-28 | 9999-12-31\n13 | 108 | Lahti | Large | true | 2000-01-01 | 9999-12-31\n15 | 110 | Turku Kupittaa | Large | true | 2000-01-01 | 9999-12-31\n21 | 115 | Tampere Hervanta | Large | true | 2000-01-01 | 9999-12-31\n22 | 116 | Tampere Lielahti | Large | true | 2000-01-01 | 9999-12-31\n31 | 125 | Kuopio | Large | true | 2000-01-01 | 9999-12-31\n37 | 131 | Oulu Kaakkuri | Large | true | 2000-01-01 | 9999-12-31\n2 | 101 | Helsinki Vuosaari | Medium | true | 2025-04-28 | 9999-12-31\n6 | 103 | Espoo Lommila | Medium | true | 2025-04-28 | 9999-12-31\n12 | 107 | Hyvinkää | Medium | true | 2000-01-01 | 9999-12-31\n14 | 109 | Hämeenlinna | Medium | true | 2000-01-01 | 9999-12-31\n16 | 111 | Turku Härmälä | Medium | true | 2000-01-01 | 9999-12-31\n20 | 114 | Kouvola | Medium | true | 2025-04-28 | 9999-12-31\n23 | 117 | Tampere Kaleva | Medium | true | 2000-01-01 | 9999-12-31\n24 | 118 | Nokia | Medium | true | 2000-01-01 | 9999-12-31\n25 | 119 | Pori | Medium | true | 2000-01-01 | 9999-12-31\n27 | 121 | Vaasa | Medium | true | 2000-01-01 | 9999-12-31\n28 | 122 | Seinäjoki | Medium | true | 2000-01-01 | 9999-12-31\n30 | 124 | Jyväskylä Palokka | Medium | true | 2000-01-01 | 9999-12-31\n32 | 126 | Joensuu | Medium | true | 2000-01-01 | 9999-12-31\n33 | 127 | Mikkeli | Medium | true | 2000-01-01 | 9999-12-31\n34"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:30",
+   "statement": "-- Spot check: look at a few sample receipts to verify data\nSELECT \n  f.receipt_id,\n  f.store_key,\n  s.store_name,\n  s.format,\n  COUNT(*) as line_count,\n  SUM(f.net_amount) as receipt_total,\n  f.sale_date\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2026-08-03' \n  AND f.sale_date <= '2026-08-30'\n  AND s.format IN ('Large', 'Medium', 'Small')\nGROUP BY f.receipt_id, f.store_key, s.store_name, s.format, f.sale_date\nORDER BY f.receipt_id\nLIMIT 10\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "receipt_id | store_key | store_name | format | line_count | receipt_total | sale_date\n10537394 | 20 | Kouvola | Medium | 2 | 15.96 | 2026-08-03\n10537395 | 28 | Seinäjoki | Medium | 1 | 66.64 | 2026-08-03\n10537396 | 21 | Tampere Hervanta | Large | 2 | 28.18 | 2026-08-03\n10537397 | 44 | Iisalmi | Small | 2 | 35.51 | 2026-08-03\n10537398 | 4 | Helsinki Pitäjänmäki | Large | 2 | 14.63 | 2026-08-03\n10537399 | 22 | Tampere Lielahti | Large | 2 | 57.42 | 2026-08-03\n10537400 | 25 | Pori | Medium | 5 | 123.63 | 2026-08-03\n10537401 | 8 | Vantaa Tammisto | Large | 2 | 126.32 | 2026-08-03\n10537402 | 4 | Helsinki Pitäjänmäki | Large | 1 | 15.30 | 2026-08-03\n10537403 | 10 | Kerava | Small | 2 | 38.70 | 2026-08-03\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:37",
+   "statement": "-- Check web order handling - verify web sales are in fact_sales_line\nSELECT \n  COUNT(DISTINCT f.receipt_id) as web_receipts_in_sales_line,\n  COUNT(DISTINCT o.web_order_id) as web_orders_total\nFROM fact_sales_line f\nLEFT JOIN fact_web_order o ON f.receipt_id = o.web_order_id\nWHERE f.sale_date >= '2026-08-03' \n  AND f.sale_date <= '2026-08-30'\n  AND f.channel_code = 'WB'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "web_receipts_in_sales_line | web_orders_total\n0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:42",
+   "statement": "-- Check what's happening with Web format - look at the actual sales\nSELECT \n  f.channel_code,\n  f.store_key,\n  s.store_name,\n  s.format,\n  COUNT(DISTINCT f.receipt_id) as receipt_count,\n  ROUND(AVG(f.net_amount), 2) as avg_line_value\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2026-08-03' \n  AND f.sale_date <= '2026-08-30'\n  AND s.format = 'Web'\nGROUP BY f.channel_code, f.store_key, s.store_name, s.format\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "channel_code | store_key | store_name | format | receipt_count | avg_line_value\nNULL | 46 | Tuomimetsä web shop | Web | 3229 | 32.37\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:49",
+   "statement": "-- Final query: average basket value by store format, excluding Training\n-- Period 4 of FY2026/27: 2026-08-03 to 2026-08-30\nWITH period_sales AS (\n  SELECT \n    f.receipt_id,\n    f.store_key,\n    s.format,\n    SUM(f.net_amount) as receipt_total\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  WHERE f.sale_date >= '2026-08-03' \n    AND f.sale_date <= '2026-08-30'\n    AND s.format != 'Training'\n  GROUP BY f.receipt_id, f.store_key, s.format\n)\nSELECT \n  format,\n  ROUND(AVG(receipt_total), 2) as avg_basket_value\nFROM period_sales\nGROUP BY format\nORDER BY format\n",
+   "n": 8,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "format | avg_basket_value\nLarge | 60.6\nMedium | 60.15\nSmall | 50.67\nWeb | 64.76\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:56",
+   "statement": "-- Check historical store formats to see if there's a schema mismatch\nSELECT DISTINCT format\nFROM dim_store\nORDER BY format\n",
+   "n": 9,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  }
+ ]
+}

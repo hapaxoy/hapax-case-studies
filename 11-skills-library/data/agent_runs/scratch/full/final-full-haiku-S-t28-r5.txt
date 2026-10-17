@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH period_info AS (\n  SELECT \n    weeks_in_period\n  FROM ref_fiscal_calendar\n  WHERE fiscal_period_label = 'FY2026/27 P05'\n),\nstock_by_category AS (\n  SELECT \n    dp.category,\n    SUM(fs.closing_units) as closing_units\n  FROM fact_stock_week fs\n  JOIN dim_product dp ON fs.product_key = dp.product_key\n  WHERE fs.week_ending_date = '2026-09-27'\n    AND dp.category != 'ZZ Test'\n  GROUP BY dp.category\n),\nsales_by_category AS (\n  SELECT \n    dp.category,\n    SUM(fsl.quantity) as quantity_sold\n  FROM fact_sales_line fsl\n  JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE fsl.sale_date &gt;= '2026-08-31' AND fsl.sale_date &lt;= '2026-09-27'\n    AND dp.category != 'ZZ Test'\n  GROUP BY dp.category\n)\nSELECT \n  COALESCE(s.category, sb.category) as category,\n  ROUND(COALESCE(s.closing_units, 0) * pi.weeks_in_period / COALESCE(sb.quantity_sold, 1)::DECIMAL, 2) as weeks_of_cover\nFROM stock_by_category s\nFULL OUTER JOIN sales_by_category sb ON s.category = sb.category\nCROSS JOIN period_info pi\nORDER BY category;",
+  "result": {
+    "columns": ["category", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 9.96],
+      ["Cleaning &amp; Household", 6.56],
+      ["Electrical", 7.36],
+      ["Furniture", 21.21],
+      ["Garden", 15.9],
+      ["Home Textiles &amp; Decor", 10.01],
+      ["Kitchen &amp; Dining", 11.75],
+      ["Paint &amp; Decorating", 11.59],
+      ["Seasonal", 36.46],
+      ["Tools &amp; Hardware", 6.6]
+    ]
+  },
+  "definitions_applied": [
+    "Weeks of cover: closing stock units divided by weekly consumption rate (period sales / period weeks)",
+    "Last period: final fully loaded fiscal period in ref_fiscal_calendar (FY2026/27 P05)",
+    "Closing stock: unit inventory at week ending 2026-09-27",
+    "Consumption rate: total quantity sold during the 4-week period"
+  ],
+  "assumptions": [
+    "Last period refers to the most recent fully loaded fiscal period (FY2026/27 P05, 2026-08-31 to 2026-09-27)",
+    "Stock snapshot at period end date accurately represents inventory position at period close",
+    "Weekly consumption is calculated as total period sales divided by 4 weeks",
+    "Test category (ZZ Test) excluded as it contains test articles only"
+  ],
+  "caveats": [
+    "ZZ Test category excluded from results (contains test articles)",
+    "Stock data source is fact_stock_week at 2026-09-27; sales data from fact_sales_line during period",
+    "Weeks of cover is a snapshot calculation using period-end stock and period-average weekly consumption",
+    "Categories with zero closing units but sales would show division handling; no such category present"
+  ]
+}
+```

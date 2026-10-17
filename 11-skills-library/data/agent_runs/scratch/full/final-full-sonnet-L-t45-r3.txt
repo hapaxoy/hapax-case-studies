@@ -1,0 +1,29 @@
+```json
+{
+  "sql": "WITH active AS (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_store fs ON fs.store_key = f.store_key WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04' AND p.category <> 'ZZ Test' AND fs.store_id <> 999) SELECT 'Tampere' AS city, COUNT(*) AS active_members FROM active a JOIN dim_member cur ON cur.member_id = a.member_id AND DATE '2026-10-04' BETWEEN cur.valid_from AND cur.valid_to JOIN dim_store s ON s.store_id = cur.home_store_id AND s.is_current WHERE s.city = 'Tampere' AND s.store_id < 900",
+  "result": {
+    "columns": ["city", "active_members"],
+    "rows": [["Tampere", 4441]]
+  },
+  "definitions_applied": [
+    "Active member: at least one purchase in the trailing 52 fiscal weeks, as-of week included, in any channel",
+    "Distinct member_id counted, not member_key (member versions)",
+    "Member version valid on the as-of date (Sunday 4 October 2026)",
+    "Store scope: physical stores only (store_id below 900)",
+    "Store 999 (training store) and category ZZ Test excluded"
+  ],
+  "assumptions": [
+    "There is no customer table or customer definition in the metric dictionary. Only loyalty members can be identified, so I read 'customers' as active loyalty members. Non-member shoppers are anonymous and cannot be counted.",
+    "I read 'in Tampere' as members whose home store is one of the four Tampere stores: Hervanta (115), Lielahti (116), Kaleva (117) and Lamminpää (136). This is the store where the member enrolled or is registered, not the member's home address, which the warehouse does not hold.",
+    "I read 'now' as the last completed fiscal week in the warehouse, ending Sunday 4 October 2026 (the warehouse is loaded through that date). The window is 5 October 2025 to 4 October 2026.",
+    "The count is of members whose home store is in Tampere, whichever channel they bought in. A Tampere member who only buys online is included, and someone from elsewhere who shops in a Tampere store is not."
+  ],
+  "caveats": [
+    "dim_store gives city = Tampere to the web shop (store 900) and the training store (999). These are pseudo-locations, not Tampere stores. I excluded both. Counting by city alone would have added 12,028 online sign-ups with home store 900, of whom 4,698 are active.",
+    "If 'customers' is meant as every enrolled loyalty member, whether or not active, the count is 7,175 (Hervanta 2,788, Lielahti 1,721, Kaleva 1,692, Lamminpää 974). I used the active-member figure because that is the company's only defined customer count. Please say if you want the all-members figure instead.",
+    "Active members by Tampere home store: Hervanta 1,708, Lielahti 1,052, Kaleva 1,034, Lamminpää 647 (total 4,441).",
+    "The definition of 'customer' is not in the metric dictionary. The house rule is to ask in the queue before inventing one, so please confirm this reading is what you wanted.",
+    "Excluding store 999 and ZZ Test articles did not change the result."
+  ]
+}
+```

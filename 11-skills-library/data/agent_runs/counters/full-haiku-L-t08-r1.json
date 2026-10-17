@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-L-t08-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T08",
+ "budget": 30,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "24537abf959d1114b0ab75176529f26e038f5b647ee62b1ffef541b4d07f3926",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:30:00",
+   "statement": "fiscal-calendar/scripts/fiscal.py Q3 FY2025/26 --compare",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: Q3 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P07, FY2025/26 P08, FY2025/26 P09\n  fiscal_weeks                       27-39\n  start_date                         2025-10-27\n  end_date                           2026-01-25\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-01-25\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 27 AND 39)\n  note: Q1 = P1-P3 (weeks 1-13), Q2 = P4-P6, Q3 = P7-P9, Q4 = P10-P12 (CAL-PERIODS).\n\nPrior-year comparator (same fiscal week numbers)\n------------------------------------------------\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P07, FY2024/25 P08, FY2024/25 P09\n  fiscal_weeks                       27-39\n  start_date                         2024-10-28\n  end_date                           2025-01-26\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-01-26\n  aligned_on                         fiscal week number (CAL-COMPARE)\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETW"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:15",
+   "statement": "-- Like-for-like (LFL) net sales growth, total and by region (as-is).\n-- Q3 FY2025/26 (weeks 27-39) vs Q3 FY2024/25\nWITH params AS (\n    SELECT 'FY2025/26' AS ty_year, 'FY2024/25' AS ly_year, 27 AS first_week, 39 AS last_week\n),\nrange_start AS (\n    SELECT MIN(d.calendar_date) AS first_day\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year = params.ty_year AND d.fiscal_week = params.first_week\n),\nweeks AS (\n    SELECT DISTINCT d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n),\nstore_weeks AS (\n    SELECT st.store_id, w.fiscal_year, w.fiscal_week,\n           (st.open_date IS NULL OR st.open_date <= w.fiscal_week_start_date)\n           AND (st.close_date IS NULL OR st.close_date >= w.fiscal_week_end_date)\n           AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                           WHERE c.store_id = st.store_id\n                             AND c.closure_start_date <= w.fiscal_week_end_date\n                             AND c.closure_end_date >= w.fiscal_week_start_date) AS trading\n    FROM dim_store st\n    CROSS JOIN weeks w\n    WHERE st.is_current AND st.store_id < 900\n),\nlfl_store_weeks AS (\n    SELECT ty.store_id, ty.fiscal_week\n    FROM store_weeks ty\n    CROSS JOIN params\n    CROSS JOIN range_start\n    JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = params.ly_year\n    JOIN dim_store st   ON st.store_id = ty.store_id AND st.is_current\n    WHERE ty.fiscal_year = params.ty_year AND ty.trading AND ly.trading\n      AND (st.open_date IS NULL OR st.open_date <= range_start.first_day - 364)\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nlfl_sales AS (\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales, COUNT(DISTINCT n.store_id || '-' || d.fiscal_week) AS store_weeks\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n    GROUP BY GROUPING SETS ((d.fiscal_year), (d.fiscal_year, cs.region))\n)\nSELECT ty.region, ty.net_sales AS this_year, ly.net_sales AS last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct\nFROM lfl_sales ty\nCROSS JOIN params\nJOIN lfl_sales ly ON ly.region IS NOT DISTINCT FROM ty.region AND ly.fiscal_year = params.ly_year\nWHERE ty.fiscal_year = params.ty_year\nORDER BY ty.region NULLS FIRST;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | this_year | last_year | lfl_growth_pct\nNULL | 3223126.99 | 3140011.17 | 2.65\nCapital Region | 527026.01 | 525151.30 | 0.36\nEast | 597583.01 | 588069.69 | 1.62\nNorth | 413618.24 | 387519.62 | 6.73\nSouth | 686946.66 | 686791.06 | 0.02\nWest | 997953.07 | 952479.50 | 4.77\n(6 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:30:28",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 1.2 s.\n\n== Row count ==\n  [PASS] 6 rows, 4 columns: region, this_year, last_year, lfl_growth_pct\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 6 rows) ==\n  region | this_year | last_year | lfl_growth_pct\n   | 3223126.99 | 3140011.17 | 2.65\n  Capital Region | 527026.01 | 525151.30 | 0.36\n  East | 597583.01 | 588069.69 | 1.62\n  North | 413618.24 | 387519.62 | 6.73\n  South | 686946.66 | 686791.06 | 0.02\n  West | 997953.07 | 952479.50 | 4.77\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

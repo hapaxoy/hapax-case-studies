@@ -1,0 +1,42 @@
+```json
+{
+  "sql": "WITH per AS (SELECT fiscal_year, fiscal_period, period_start_date AS d0, period_end_date AS d1 FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 6), lines AS (SELECT p.category, f.net_amount AS net, f.standard_cost AS cost FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key JOIN dim_store s ON s.store_key = f.store_key JOIN per ON f.sale_date BETWEEN per.d0 AND per.d1 WHERE p.category IN ('Garden','Electrical') AND s.store_id &lt;&gt; 999 UNION ALL SELECT p.category, -r.refund_net, -r.standard_cost_returned FROM fact_return_line r JOIN dim_product p ON p.product_key = r.product_key JOIN dim_store s ON s.store_key = r.store_key JOIN per ON r.return_date BETWEEN per.d0 AND per.d1 WHERE p.category IN ('Garden','Electrical') AND s.store_id &lt;&gt; 999) SELECT 'FY2025/26' AS fiscal_year, 6 AS fiscal_period, category, round(sum(net), 2) AS net_sales_eur, round(100 * (sum(net) - sum(cost)) / sum(net), 2) AS gross_margin_pct FROM lines GROUP BY category ORDER BY category",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "net_sales_eur", "gross_margin_pct"],
+    "rows": [
+      ["FY2025/26", 6, "Electrical", 185576.57, 41.63],
+      ["FY2025/26", 6, "Garden", 147932.68, 39.52]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 6 of FY2025/26 is 22 Sep 2025 to 26 Oct 2025 (5 weeks), from ref_fiscal_calendar",
+    "Net sales = line net amount (EUR excluding VAT, after line discounts) minus refunds (refund_net) booked in the period, as the company's daily store sales report does",
+    "Gross margin % = (net sales minus standard cost of units sold, with the standard cost of returned units taken off) divided by net sales, as a percentage",
+    "Cost = the standard cost on each sales and return line, which matches the product's standard unit cost times quantity",
+    "Category taken from the product version in force on the sale date (product_key on the fact line)",
+    "Both channels included: stores and web (home delivery and click-and-collect)",
+    "Staff purchases included, as in the company's daily store sales report",
+    "Training store 999 excluded; it is not a trading store and the company's daily sales report excludes it",
+    "Test articles (category ZZ Test) excluded; they lie outside the two categories asked for, so they do not touch the figures"
+  ],
+  "assumptions": [
+    "Today is 8 Oct 2026, so the current fiscal year is FY2026/27 and 'last year' is FY2025/26. Period 6 of FY2025/26 is the same period as the current, still open FY2026/27 P06.",
+    "'Period 6' means fiscal period 6 of the company's 4-4-5 style calendar, not calendar month 6 (June).",
+    "'Garden' and 'Electrical' mean the categories as they stood at the time of sale. Outdoor Lighting was in Garden then and moved to Electrical on 27 Oct 2025, the day after this period ended.",
+    "Returns are counted in the period in which the refund was booked, whenever the original sale was made, and in the category of the returned product.",
+    "Web sales are counted by sale date, with the web shop (store 900) as the location. All web orders in the period are delivered or collected, with none cancelled.",
+    "Staff purchases are kept in, since the company's report keeps them. Taking them out would change the figures slightly."
+  ],
+  "caveats": [
+    "Excluded the training store (store 999): 21 Garden and 21 Electrical staff-flagged lines, about EUR 615 and EUR 511 of net sales. These are not real trading.",
+    "Excluded 67 test-article lines (category ZZ Test, brand TEST). They fall outside both categories, so the effect on these figures is nil.",
+    "Outdoor Lighting was reclassified from Garden to Electrical on 27 Oct 2025, so current dim_product shows these 65 articles under Electrical. I used the category as at sale date, as the fact tables do. On that basis Outdoor Lighting is EUR 34,119.26 net sales (37.26% margin) inside the Garden figure. If Hanna wants today's category structure, Garden would be about EUR 113,813 net sales at 40.20% margin, and Electrical about EUR 219,696 at roughly 40.95% (the Electrical margin is my own back-calculation, not a query result). The comparison with the current year and any later period should use the same basis.",
+    "rpt_daily_store_sales does not tie to the fact table for the web shop. Daily web figures are off by up to several thousand euros, with Sundays far too low, so I did not use it. Store-level net sales before returns match the fact table exactly.",
+    "Garden and Electrical returns in the period are 295 and 420 lines, with net refunds of EUR 9,990.37 and EUR 9,040.69. They are already netted off the net sales above.",
+    "52 groups of identical lines (same receipt, product, quantity, amount and timestamp) exist in the period. I read them as repeat scans of the same item and did not remove them.",
+    "Margin is at standard cost (revalued each April), not actual purchase cost, so it is a standard margin.",
+    "Net sales are in EUR excluding VAT.",
+    "Period 6 of FY2025/26 is fully loaded. I found no missing days and no duplicate sales lines, and the staging tables hold no rows for the period."
+  ]
+}
+```

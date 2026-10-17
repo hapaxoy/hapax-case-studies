@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH params AS (SELECT 'FY2025/26' AS fiscal_year, 6 AS first_period, 8 AS last_period), web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), web_lines AS (SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN web_dispatch w ON w.web_order_id = f.receipt_id JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, o.fulfilment_type, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_product p ON p.product_key = f.product_key JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 2) AS click_collect_share_pct FROM web_lines l JOIN dim_date d ON d.calendar_date = l.business_date CROSS JOIN params WHERE d.fiscal_year = params.fiscal_year AND d.fiscal_period BETWEEN params.first_period AND params.last_period GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 6, 27.85],
+      ["FY2025/26", 7, 25.43],
+      ["FY2025/26", 8, 27.03]
+    ]
+  },
+  "definitions_applied": [
+    "Click-and-collect share = click-and-collect net sales divided by all web net sales (click-and-collect counted as web)",
+    "Net sales excluding VAT, after returns; returns reduce net sales on their own return date",
+    "Web sales recognised on the Helsinki dispatch date (not the order date)",
+    "Cancelled and processing orders excluded (no dispatch, no sales lines); only delivered and collected orders count",
+    "Web identified by store_id 900; click-and-collect identified by fact_web_order.fulfilment_type (channel_code and channel_id are unusable across the 3 Nov 2025 migration)",
+    "Store 999 and category ZZ Test excluded",
+    "Fiscal periods from dim_date (FY2025/26 P6 = 22 Sep to 26 Oct 2025, P7 = 27 Oct to 23 Nov 2025, P8 = 24 Nov to 21 Dec 2025)",
+    "Timestamps converted from UTC to Europe/Helsinki before taking the date"
+  ],
+  "assumptions": [
+    "'Last year' read as the previous fiscal year, FY2025/26, since the request was received on 9 Oct 2026 in FY2026/27. This follows how earlier accepted requests read 'last year' once a new fiscal year had begun.",
+    "'Periods 6 to 8' read as fiscal periods P6, P7 and P8 of FY2025/26. They are fully loaded (warehouse is loaded through 4 Oct 2026).",
+    "'Share of the web shop's sales' read as share of web net sales (EUR excluding VAT, after returns) per the company click-and-collect definition, not share of orders.",
+    "Web refunds booked to the web shop (store 900) are netted against the fulfilment type of the original order."
+  ],
+  "caveats": [
+    "The period range spans the 3 Nov 2025 web-platform migration (it falls in P7). channel_code is empty after that date and click-and-collect carried no channel_id before it, so I used store 900 for web and fact_web_order.fulfilment_type for click-and-collect. Using channel_code or the legacy views rpt.v_daily_sales / rpt.v_weekly_store_sales would have left out web sales after the migration.",
+    "Web sales were taken on the Helsinki dispatch date. On a web line, sale_date is the order date, and using it would shift sales across period boundaries.",
+    "Control check: my web net sales for P6 to P8 (555,830.97 EUR) match rpt_daily_store_sales for store 900 over 22 Sep to 21 Dec 2025 exactly.",
+    "Some refunds on web orders (3,411 web-order return lines across the whole warehouse, all time) were processed in physical stores and are booked to those stores. Following the company definition they are not netted against web sales, so the web shares do not reflect them. Refunds booked to the web shop are included.",
+    "Cancelled orders (566 placed between mid-September and December 2025, 154 of them click-and-collect) are excluded; they have no sales lines or dispatch date.",
+    "Duplicate (receipt_id, line_no) rows exist in store 116 for 15 to 21 Sep 2025 (418 pairs, same amounts). That is before P6 and in a physical store, so it does not touch this answer, but it will affect store-level figures for that week.",
+    "No corrections to the figures were needed for this request beyond applying the definitions above."
+  ]
+}
+```

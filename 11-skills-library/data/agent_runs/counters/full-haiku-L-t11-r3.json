@@ -1,0 +1,49 @@
+{
+ "run_id": "full-haiku-L-t11-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T11",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "c610120a13cdbc87d4d85bbff076214edc5ff0ef6b8eb6da18d24eeb54ab62f3",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:23:22",
+   "statement": "fiscal-calendar/scripts/fiscal.py P8 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P8 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P08\n  fiscal_weeks                       31-34\n  start_date                         2025-11-24\n  end_date                           2025-12-21\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 31 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:23:22",
+   "statement": "fiscal-calendar/scripts/fiscal.py P8 FY2024/25",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P8 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P08\n  fiscal_weeks                       31-34\n  start_date                         2024-11-25\n  end_date                           2024-12-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2024-12-22\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 31 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:23:34",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nby_category_period AS (\n    SELECT d.fiscal_year, cp.category, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d     ON d.calendar_date = n.business_date\n    JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\n    WHERE cp.category IN ('Garden', 'Electrical')\n      AND ((d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 31 AND 34)\n        OR (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 31 AND 34))\n    GROUP BY d.fiscal_year, cp.category\n)\nSELECT category, fiscal_year, net_sales\nFROM by_category_period\nORDER BY category, fiscal_year DESC;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "category | fiscal_year | net_sales\nElectrical | FY2025/26 | 171210.97\nElectrical | FY2024/25 | 162418.96\nGarden | FY2025/26 | 36813.07\nGarden | FY2024/25 | 36765.02\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:23:41",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.2 s.\n\n== Row count ==\n  [PASS] 4 rows, 3 columns: category, fiscal_year, net_sales\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 4 rows) ==\n  category | fiscal_year | net_sales\n  Electrical | FY2025/26 | 171210.97\n  Electrical | FY2024/25 | 162418.96\n  Garden | FY2025/26 | 36813.07\n  Garden | FY2024/25 | 36765.02\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

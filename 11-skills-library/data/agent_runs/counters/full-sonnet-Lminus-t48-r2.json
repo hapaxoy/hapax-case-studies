@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t48-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T48",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "a4f2bb9c65ce99d5ca805eef6a31833b8667dba98abb48a2cc242b9f62586973",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:00",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period IN (2,3,4)\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2026/27 | 2 | 2026-06-01 | 2026-06-28 | 4 | 5 | 8 | true\nFY2026/27 | 3 | 2026-06-29 | 2026-08-02 | 5 | 9 | 13 | true\nFY2026/27 | 4 | 2026-08-03 | 2026-08-30 | 4 | 14 | 17 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:01",
+   "statement": "SELECT category, count(*) n, count(DISTINCT sku) skus, sum(is_current::int) cur FROM dim_product WHERE category ILIKE '%paint%' OR category ILIKE '%decor%' GROUP BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | n | skus | cur\nHome Textiles & Decor | 375 | 370 | 370\nPaint & Decorating | 388 | 385 | 385\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:05",
+   "statement": "SELECT week_ending_date, count(*) n, count(DISTINCT (store_key, product_key)) dist_keys, count(DISTINCT etl_loaded_at) loads, min(etl_loaded_at) mn, max(etl_loaded_at) mx, sum(closing_value) v\nFROM fact_stock_week WHERE week_ending_date BETWEEN DATE '2026-06-28' AND DATE '2026-08-09' GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "week_ending_date | n | dist_keys | loads | mn | mx | v\n2026-06-28 | 27324 | 27324 | 1 | 2026-06-29T01:00:00 | 2026-06-29T01:00:00 | 2947947.23\n2026-07-05 | 27324 | 27324 | 1 | 2026-07-06T01:00:00 | 2026-07-06T01:00:00 | 2948647.43\n2026-07-12 | 27263 | 27263 | 1 | 2026-07-13T01:00:00 | 2026-07-13T01:00:00 | 2945019.18\n2026-07-19 | 27263 | 27263 | 1 | 2026-07-20T01:00:00 | 2026-07-20T01:00:00 | 2934338.44\n2026-07-26 | 27263 | 27263 | 1 | 2026-07-27T01:00:00 | 2026-07-27T01:00:00 | 2958726.35\n2026-08-02 | 27263 | 27263 | 1 | 2026-08-03T01:00:00 | 2026-08-03T01:00:00 | 2942412.19\n2026-08-09 | 27143 | 27143 | 1 | 2026-08-10T01:00:00 | 2026-08-10T01:00:00 | 2938255.11\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:11",
+   "statement": "WITH r AS (\n  SELECT fs.week_ending_date, s.store_id, p.sku, p.category, s.store_name, fs.closing_units, fs.closing_value, p.standard_unit_cost,\n         fs.product_key, fs.store_key\n  FROM fact_stock_week fs JOIN dim_store s ON s.store_key=fs.store_key JOIN dim_product p ON p.product_key=fs.product_key\n  WHERE fs.week_ending_date BETWEEN DATE '2026-07-05' AND DATE '2026-08-02'\n)\nSELECT week_ending_date, category = 'Paint & Decorating' AS pd,\n  count(*) n, count(DISTINCT (store_id, sku)) dist_nat, count(DISTINCT store_id) stores,\n  min(store_id) mnst, max(store_id) mxst,\n  sum(closing_units) units, sum(closing_value) val,\n  sum(CASE WHEN abs(closing_value - closing_units*standard_unit_cost) > 0.02 THEN 1 ELSE 0 END) mismatch,\n  sum(CASE WHEN closing_units<0 THEN 1 ELSE 0 END) neg\nFROM r WHERE category IN ('Paint & Decorating') OR category='ZZ Test' OR true\nGROUP BY 1,2 ORDER BY 2 DESC,1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "week_ending_date | pd | n | dist_nat | stores | mnst | mxst | units | val | mismatch | neg\n2026-07-05 | true | 2699 | 2699 | 38 | 101 | 139 | 18829 | 341138.89 | 0 | 0\n2026-07-12 | true | 2674 | 2674 | 38 | 101 | 139 | 18891 | 341742.53 | 0 | 0\n2026-07-19 | true | 2674 | 2674 | 38 | 101 | 139 | 18907 | 344245.91 | 0 | 0\n2026-07-26 | true | 2674 | 2674 | 38 | 101 | 139 | 19048 | 349160.39 | 0 | 0\n2026-08-02 | true | 2674 | 2674 | 38 | 101 | 139 | 18910 | 346046.42 | 0 | 0\n2026-07-05 | false | 24625 | 24625 | 38 | 101 | 139 | 201517 | 2607508.54 | 0 | 0\n2026-07-12 | false | 24589 | 24589 | 38 | 101 | 139 | 201277 | 2603276.65 | 0 | 0\n2026-07-19 | false | 24589 | 24589 | 38 | 101 | 139 | 199022 | 2590092.53 | 0 | 0\n2026-07-26 | false | 24589 | 24589 | 38 | 101 | 139 | 199891 | 2609565.96 | 0 | 0\n2026-08-02 | false | 24589 | 24589 | 38 | 101 | 139 | 197059 | 2596365.77 | 0 | 0\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:17",
+   "statement": "SELECT s.store_id, s.store_name, s.is_current, s.close_date, s.valid_from, s.valid_to, count(*) rows_pd, sum(fs.closing_units) u, sum(fs.closing_value) v\nFROM fact_stock_week fs JOIN dim_store s ON s.store_key=fs.store_key JOIN dim_product p ON p.product_key=fs.product_key\nWHERE fs.week_ending_date BETWEEN DATE '2026-07-05' AND DATE '2026-08-02' AND p.category='Paint & Decorating'\n  AND (s.store_id IN (125,129,104,119,136,137) OR s.store_id>=900 OR s.close_date IS NOT NULL OR NOT s.is_current)\nGROUP BY ALL ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "store_id | store_name | is_current | close_date | valid_from | valid_to | rows_pd | u | v\n104 | Vantaa Tammisto | true | NULL | 2025-04-28 | 9999-12-31 | 622 | 4132 | 78344.10\n119 | Pori | true | NULL | 2000-01-01 | 9999-12-31 | 326 | 2672 | 51366.61\n125 | Kuopio | true | NULL | 2000-01-01 | 9999-12-31 | 607 | 4255 | 86205.46\n136 | Tampere Lamminpää | true | NULL | 2024-09-02 | 9999-12-31 | 325 | 2333 | 40483.43\n137 | Lohja | true | NULL | 2024-11-04 | 9999-12-31 | 161 | 1163 | 18986.75\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:24",
+   "statement": "WITH weekly AS (\n  SELECT fs.week_ending_date,\n         SUM(fs.closing_value) FILTER (WHERE cp.category = 'Paint & Decorating') AS asis_value,\n         SUM(fs.closing_value) FILTER (WHERE p.category = 'Paint & Decorating') AS aswas_value,\n         COUNT(*) FILTER (WHERE cp.sku IS NULL) AS no_current_version\n  FROM fact_stock_week fs\n  JOIN dim_store s ON s.store_key = fs.store_key\n  JOIN dim_product p ON p.product_key = fs.product_key\n  LEFT JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE fs.week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n    AND s.store_id < 900 AND p.category <> 'ZZ Test'\n  GROUP BY 1\n)\nSELECT COUNT(*) weeks, MIN(week_ending_date) first_w, MAX(week_ending_date) last_w,\n       ROUND(AVG(asis_value), 2) avg_asis, ROUND(AVG(aswas_value), 2) avg_aswas, SUM(no_current_version) nocur\nFROM weekly\n",
+   "n": 6,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"weeks\"\n\nLINE 14: SELECT COUNT(*) weeks, MIN(week_ending_date) first_w, MAX(week_ending_date...\n                         ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:28",
+   "statement": "WITH weekly AS (\n  SELECT fs.week_ending_date,\n         SUM(fs.closing_value) FILTER (WHERE cp.category = 'Paint & Decorating') AS asis_value,\n         SUM(fs.closing_value) FILTER (WHERE p.category = 'Paint & Decorating') AS aswas_value,\n         COUNT(*) FILTER (WHERE cp.sku IS NULL) AS no_current_version\n  FROM fact_stock_week fs\n  JOIN dim_store s ON s.store_key = fs.store_key\n  JOIN dim_product p ON p.product_key = fs.product_key\n  LEFT JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE fs.week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n    AND s.store_id < 900 AND p.category <> 'ZZ Test'\n  GROUP BY 1\n)\nSELECT COUNT(*) AS n_weeks, MIN(week_ending_date) AS first_w, MAX(week_ending_date) AS last_w,\n       ROUND(AVG(asis_value), 2) AS avg_asis, ROUND(AVG(aswas_value), 2) AS avg_aswas, SUM(no_current_version) AS nocur\nFROM weekly\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n_weeks | first_w | last_w | avg_asis | avg_aswas | nocur\n5 | 2026-07-05 | 2026-08-02 | 344466.83 | 344466.83 | 0\n(1 row)"
+  }
+ ]
+}

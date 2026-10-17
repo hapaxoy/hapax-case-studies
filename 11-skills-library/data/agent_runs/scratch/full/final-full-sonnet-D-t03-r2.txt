@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected') AND dispatch_ts_utc &gt;= TIMESTAMP '2026-05-01' AND dispatch_ts_utc &lt; TIMESTAMP '2026-08-10'), lines AS (SELECT f.receipt_id, f.net_amount, w.dispatch_date AS business_date FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' AND NOT f.staff_purchase_flag UNION ALL SELECT f.receipt_id, f.net_amount, f.sale_date FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' AND NOT f.staff_purchase_flag AND f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02') SELECT 'FY2026/27' AS fiscal_year, ROUND(SUM(net_amount) / COUNT(DISTINCT receipt_id), 2) AS atv FROM lines WHERE business_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'",
+  "result": {
+    "columns": ["fiscal_year", "atv"],
+    "rows": [["FY2026/27", 56.14]]
+  },
+  "definitions_applied": [
+    "ATV = net sales before returns (EUR, excluding VAT) divided by the number of sales receipts",
+    "Staff purchases (staff_purchase_flag) excluded from ATV",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Fiscal calendar: P1 to P3 of FY2026/27 = 4 May 2026 to 2 August 2026 (weeks 1 to 13)",
+    "Store receipts dated by sale_date; web orders dated by Helsinki dispatch date (web sales recognition rule)",
+    "Web identified by store_id 900, not by channel_code; cancelled and processing orders are not web sales",
+    "Receipts counted as distinct receipt_id (equals web_order_id for web)",
+    "No deprecated tables or views used (rpt.v_daily_sales, staging, backups and so on)",
+    "Control total: store-level net sales before returns and receipts agreed exactly with rpt_daily_store_sales for the same days (3,767,921.27 EUR and 68,021 receipts, including staff purchases, which the ATV figure then leaves out)"
+  ],
+  "assumptions": [
+    "'This year' is read as the current fiscal year, FY2026/27, so periods 1 to 3 run from 4 May 2026 to 2 August 2026 (all fully loaded).",
+    "'Whole company' with web included is read as the physical stores (store_id below 900) plus the web shop (store 900) pooled into one ATV: total net sales before returns divided by total receipts. It is not an average of the store ATV and the web ATV.",
+    "Each web order counts as one receipt, so web ATV is net sales before returns per dispatched web order.",
+    "Web orders are dated by dispatch date in Helsinki time, in line with the company's web sales recognition. This brings in 45 orders placed just before 4 May and dispatched inside the window, and leaves out any placed late in the window but dispatched after it. Dating web by order date instead gives 56.17.",
+    "Net amounts exclude VAT and are before returns, as the ATV definition says.",
+    "The request gives a single figure for the three periods together, not a figure per period."
+  ],
+  "caveats": [
+    "Correction to the company default: the company ATV definition is a store-only measure and leaves web orders out. Mika explicitly asked for web orders to be included, so the figure above includes them. This is not the standard ATV.",
+    "For reference, store-only ATV (the standard definition) for the same periods is 55.52 on 66,984 receipts. Web ATV is 59.33 on 13,004 dispatched orders. The combined figure is 56.14 on 79,988 receipts and 4,490,717.08 EUR net sales before returns.",
+    "Filters applied that change totals: store 999 (training store) and ZZ Test articles are excluded. Staff purchases are excluded from ATV, which removes 1,037 store receipts. Store 999 and ZZ Test removed 54 test receipts from store 999, plus 3 web test orders.",
+    "Cancelled web orders (519 placed in the window) and orders still processing are not counted as web sales.",
+    "channel_code is not used, because it is empty for web lines from 3 November 2025.",
+    "No duplicate sales lines or receipts spanning several stores, dates or staff flags were found in the window.",
+    "The warehouse is loaded through 4 October 2026 and P1 to P3 are fully loaded, so the figure is complete. Web returns and store returns do not affect it, because ATV is before returns."
+  ]
+}
+```

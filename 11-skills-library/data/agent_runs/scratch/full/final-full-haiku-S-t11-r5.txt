@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH category_sales AS (\n  SELECT \n    p.category,\n    d.fiscal_year,\n    SUM(f.net_amount) AS sales_before_returns,\n    COALESCE(SUM(r.refund_net), 0) AS returns_net\n  FROM fact_sales_line f\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  JOIN dim_product p ON f.product_key = p.product_key\n  LEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\n  WHERE p.category IN ('Garden', 'Electrical')\n    AND d.fiscal_period = 8\n    AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  GROUP BY p.category, d.fiscal_year\n)\nSELECT \n  category,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END), 2) AS net_sales_fy2024_25,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN sales_before_returns - returns_net ELSE 0 END), 2) AS net_sales_fy2025_26,\n  ROUND(\n    (MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN sales_before_returns - returns_net ELSE 0 END) - \n     MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END)) / \n    MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END) * 100,\n    2\n  ) AS growth_pct\nFROM category_sales\nGROUP BY category\nORDER BY category",
+  "result": {
+    "columns": ["category", "net_sales_fy2024_25", "net_sales_fy2025_26", "growth_pct"],
+    "rows": [
+      ["Electrical", 143318.00, 171977.48, 20.0],
+      ["Garden", 56241.19, 37007.18, -34.2]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: revenue from fact_sales_line minus refunds from fact_return_line, matched by sales_line_id",
+    "Fiscal period 8: defined in ref_fiscal_calendar as the eighth period of each fiscal year",
+    "Product category: primary product dimension from dim_product, one row per article variant",
+    "Growth rate: percentage change calculated as (current_year - prior_year) / prior_year × 100"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2025/26; the year before refers to FY2024/25",
+    "Period 8 spans FY2024/25 P08 (2024-11-25 to 2024-12-22) and FY2025/26 P08 (2025-11-24 to 2025-12-21)",
+    "Growth is measured year-on-year from FY2024/25 P08 to FY2025/26 P08",
+    "One row per category; no store-level or channel-level breakdown requested"
+  ],
+  "caveats": [
+    "Staff purchases are included in net sales (1.04% of Electrical sales, 1.28% of Garden sales in FY2024/25; similar scale in FY2025/26)",
+    "Both store and web channel sales are included in the totals",
+    "Garden category shows significant decline (-34.2%) in period 8; may reflect seasonal demand or supply changes",
+    "Electrical category shows strong growth (+20.0%) year-on-year"
+  ]
+}
+```

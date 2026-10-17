@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t37-r1",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T37",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "bb6b9e3f2942acb7d22c68dd8d18373a76062a0cfc3783ce100802233aa392bf",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:30",
+   "statement": "SELECT 'store' AS k, store_key, store_id, store_name, city, region, format, valid_from, valid_to, is_current, CAST(close_date AS VARCHAR) AS extra FROM dim_store WHERE store_name ILIKE '%Palokka%' OR city ILIKE '%Jyv%'\nUNION ALL\nSELECT 'product', product_key, sku, product_name, category, subcategory, brand, valid_from, valid_to, is_current, CAST(delisted_on AS VARCHAR) FROM dim_product WHERE sku = 100011\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "k | store_key | store_id | store_name | city | region | format | valid_from | valid_to | is_current | extra\nstore | 30 | 124 | Jyväskylä Palokka | Jyväskylä | East | Medium | 2000-01-01 | 9999-12-31 | true | NULL\nproduct | 11 | 100011 | Plants & Flowers Kuusela 570 | Garden | Plants & Flowers | Kuusela | 2000-01-01 | 9999-12-31 | true | NULL\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:33",
+   "statement": "SELECT week_ending_date, store_key, product_key, closing_units, closing_value, receipts_units, adjustment_units, etl_loaded_at\nFROM fact_stock_week\nWHERE store_key = 30 AND product_key = 11 AND week_ending_date >= DATE '2026-09-06'\nORDER BY week_ending_date, etl_loaded_at\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | store_key | product_key | closing_units | closing_value | receipts_units | adjustment_units | etl_loaded_at\n2026-09-06 | 30 | 11 | 16 | 67.84 | 0 | 0 | 2026-09-07T01:00:00\n2026-09-13 | 30 | 11 | 13 | 55.12 | 0 | 0 | 2026-09-14T01:00:00\n2026-09-20 | 30 | 11 | 13 | 55.12 | 0 | 0 | 2026-09-21T01:00:00\n2026-09-27 | 30 | 11 | 11 | 46.64 | 0 | 0 | 2026-09-28T01:00:00\n2026-10-04 | 30 | 11 | 11 | 46.64 | 0 | 0 | 2026-10-05T01:00:00\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:34",
+   "statement": "SELECT MAX(week_ending_date) AS max_week, COUNT(*) AS n, COUNT(DISTINCT (store_key, product_key, week_ending_date)) AS distinct_keys FROM fact_stock_week WHERE week_ending_date >= DATE '2026-09-20'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "max_week | n | distinct_keys\n2026-10-04 | 81429 | 81429\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:40",
+   "statement": "SELECT d.fiscal_week_end_date AS week_end, SUM(f.quantity) AS units_sold, COUNT(*) AS lines\nFROM fact_sales_line f JOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE f.store_key = 30 AND f.product_key = 11 AND f.sale_date >= DATE '2026-09-01'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "week_end | units_sold | lines\n2026-09-06 | 4 | 2\n2026-09-13 | 3 | 1\n2026-09-27 | 2 | 2\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:41",
+   "statement": "WITH w AS (\n  SELECT store_key, product_key, week_ending_date, closing_units,\n         LAG(closing_units) OVER (PARTITION BY store_key, product_key ORDER BY week_ending_date) AS prev_units\n  FROM fact_stock_week WHERE week_ending_date >= DATE '2026-09-13'\n)\nSELECT week_ending_date, COUNT(*) AS n, SUM(CASE WHEN closing_units = prev_units THEN 1 ELSE 0 END) AS unchanged, SUM(closing_units) AS total_units\nFROM w GROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "week_ending_date | n | unchanged | total_units\n2026-09-13 | 27143 | 0 | 212352\n2026-09-20 | 27143 | 19297 | 211748\n2026-09-27 | 27143 | 19224 | 211157\n2026-10-04 | 27143 | 19400 | 210323\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:46",
+   "statement": "SELECT s.store_id, s.store_name, p.sku, p.product_name, fs.week_ending_date, SUM(fs.closing_units) AS closing_units\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key = fs.store_key\nJOIN dim_product p ON p.product_key = fs.product_key\nWHERE s.store_id = 124 AND p.sku = 100011 AND p.category <> 'ZZ Test'\n  AND fs.week_ending_date = DATE '2026-10-04'\nGROUP BY 1, 2, 3, 4, 5\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | sku | product_name | week_ending_date | closing_units\n124 | Jyväskylä Palokka | 100011 | Plants & Flowers Kuusela 570 | 2026-10-04 | 11\n(1 row)"
+  }
+ ]
+}

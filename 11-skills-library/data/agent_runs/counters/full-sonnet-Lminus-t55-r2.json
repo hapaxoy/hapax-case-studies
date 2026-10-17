@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t55-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T55",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "8a953a129ad88caee60a23d8629a8e32baaf5d9164203243ea1f15081c59cba9",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:52",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year IN ('FY2025/26','FY2026/27') AND fiscal_period BETWEEN 8 AND 12 ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | fully_loaded\nFY2025/26 | 8 | 2025-11-24 | 2025-12-21 | 4 | true\nFY2025/26 | 9 | 2025-12-22 | 2026-01-25 | 5 | true\nFY2025/26 | 10 | 2026-01-26 | 2026-02-22 | 4 | true\nFY2025/26 | 11 | 2026-02-23 | 2026-03-22 | 4 | true\nFY2025/26 | 12 | 2026-03-23 | 2026-05-03 | 6 | true\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:58",
+   "statement": "SELECT s.store_id, f.channel_code, COUNT(*) n, COUNT(DISTINCT f.sales_line_id) dist_lines, COUNT(DISTINCT (f.receipt_id, f.line_no)) dist_rl, SUM(CASE WHEN f.member_key IS NULL THEN 0 ELSE 1 END) member_lines, MIN(f.sale_date), MAX(f.sale_date)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE f.sale_date BETWEEN DATE '2025-12-15' AND DATE '2026-03-31' AND (s.store_id>=900)\nGROUP BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_id | channel_code | n | dist_lines | dist_rl | member_lines | min(f.sale_date) | max(f.sale_date)\n999 | NULL | 503 | 503 | 503 | 0 | 2025-12-15 | 2026-03-31\n900 | NULL | 22174 | 22174 | 22174 | 13784 | 2025-12-15 | 2026-03-31\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:03",
+   "statement": "SELECT o.login_state, o.status, (o.member_key IS NOT NULL) AS order_has_member, (f.member_key IS NOT NULL) AS line_has_member, (m.member_key IS NOT NULL) AS member_in_dim, COUNT(DISTINCT o.web_order_id) orders, COUNT(*) lines, SUM(f.net_amount) net\nFROM fact_web_order o\nLEFT JOIN fact_sales_line f ON f.receipt_id=o.web_order_id\nLEFT JOIN dim_member m ON m.member_key=f.member_key\nWHERE CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-12-01' AND DATE '2026-03-31'\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "login_state | status | order_has_member | line_has_member | member_in_dim | orders | lines | net\nguest | cancelled | false | false | false | 192 | 192 | NULL\nguest | collected | false | false | false | 1262 | 2480 | 73075.58\nguest | delivered | false | false | false | 2955 | 5943 | 166104.61\nlogged_in | cancelled | true | false | false | 366 | 366 | NULL\nlogged_in | collected | true | false | false | 193 | 381 | 10946.25\nlogged_in | collected | true | true | true | 2390 | 4728 | 132539.97\nlogged_in | delivered | true | false | false | 462 | 928 | 27035.04\nlogged_in | delivered | true | true | true | 5997 | 12057 | 331154.74\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:10",
+   "statement": "SELECT date_trunc('week', f.sale_date) wk, COUNT(DISTINCT o.web_order_id) logged_orders, COUNT(DISTINCT CASE WHEN f.member_key IS NULL THEN o.web_order_id END) lines_missing_member, (SUM(CASE WHEN o.member_key IN (SELECT member_key FROM dim_member) THEN 0 ELSE 1 END)) order_member_not_in_dim, MIN(f.etl_loaded_at) min_load, MAX(f.etl_loaded_at) max_load\nFROM fact_web_order o JOIN fact_sales_line f ON f.receipt_id=o.web_order_id\nWHERE o.login_state='logged_in' AND o.status<>'cancelled' AND f.sale_date BETWEEN DATE '2025-11-01' AND DATE '2026-04-30'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 27,
+   "output_preview": "wk | logged_orders | lines_missing_member | order_member_not_in_dim | min_load | max_load\n2025-10-27T00:00:00 | 152 | 0 | 0 | 2025-11-02T01:00:00 | 2025-11-03T01:00:00\n2025-11-03T00:00:00 | 549 | 0 | 0 | 2025-11-04T01:00:00 | 2025-11-10T01:00:00\n2025-11-10T00:00:00 | 523 | 0 | 0 | 2025-11-11T01:00:00 | 2025-11-17T01:00:00\n2025-11-17T00:00:00 | 552 | 0 | 0 | 2025-11-18T01:00:00 | 2025-11-24T01:00:00\n2025-11-24T00:00:00 | 837 | 0 | 0 | 2025-11-25T01:00:00 | 2025-12-01T01:00:00\n2025-12-01T00:00:00 | 807 | 0 | 0 | 2025-12-02T01:00:00 | 2025-12-08T01:00:00\n2025-12-08T00:00:00 | 692 | 0 | 0 | 2025-12-09T01:00:00 | 2025-12-15T01:00:00\n2025-12-15T00:00:00 | 989 | 0 | 0 | 2025-12-16T01:00:00 | 2025-12-22T01:00:00\n2025-12-22T00:00:00 | 810 | 0 | 0 | 2025-12-23T01:00:00 | 2025-12-29T01:00:00\n2025-12-29T00:00:00 | 533 | 0 | 0 | 2025-12-30T01:00:00 | 2026-01-05T01:00:00\n2026-01-05T00:00:00 | 420 | 0 | 0 | 2026-01-06T01:00:00 | 2026-01-12T01:00:00\n2026-01-12T00:00:00 | 422 | 0 | 0 | 2026-01-13T01:00:00 | 2026-01-19T01:00:00\n2026-01-19T00:00:00 | 433 | 0 | 0 | 2026-01-20T01:00:00 | 2026-01-26T01:00:00\n2026-01-26T00:00:00 | 435 | 0 | 0 | 2026-01-27T01:00:00 | 2026-02-02T01:00:00\n2026-02-02T00:00:00 | 393 | 0 | 0 | 2026-02-03T01:00:00 | 2026-02-09T01:00:00\n2026-02-09T00:00:00 | 397 | 220 | 0 | 2026-02-10T01:00:00 | 2026-02-16T01:00:00\n2026-02-16T00:00:00 | 362 | 201 | 0 | 2026-02-17T01:00:00 | 2026-02-23T01:00:00\n2026-02-23T00:00:00 | 413 | 234 | 0 | 2026-02-24T01:00:00 | 2026-03-02T01:00:00\n"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:21",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, member_key AS order_member_key,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT w.dispatch_date, f.member_key AS line_member_key, w.order_member_key, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period,\n       COUNT(*) n_lines,\n       SUM(l.net_amount) AS web_net_before_returns,\n       SUM(CASE WHEN l.order_member_key IS NOT NULL THEN l.net_amount ELSE 0 END) AS member_net_fixed,\n       SUM(CASE WHEN l.line_member_key IS NOT NULL THEN l.net_amount ELSE 0 END) AS member_net_linekey,\n       SUM(CASE WHEN l.line_member_key IS NOT NULL AND l.order_member_key IS NULL THEN 1 ELSE 0 END) AS line_member_but_order_null,\n       SUM(CASE WHEN l.order_member_key IS NOT NULL AND l.line_member_key IS NOT NULL AND l.order_member_key<>l.line_member_key THEN 1 ELSE 0 END) AS keys_differ,\n       ROUND(100.0*SUM(CASE WHEN l.order_member_key IS NOT NULL THEN l.net_amount ELSE 0 END)/SUM(l.net_amount),2) AS share_fixed,\n       ROUND(100.0*SUM(CASE WHEN l.line_member_key IS NOT NULL THEN l.net_amount ELSE 0 END)/SUM(l.net_amount),2) AS share_linekey\nFROM lines l JOIN dim_date d ON d.calendar_date = l.dispatch_date\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period BETWEEN 9 AND 11\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | n_lines | web_net_before_returns | member_net_fixed | member_net_linekey | line_member_but_order_null | keys_differ | share_fixed | share_linekey\nFY2025/26 | 9 | 7898 | 219929.50 | 149523.93 | 149523.93 | 0 | 0 | 67.99 | 67.99\nFY2025/26 | 10 | 4749 | 137569.07 | 92893.33 | 71223.59 | 0 | 0 | 67.52 | 51.77\nFY2025/26 | 11 | 5185 | 149798.62 | 99909.32 | 83597.77 | 0 | 0 | 66.7 | 55.81\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:26",
+   "statement": "SELECT COUNT(*) n, COUNT(DISTINCT web_order_id) d, SUM(CASE WHEN status IN ('delivered','collected') AND dispatch_ts_utc IS NULL THEN 1 ELSE 0 END) nodisp, SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END) processing FROM fact_web_order\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | nodisp | processing\n94876 | 94876 | 0 | 296\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:30",
+   "statement": "SELECT d.fiscal_period, SUM(r.net_sales_before_returns) FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date WHERE r.store_id=900 AND d.fiscal_year='FY2025/26' AND d.fiscal_period BETWEEN 9 AND 11 GROUP BY 1 ORDER BY 1\n",
+   "n": 7,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | sum(r.net_sales_before_returns)\n9 | 219929.50\n10 | 137569.07\n11 | 149798.62\n(3 rows)"
+  }
+ ]
+}

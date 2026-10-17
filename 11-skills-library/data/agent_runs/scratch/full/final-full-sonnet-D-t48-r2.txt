@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH weekly AS (SELECT d.fiscal_week, SUM(f.closing_value) AS closing_value FROM fact_stock_week f JOIN dim_date d ON d.calendar_date = f.week_ending_date JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3 AND cp.category = 'Paint &amp; Decorating' AND cp.category &lt;&gt; 'ZZ Test' AND s.store_id &lt; 900 GROUP BY d.fiscal_week) SELECT 'FY2026/27' AS fiscal_year, 3 AS fiscal_period, 'Paint &amp; Decorating' AS category, ROUND(AVG(closing_value), 2) AS average_stock_value_at_cost_eur FROM weekly",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "average_stock_value_at_cost_eur"],
+    "rows": [["FY2026/27", 3, "Paint &amp; Decorating", 344466.83]]
+  },
+  "definitions_applied": [
+    "Closing stock is a weekly snapshot: summed across stores and products within each fiscal week first, then averaged over the weeks of the period (never summed across weeks)",
+    "Value at cost: closing_value, which is stock at standard cost",
+    "Fiscal period 3 of FY2026/27 from dim_date: weeks 9 to 13, 29 June to 2 August 2026 (ref_fiscal_calendar fully_loaded = true)",
+    "Physical stores only for stock by store/chain (store_id below 900, web shop and its central warehouse excluded)",
+    "Store 999 and category ZZ Test excluded",
+    "Category as-is: Paint &amp; Decorating taken from the current product version (dim_product.is_current joined on sku)",
+    "Deprecated tables, views and staging/backup/tmp objects not used"
+  ],
+  "assumptions": [
+    "\"This year\" read as the current fiscal year FY2026/27 (asked 8 October 2026), so period 3 is 29 June to 2 August 2026, which is a complete period",
+    "\"Average stock\" read as the average of the five weekly closing values in the period (not the last week's closing), as the Warehouse rules give both options and the request says average",
+    "\"Whole chain\" read as all physical stores. The central warehouse that supplies web orders is not in the stock table, so it is not included",
+    "Stores shut for a refit during the period (Kuopio, store 125, 15 June to 26 July 2026) are kept in, as stock is still held while a store is closed",
+    "Savonlinna (129), closed 25 January 2026, has no stock rows in the period, so 38 stores are included",
+    "Prior-year comparison not requested, so not given"
+  ],
+  "caveats": [
+    "No data corrections were needed. In the weeks 9 to 13 snapshots there were no duplicate rows at the store x article x week grain (one row per key, one load per row), no negative closing units, and closing_value equalled closing_units x standard_unit_cost on every row.",
+    "Week 9 has 25 more rows than weeks 10 to 13 (2,699 against 2,674). They are three articles (skus 101007, 101166, 101187) delisted on 1 July 2026, held at zero units and zero value in week 9, so they do not change the average.",
+    "The five weekly totals (EUR) are 341,138.89, 341,742.53, 344,245.91, 349,160.39 and 346,046.42, so the average (344,466.83) hides a rise of about 1.4% over the period.",
+    "The control total against rpt_daily_store_sales does not apply, because it holds sales and not stock."
+  ]
+}
+```

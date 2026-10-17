@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), web AS (SELECT business_date, SUM(net_sales) AS ns FROM net_lines WHERE store_id = 900 GROUP BY 1) SELECT d.fiscal_year, d.fiscal_period, ROUND(SUM(w.ns),2) AS web_net_sales FROM dim_date d LEFT JOIN web w ON w.business_date = d.calendar_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_net_sales"],
+    "rows": [
+      ["FY2025/26", 5, 145626.90],
+      ["FY2025/26", 6, 175588.62],
+      ["FY2025/26", 7, 154977.27],
+      ["FY2025/26", 8, 225265.08]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Returns reduce net sales on their own return date, not the original sale date",
+    "Web sales recognised on the Helsinki dispatch date, not the order date",
+    "Web identified by store_id 900, not channel_code (channel_code is empty after the 3 Nov 2025 migration)",
+    "Click-and-collect counted as web",
+    "Cancelled and still-processing orders excluded (no dispatch, no sales lines)",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Fiscal calendar from dim_date / ref_fiscal_calendar (4-4-5 periods, Monday to Sunday weeks)",
+    "Control total check against rpt_daily_store_sales for store 900"
+  ],
+  "assumptions": [
+    "'Last year' was read as FY2025/26. The request was received 9 Oct 2026, which falls in FY2026/27, and earlier accepted requests in FY2026/27 read 'last year' as FY2025/26.",
+    "Periods 5 to 8 are FY2025/26 P05 to P08: P05 25 Aug to 21 Sep 2025 (4 weeks), P06 22 Sep to 26 Oct 2025 (5 weeks), P07 27 Oct to 23 Nov 2025 (4 weeks) and P08 24 Nov to 21 Dec 2025 (4 weeks).",
+    "'Web net sales' was read as the company-definition net sales of the web shop (store 900): net of VAT, after returns booked to the web shop.",
+    "Figures are as-is, in EUR excluding VAT. The web shop is a single store, so the hierarchy does not change the answer.",
+    "One row per period, with no total, because the request asked for a breakdown by period only."
+  ],
+  "caveats": [
+    "The four period totals match rpt_daily_store_sales for store 900 exactly (difference 0.00 in every period), and all 28, 35, 28 and 28 days of the periods are present.",
+    "Periods are shown as dispatch-date sales net of returns on their own return dates. Returns for web sales dispatched late in P08 could still arrive up to 30 days later, but that falls after this period and does not change P08 here. Returns that arrive in a period for items sold in an earlier period reduce the period they arrive in.",
+    "One web test-article line (category ZZ Test) falls in the date range and was excluded, as the company definition requires.",
+    "P06 has 5 weeks against 4 in the other periods, so it is not directly comparable on a per-week basis. P08 includes the Black Friday week (24 to 30 Nov).",
+    "The legacy views rpt.v_daily_sales and rpt.v_weekly_store_sales were not used. They silently drop web sales from 3 Nov 2025, which would understate P07 (partly) and P08.",
+    "Outside the scope of this request: store 116 has 418 duplicated receipt_id and line_no pairs in the week of 15 to 21 Sep 2025 (P05). The duplicates sit on distinct sales_line_id values, and the rows came from 8 separate loads, with about 20.8k EUR of net amount in the affected rows. This does not affect web figures, but any store-level P05 figure for store 116 should be checked."
+  ]
+}
+```

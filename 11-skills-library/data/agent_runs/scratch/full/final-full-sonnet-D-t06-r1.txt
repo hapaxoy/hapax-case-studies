@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH sold AS (SELECT f.sales_line_id, cs.format, f.net_amount AS sold_net FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT 'FY2025/26' AS fiscal_year, 2 AS fiscal_period, sold.format, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(sold.sold_net), 2) AS return_rate_pct FROM sold LEFT JOIN refunds r USING (sales_line_id) GROUP BY ALL ORDER BY 3",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "format", "return_rate_pct"],
+    "rows": [
+      ["FY2025/26", 2, "Large", 4.42],
+      ["FY2025/26", 2, "Medium", 4.53],
+      ["FY2025/26", 2, "Small", 4.28],
+      ["FY2025/26", 2, "Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate = refund_net divided by sold net, as a sale-week cohort: sold lines are chosen by the fiscal period of fact_sales_line.sale_date, and refunds are matched through sales_line_id whenever and wherever they were booked",
+    "Net amounts excluding VAT (net_amount for sold, refund_net for refunds)",
+    "Store 999 (training store) and category ZZ Test left out of sales and returns",
+    "Format as-is, taken from the current dim_store version; format is the same in every version of a store",
+    "Web shop (store 900, format Web) shown as its own line; web identified by store_id, not channel_code",
+    "Fiscal period taken from dim_date (FY2025/26 P2 = 26 May to 22 June 2025, 4 weeks)",
+    "Staff purchases included, as in net sales",
+    "Sources: only canonical tables used (fact_sales_line, fact_return_line, dim_store, dim_product, dim_date). No stg_, bak_, tmp_ or old tables and no rpt.v_ views"
+  ],
+  "assumptions": [
+    "\"Last year\" read as FY2025/26, the fiscal year just completed (the current year is FY2026/27, and past requests in May 2026 and later took FY2025/26). \"Period 2\" is therefore FY2025/26 P2, 26 May to 22 June 2025.",
+    "\"Goods sold in period 2\" read as the sale-week cohort convention for return rates: the denominator is net sales before returns on lines sold in P2, and the numerator is every refund against those lines, including refunds booked after P2.",
+    "Web lines are dated by fact_sales_line.sale_date (the order date), as in the accepted return-rate queries (REQ-D14 to D16), not by the dispatch date used for net sales.",
+    "Format as-is, grouped by the format of the store where the line was sold. A web order returned in a physical store is counted under Web, because the refund follows the sold line.",
+    "Format values in the warehouse are Large, Medium, Small and Web. The schema comment (Hyper, Standard, Express) is out of date."
+  ],
+  "caveats": [
+    "Filter that changed the totals: the training store (999) had 126 sale lines in P2 (net 2,222.21 EUR, of which ZZ Test 71.90 EUR) and one ZZ Test web line (3.82 EUR) was also removed. Store 999 shows as its own format, Training, and has no row in the result.",
+    "The web rate (12.23%) is about three times the store rates (4.28% to 4.53%). Of its 478 returned lines, 102 were processed in physical stores rather than the web shop. They are included in Web because the refund follows the sold line. Booked by processing location instead, the store rates would be higher and the web rate lower.",
+    "The cohort is complete. The latest return against these sales is 23 July 2025 and returns arrive up to about 30 days after the sale (web lag up to 33 days), well before the 4 October 2026 load date.",
+    "Data checks found no problems: no duplicate sales or return lines, no orphan returns, no refund above the sold value, no return before its sale, and refund_net matches the pro-rata sold net on every line. The store-level control total against rpt_daily_store_sales was not run, since it is by return date and this is a sale-date cohort by format.",
+    "Underlying amounts for reference (EUR excl. VAT): Large sold 400,763.11 and refunded 17,707.57; Medium 552,936.25 and 25,030.11; Small 147,668.20 and 6,319.09; Web 183,098.49 and 22,388.29."
+  ]
+}
+```

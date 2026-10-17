@@ -1,0 +1,85 @@
+{
+ "run_id": "full-haiku-S-t11-r5",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T11",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "ac1aa45d53e5370f938a695e6b80531f832eaedf3ecf776fda8c0899cfad7051",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:25:54",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_period = 8\nORDER BY fiscal_year DESC\nLIMIT 5\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21\nFY2024/25 | 8 | FY2024/25 P08 | 2024-11-25 | 2024-12-22\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:25:58",
+   "statement": "SELECT DISTINCT category\nFROM dim_product\nWHERE is_current = TRUE\nORDER BY category\n",
+   "n": 2,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "category\nBathroom & Plumbing\nCleaning & Household\nElectrical\nFurniture\nGarden\nHome Textiles & Decor\nKitchen & Dining\nPaint & Decorating\nSeasonal\nTools & Hardware\nZZ Test\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:03",
+   "statement": "SELECT \n  p.category,\n  d.fiscal_year,\n  SUM(f.net_amount) AS net_sales\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nJOIN dim_product p ON f.product_key = p.product_key\nWHERE p.category IN ('Garden', 'Electrical')\n  AND d.fiscal_period = 8\n  AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\nGROUP BY p.category, d.fiscal_year\nORDER BY p.category, d.fiscal_year\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "category | fiscal_year | net_sales\nElectrical | FY2024/25 | 150317.52\nElectrical | FY2025/26 | 182217.99\nGarden | FY2024/25 | 59501.02\nGarden | FY2025/26 | 39146.83\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:11",
+   "statement": "SELECT \n  p.category,\n  d.fiscal_year,\n  SUM(f.net_amount) AS sales_net,\n  COALESCE(SUM(r.refund_net), 0) AS returns_net,\n  SUM(f.net_amount) - COALESCE(SUM(r.refund_net), 0) AS net_sales_after_returns\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nJOIN dim_product p ON f.product_key = p.product_key\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE p.category IN ('Garden', 'Electrical')\n  AND d.fiscal_period = 8\n  AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\nGROUP BY p.category, d.fiscal_year\nORDER BY p.category, d.fiscal_year\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "category | fiscal_year | sales_net | returns_net | net_sales_after_returns\nElectrical | FY2024/25 | 150317.52 | 6999.52 | 143318.00\nElectrical | FY2025/26 | 182217.99 | 10240.51 | 171977.48\nGarden | FY2024/25 | 59501.02 | 3259.83 | 56241.19\nGarden | FY2025/26 | 39146.83 | 2139.65 | 37007.18\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:17",
+   "statement": "SELECT \n  COUNT(*) as row_count,\n  SUM(net_sales_before_returns) as total_before,\n  SUM(returns_net) as total_returns,\n  SUM(net_sales) as total_after\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2024-11-25' AND '2024-12-22'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "row_count | total_before | total_returns | total_after\n1081 | 1426941.68 | 53752.71 | 1373188.97\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:25",
+   "statement": "SELECT \n  p.category,\n  d.fiscal_year,\n  COUNT(CASE WHEN f.staff_purchase_flag = TRUE THEN 1 END) as staff_purchases,\n  SUM(CASE WHEN f.staff_purchase_flag = TRUE THEN f.net_amount ELSE 0 END) as staff_purchase_amount,\n  COUNT(DISTINCT f.sales_line_id) as total_lines\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nJOIN dim_product p ON f.product_key = p.product_key\nWHERE p.category IN ('Garden', 'Electrical')\n  AND d.fiscal_period = 8\n  AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\nGROUP BY p.category, d.fiscal_year\nORDER BY p.category, d.fiscal_year\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "category | fiscal_year | staff_purchases | staff_purchase_amount | total_lines\nElectrical | FY2024/25 | 86 | 1484.89 | 7005\nElectrical | FY2025/26 | 118 | 2101.38 | 8154\nGarden | FY2024/25 | 31 | 477.49 | 2505\nGarden | FY2025/26 | 30 | 670.28 | 1976\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:34",
+   "statement": "WITH category_sales AS (\n  SELECT \n    p.category,\n    d.fiscal_year,\n    SUM(f.net_amount) AS sales_before_returns,\n    COALESCE(SUM(r.refund_net), 0) AS returns_net\n  FROM fact_sales_line f\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  JOIN dim_product p ON f.product_key = p.product_key\n  LEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\n  WHERE p.category IN ('Garden', 'Electrical')\n    AND d.fiscal_period = 8\n    AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  GROUP BY p.category, d.fiscal_year\n)\nSELECT \n  category,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END), 2) AS net_sales_fy2024_25,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN sales_before_returns - returns_net ELSE 0 END), 2) AS net_sales_fy2025_26,\n  ROUND(\n    (MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN sales_before_returns - returns_net ELSE 0 END) - \n     MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END)) / \n    MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END) * 100,\n    2\n  ) AS growth_pct\nFROM category_sales\nGROUP BY category\nORDER BY category\n",
+   "n": 7,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | net_sales_fy2024_25 | net_sales_fy2025_26 | growth_pct\nElectrical | 143318.00 | 171977.48 | 20.0\nGarden | 56241.19 | 37007.18 | -34.2\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:44",
+   "statement": "WITH category_sales AS (\n  SELECT \n    p.category,\n    d.fiscal_year,\n    SUM(f.net_amount) AS sales_before_returns,\n    COALESCE(SUM(r.refund_net), 0) AS returns_net\n  FROM fact_sales_line f\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  JOIN dim_product p ON f.product_key = p.product_key\n  LEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\n  WHERE p.category IN ('Garden', 'Electrical')\n    AND d.fiscal_period = 8\n    AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  GROUP BY p.category, d.fiscal_year\n)\nSELECT \n  category,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END), 2) AS net_sales_fy2024_25,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN sales_before_returns - returns_net ELSE 0 END), 2) AS net_sales_fy2025_26,\n  ROUND(\n    (MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN sales_before_returns - returns_net ELSE 0 END) - \n     MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END)) / \n    MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN sales_before_returns - returns_net ELSE 0 END) * 100,\n    2\n  ) AS growth_pct\nFROM category_sales\nGROUP BY category\nORDER BY category\n",
+   "n": 8,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | net_sales_fy2024_25 | net_sales_fy2025_26 | growth_pct\nElectrical | 143318.00 | 171977.48 | 20.0\nGarden | 56241.19 | 37007.18 | -34.2\n(2 rows)"
+  }
+ ]
+}

@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-S-t49-r2",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T49",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "aaa118c49d01b3457a1c017e2d0f122c3397766c4b40bc97640203df7e3f6281",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:59",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2026/27' AND fiscal_period = 4\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2026/27 | 4 | FY2026/27 P04 | 2026-08-03 | 2026-08-30\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:47:09",
+   "statement": "SELECT \n    s.format,\n    ROUND(AVG(receipt_total), 2) AS average_basket_value\nFROM (\n    SELECT \n        f.receipt_id,\n        f.store_key,\n        SUM(f.gross_amount) AS receipt_total\n    FROM fact_sales_line f\n    WHERE f.sale_date >= '2026-08-03' \n      AND f.sale_date <= '2026-08-30'\n    GROUP BY f.receipt_id, f.store_key\n) transaction_totals\nJOIN dim_store s ON transaction_totals.store_key = s.store_key\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | average_basket_value\nLarge | 75.98\nMedium | 75.42\nSmall | 63.52\nTraining | 42.99\nWeb | 81.2\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:47:14",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY format\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:47:19",
+   "statement": "SELECT \n    s.format,\n    COUNT(DISTINCT f.receipt_id) AS transactions,\n    ROUND(AVG(receipt_total), 2) AS average_basket_value\nFROM (\n    SELECT \n        f.receipt_id,\n        f.store_key,\n        f.sale_date,\n        SUM(f.gross_amount) AS receipt_total\n    FROM fact_sales_line f\n    WHERE f.sale_date >= '2026-08-03' \n      AND f.sale_date <= '2026-08-30'\n    GROUP BY f.receipt_id, f.store_key, f.sale_date\n) transaction_totals\nJOIN dim_store s ON transaction_totals.store_key = s.store_key\n    AND transaction_totals.sale_date >= s.valid_from\n    AND transaction_totals.sale_date <= s.valid_to\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Referenced table \"f\" not found!\nCandidate tables: \"s\"\n\nLINE 3:     COUNT(DISTINCT f.receipt_id) AS transactions,\n                           ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:47:24",
+   "statement": "SELECT \n    s.format,\n    COUNT(DISTINCT t.receipt_id) AS transactions,\n    ROUND(AVG(t.receipt_total), 2) AS average_basket_value\nFROM (\n    SELECT \n        f.receipt_id,\n        f.store_key,\n        f.sale_date,\n        SUM(f.gross_amount) AS receipt_total\n    FROM fact_sales_line f\n    WHERE f.sale_date >= '2026-08-03' \n      AND f.sale_date <= '2026-08-30'\n    GROUP BY f.receipt_id, f.store_key, f.sale_date\n) t\nJOIN dim_store s ON t.store_key = s.store_key\n    AND t.sale_date >= s.valid_from\n    AND t.sale_date <= s.valid_to\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 5,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | transactions | average_basket_value\nLarge | 6607 | 75.98\nMedium | 8779 | 75.42\nSmall | 2641 | 63.52\nTraining | 55 | 42.99\nWeb | 3229 | 81.2\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:47:30",
+   "statement": "SELECT \n    s.format,\n    COUNT(CASE WHEN t.receipt_total < 0 THEN 1 END) AS negative_transactions,\n    COUNT(CASE WHEN t.receipt_total = 0 THEN 1 END) AS zero_transactions,\n    MIN(t.receipt_total) AS min_receipt_value,\n    MAX(t.receipt_total) AS max_receipt_value\nFROM (\n    SELECT \n        f.receipt_id,\n        f.store_key,\n        f.sale_date,\n        SUM(f.gross_amount) AS receipt_total\n    FROM fact_sales_line f\n    WHERE f.sale_date >= '2026-08-03' \n      AND f.sale_date <= '2026-08-30'\n    GROUP BY f.receipt_id, f.store_key, f.sale_date\n) t\nJOIN dim_store s ON t.store_key = s.store_key\n    AND t.sale_date >= s.valid_from\n    AND t.sale_date <= s.valid_to\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | negative_transactions | zero_transactions | min_receipt_value | max_receipt_value\nLarge | 0 | 0 | 1.79 | 713.68\nMedium | 0 | 0 | 1.71 | 709.07\nSmall | 0 | 0 | 1.12 | 540.27\nTraining | 0 | 0 | 2.20 | 305.22\nWeb | 0 | 0 | 1.45 | 776.12\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:47:39",
+   "statement": "SELECT \n    s.format,\n    ROUND(AVG(t.receipt_total), 2) AS average_basket_value\nFROM (\n    SELECT \n        f.receipt_id,\n        f.store_key,\n        f.sale_date,\n        SUM(f.gross_amount) AS receipt_total\n    FROM fact_sales_line f\n    WHERE f.sale_date >= '2026-08-03' \n      AND f.sale_date <= '2026-08-30'\n    GROUP BY f.receipt_id, f.store_key, f.sale_date\n) t\nJOIN dim_store s ON t.store_key = s.store_key\n    AND t.sale_date >= s.valid_from\n    AND t.sale_date <= s.valid_to\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | average_basket_value\nLarge | 75.98\nMedium | 75.42\nSmall | 63.52\nTraining | 42.99\nWeb | 81.2\n(5 rows)"
+  }
+ ]
+}

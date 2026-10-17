@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "WITH cur AS (SELECT * FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=4), prev AS (SELECT * FROM ref_fiscal_calendar WHERE fiscal_year='FY2025/26' AND fiscal_period=4), lfl_stores AS (SELECT DISTINCT st.store_id FROM dim_store st, cur, prev WHERE st.is_current AND st.store_id &lt; 900 AND (st.open_date IS NULL OR st.open_date &lt; prev.period_start_date) AND (st.close_date IS NULL OR st.close_date &gt; cur.period_end_date) AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id = st.store_id AND ((c.closure_start_date &lt;= cur.period_end_date AND c.closure_end_date &gt;= cur.period_start_date) OR (c.closure_start_date &lt;= prev.period_end_date AND c.closure_end_date &gt;= prev.period_start_date)))), sales AS (SELECT CASE WHEN f.sale_date BETWEEN cur.period_start_date AND cur.period_end_date THEN 'cur' ELSE 'prev' END AS p, sum(f.net_amount) AS v FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key, cur, prev WHERE s.store_id IN (SELECT store_id FROM lfl_stores) AND (f.sale_date BETWEEN cur.period_start_date AND cur.period_end_date OR f.sale_date BETWEEN prev.period_start_date AND prev.period_end_date) GROUP BY 1), rets AS (SELECT CASE WHEN r.return_date BETWEEN cur.period_start_date AND cur.period_end_date THEN 'cur' ELSE 'prev' END AS p, sum(r.refund_net) AS v FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key, cur, prev WHERE s.store_id IN (SELECT store_id FROM lfl_stores) AND (r.return_date BETWEEN cur.period_start_date AND cur.period_end_date OR r.return_date BETWEEN prev.period_start_date AND prev.period_end_date) GROUP BY 1) SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, round(100.0 * ((sc.v - rc.v) / (sp.v - rp.v) - 1), 2) AS lfl_net_sales_growth_pct FROM sales sc JOIN sales sp ON sc.p='cur' AND sp.p='prev' JOIN rets rc ON rc.p='cur' JOIN rets rp ON rp.p='prev'",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "lfl_net_sales_growth_pct"],
+    "rows": [["FY2026/27", 4, -0.03]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2026/27 P04 (3 Aug to 30 Aug 2026, fiscal weeks 14-17) compared with FY2025/26 P04 (28 Jul to 24 Aug 2025, fiscal weeks 14-17), both 4 weeks and 28 trading days",
+    "Net sales: net_amount of sales lines (EUR excluding VAT, after line discounts) minus refund_net of returns, with returns counted on the return date, as in rpt_daily_store_sales",
+    "Physical stores only (store_id below 900): web shop (900) and training store (999) excluded",
+    "Web orders, home delivery and click-and-collect, excluded. Web channel is identified by channel_id 2 and 3 in FY2026/27 (channel_code is NULL there) and by channel_code WB in FY2025/26",
+    "Like-for-like store set: store open throughout both periods, not closed or closing, and with no refit closure overlapping either period",
+    "Stores identified by store_id (stable across versions), not store_key"
+  ],
+  "assumptions": [
+    "'Period 4 this year' read as fiscal period 4 of the current fiscal year FY2026/27 (the request is dated 2026-10-07, in FY2026/27 P06). P04 is fully loaded.",
+    "Compared with the same fiscal period of the prior year, aligned by fiscal week (Monday to Sunday), not by calendar dates",
+    "Like-for-like growth read as store like-for-like net sales growth excluding web",
+    "Stores 136 Tampere Lamminpää (opened 2 Sep 2024) and 137 Lohja (opened 4 Nov 2024) are included, because both traded in full throughout the comparison period of Jul-Aug 2025. The warehouse states no minimum trading age, so this is my reading.",
+    "Store 125 Kuopio is included. Its refit (15 Jun to 26 Jul 2026) ended before P04 began, and it traded all 28 days in both periods.",
+    "Staff purchases are included in net sales, in line with rpt_daily_store_sales, which reconciles exactly to the fact tables"
+  ],
+  "caveats": [
+    "Store 129 Savonlinna is excluded: it closed on 2026-01-25 (it has no sales in FY2026/27 P04, but it traded in P04 last year). Including it would give about -0.96%.",
+    "The tmp_lfl_store_list_2024 and tmp_lfl_store_list_2025 tables were not used. They are undocumented temporary lists, and the 2025 one still contains the closed store 129 and omits 136 and 137.",
+    "The ref_store_closure refits of stores 104 (2024), 119 (Sep-Oct 2025) and 125 (Jun-Jul 2026) do not overlap either P04 window, so no store was dropped for refit.",
+    "The result is sensitive to the like-for-like rule. If stores 136 and 137 are excluded as too new, growth is -0.23%. If store 125 is excluded for the refit that ended just before the period, it is -0.19%. If both are excluded, it is -0.41%. All are small declines, so the sign is not firmly established.",
+    "Net sales before returns would give +0.01% on the same 38 stores. Returns in the like-for-like stores were higher in absolute terms this year.",
+    "Several individual stores moved a lot (for example 127 Mikkeli about -24%, 109 Hämeenlinna about -16%, 131 Oulu Kaakkuri about +16%). I did not investigate the causes. They net out in the total.",
+    "The channel migration changed how channels are coded: FY2026/27 has NULL channel_code and uses channel_id. A filter on channel_code='ST' would drop all of this year's store sales and produce a large false decline. I used store_id and channel_id instead.",
+    "The warehouse has no written like-for-like definition, so the store eligibility rule above is my own inference from the closure, opening and closing data.",
+    "No duplicate sales or return lines, VAT inconsistencies or missing trading days were found in either period. Result based on 38 stores: net sales of 1,010,478.52 EUR in FY2026/27 P04 against 1,010,743.32 EUR in FY2025/26 P04."
+  ]
+}
+```

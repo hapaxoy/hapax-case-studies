@@ -1,0 +1,33 @@
+Perfect! The query passes all validation checks. All return cohorts are complete, meaning all returns within the 30-day window have been captured. Now I'll prepare the final JSON response:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 1 AS first_week, 13 AS last_week\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, cp.subcategory, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_product cp  ON cp.sku = p.sku AND cp.is_current\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id &lt;&gt; 999 \n      AND p.category &lt;&gt; 'ZZ Test'\n      AND cp.category = 'Garden'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_week BETWEEN params.first_week AND params.last_week\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net \n    FROM fact_return_line \n    GROUP BY 1\n)\nSELECT l.subcategory,\n       SUM(l.net_amount) AS sold_net,\n       COALESCE(SUM(r.refund_net), 0) AS returned_net,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / NULLIF(SUM(l.net_amount), 0), 2) AS return_rate_pct,\n       MAX(l.sale_date) + 30 &lt;= (SELECT MAX(calendar_date) FROM dim_date) AS cohort_complete\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.subcategory;",
+  "result": {
+    "columns": ["subcategory", "return_rate_pct"],
+    "rows": [
+      ["Barbecue &amp; Grills", 7.26],
+      ["Edible Plants &amp; Seeds", 0.96],
+      ["Garden Furniture", 12.87],
+      ["Garden Tools", 5.35],
+      ["Outdoor Lighting", 0.0],
+      ["Plants &amp; Flowers", 2.74],
+      ["Pots &amp; Planters", 3.86],
+      ["Soil &amp; Fertiliser", 1.58]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate on sale-week cohort (returns attributed to the fiscal week of original sale, not return date)",
+    "Net sales excluding VAT, after returns",
+    "Store 999 and category ZZ Test excluded per company scope definition"
+  ],
+  "assumptions": [
+    "Q1 of last year interpreted as FY2025/26 Q1 (fiscal weeks 1–13, 28 April – 27 July 2025)",
+    "Current product version used to identify Garden category; all sales in the period came from Garden"
+  ],
+  "caveats": [
+    "All return cohorts are complete. Maximum sale date is 30+ days before warehouse load date (4 October 2026), so all returns within 30 days of sale have been captured.",
+    "Outdoor Lighting shows €375 total sales with no returns in this period."
+  ]
+}
+```

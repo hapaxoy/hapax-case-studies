@@ -1,0 +1,25 @@
+```json
+{
+  "sql": "SELECT COUNT(DISTINCT web_order_id) AS web_orders_placed FROM fact_web_order WHERE CAST(order_ts_utc AS DATE) = DATE '2025-11-28'",
+  "result": {
+    "columns": ["web_orders_placed"],
+    "rows": [[377]]
+  },
+  "definitions_applied": [
+    "Web order = one row in fact_web_order, one per web_order_id",
+    "Order date = UTC calendar day of order_ts_utc, as the carrier's report is in UTC",
+    "Orders placed = every order placed, whatever its later status (cancelled included)"
+  ],
+  "assumptions": [
+    "Read 'web orders placed' as all orders placed on the day, so the 20 orders that were later cancelled are counted, because they were placed",
+    "Read 'Black Friday 2025' as 28 November 2025, as the request states",
+    "Counted orders in fact_web_order rather than from fact_sales_line. The warehouse switched its channel coding on 3 Nov 2025 (channel_code ST/WB became channel_id 1/2/3), so web lines in fact_sales_line can no longer be picked out by channel_code = 'WB' for that date"
+  ],
+  "caveats": [
+    "Without the 20 cancelled orders (5 guest home delivery, 4 logged-in click-and-collect, 11 logged-in home delivery) the count is 357. Cancelled orders have no sales lines and no dispatch time.",
+    "The count is by UTC day, not Finnish local time. Finland is 2 hours ahead, so a local-day count would differ: orders placed 00:00 to 01:59 UTC on 28 Nov fall on the same local day, while orders after 22:00 UTC on 28 Nov fall on 29 Nov locally.",
+    "Checked for double counting: the 377 order IDs are all distinct. The 255 rows in stg_web_order_load are all from October 2026 and are not in this day. Four pairs of orders share an order timestamp to the second, but they are different customers, amounts and order IDs, so I counted them as separate orders.",
+    "All 357 non-cancelled orders on the day have sales lines, and each order's line_count matches its lines. No problem found in the data for this day, so no correction was needed."
+  ]
+}
+```

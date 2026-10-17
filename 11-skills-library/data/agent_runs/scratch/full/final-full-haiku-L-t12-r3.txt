@@ -1,0 +1,39 @@
+Perfect! The query validation passed. Now let me prepare the final answer. I'll remove the working columns and format the result according to the specification:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT '2026-02-23'::DATE AS start_date, '2026-03-22'::DATE AS end_date\n),\nweekly AS (\n    SELECT fs.week_ending_date, cp.category,\n           SUM(fs.closing_units) AS closing_units, SUM(fs.closing_value) AS closing_value\n    FROM fact_stock_week fs\n    JOIN dim_store s    ON s.store_key = fs.store_key\n    JOIN dim_store cs   ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p  ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date BETWEEN params.start_date AND params.end_date\n      AND cs.region = 'West'\n      AND cs.store_id &lt; 900 \n      AND cp.category &lt;&gt; 'ZZ Test'\n    GROUP BY 1, 2\n)\nSELECT category,\n       ROUND(AVG(closing_value), 2) AS avg_closing_value_eur\nFROM weekly\nGROUP BY 1\nORDER BY 1;",
+  "result": {
+    "columns": ["category", "avg_closing_value_eur"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 94390.92],
+      ["Cleaning &amp; Household", 30134.45],
+      ["Electrical", 85769.79],
+      ["Furniture", 174781.98],
+      ["Garden", 197181.16],
+      ["Home Textiles &amp; Decor", 54622.80],
+      ["Kitchen &amp; Dining", 70772.63],
+      ["Paint &amp; Decorating", 100598.68],
+      ["Seasonal", 81396.52],
+      ["Tools &amp; Hardware", 127286.39]
+    ]
+  },
+  "definitions_applied": [
+    "Stock semi-additivity: add across stores and products, never across weeks",
+    "Stock snapshot at week-ending Sunday (fiscal week)",
+    "Physical stores only (store_id &lt; 900)",
+    "Exclude ZZ Test category products",
+    "Current dimensions: as-is store region and product category"
+  ],
+  "assumptions": [
+    "Period 11 last year = FY2025/26 P11 (fiscal weeks 44–47, 2026-02-23 to 2026-03-22)",
+    "West region = current West region (as-is reporting, after April 2025 reorganisation)",
+    "Average stock value = average closing_value across the 4 weeks in the period, summed by store and week then averaged by category"
+  ],
+  "caveats": [
+    "Stock is counted only on week-ending Sundays; intermediate-day values are not available",
+    "This covers only articles stocked by physical stores in the West region; web orders are picked from a central warehouse not included here",
+    "All 10 categories with stock in the West region in this period are shown; no categories had zero stock"
+  ]
+}
+```

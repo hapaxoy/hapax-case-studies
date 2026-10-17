@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH weekly AS (SELECT fs.week_ending_date, SUM(fs.closing_value) AS closing_value FROM fact_stock_week fs JOIN dim_store s ON s.store_key = fs.store_key JOIN dim_product p ON p.product_key = fs.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = fs.week_ending_date WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3 AND s.store_id < 900 AND cp.category = 'Paint & Decorating' GROUP BY 1) SELECT 'FY2026/27' AS fiscal_year, 3 AS fiscal_period, 'Paint & Decorating' AS category, ROUND(AVG(closing_value), 2) AS average_closing_stock_value_at_cost FROM weekly",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "average_closing_stock_value_at_cost"],
+    "rows": [["FY2026/27", 3, "Paint & Decorating", 344466.83]]
+  },
+  "definitions_applied": [
+    "Closing stock is a weekly snapshot (week-ending Sunday), valued at standard cost (closing_value)",
+    "Semi-additive stock: sum across stores and products within each week first, then average across weeks, never sum across weeks",
+    "Fiscal calendar: FY2026/27 period 3 is weeks 9 to 13 (29 June to 2 August 2026), five week-ending Sundays (5, 12, 19, 26 July and 2 August 2026)",
+    "Store scope: physical stores only (store_id below 900); the web shop (900) and training store (999) are excluded, and web has no stock in this table anyway",
+    "Test articles (category ZZ Test) excluded; none fall in Paint & Decorating",
+    "As-is product category: the current version of each article (dim_product on sku and is_current) decides whether it is Paint & Decorating",
+    "Only ranged articles are in fact_stock_week, so the figure covers the stock the stores actually carry"
+  ],
+  "assumptions": [
+    "'Average stock' is read as the average of the five weekly closing stock values in the period, not the last week's closing",
+    "'Period 3 this year' is read as FY2026/27 P3, the current fiscal year as of the request date of 8 October 2026. It is complete and fully loaded",
+    "'Value at cost' is read as the warehouse's closing_value, which is stock at standard cost",
+    "'Whole chain' is read as all 38 physical stores that carry stock, with the web shop excluded because it holds no stock here",
+    "Paint & Decorating is read as the category of that name, not the separate category Home Textiles & Decor"
+  ],
+  "caveats": [
+    "No corrections were needed. The five weeks of Paint & Decorating stock had no duplicate store, article and week rows, no negative or null values, and closing_value matched units times standard unit cost exactly",
+    "The category was the same on the sale-date version and the current version of every article, so as-is and as-was give the same answer",
+    "The weekly chain totals were 341,138.89; 341,742.53; 344,245.91; 349,160.39; and 346,046.42 EUR. The average is a mean of these five",
+    "The range is 358 to 361 articles across 38 stores. Article count dropped from 361 to 358 after the first week of the period (2,699 store-article rows to 2,674) as ranging changed, so the figure covers whatever was ranged each week",
+    "The figure is stock at standard cost, which is revalued each April, so it is not a retail value and not a purchase-price value, and it excludes VAT"
+  ]
+}
+```

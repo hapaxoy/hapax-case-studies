@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH per AS (SELECT fiscal_year, period_start_date AS s, period_end_date AS e FROM ref_fiscal_calendar WHERE fiscal_period = 8 AND fiscal_year IN ('FY2024/25', 'FY2025/26')), cur AS (SELECT p.product_key, c.category FROM dim_product p JOIN (SELECT sku, category FROM dim_product WHERE is_current) c ON c.sku = p.sku WHERE c.category IN ('Garden', 'Electrical')), sales AS (SELECT per.fiscal_year, cur.category, sum(f.net_amount) AS sales_net FROM fact_sales_line f JOIN per ON f.sale_date BETWEEN per.s AND per.e JOIN cur ON cur.product_key = f.product_key LEFT JOIN fact_web_order o ON o.web_order_id = f.receipt_id AND f.channel_code IS DISTINCT FROM 'ST' WHERE coalesce(o.status, 'ok') &lt;&gt; 'cancelled' GROUP BY 1, 2), rets AS (SELECT per.fiscal_year, cur.category, sum(r.refund_net) AS refunds_net FROM fact_return_line r JOIN per ON r.return_date BETWEEN per.s AND per.e JOIN cur ON cur.product_key = r.product_key GROUP BY 1, 2), net AS (SELECT s.fiscal_year, s.category, s.sales_net - coalesce(t.refunds_net, 0) AS net_sales FROM sales s LEFT JOIN rets t ON t.fiscal_year = s.fiscal_year AND t.category = s.category) SELECT n.category, 'FY2025/26' AS fiscal_year, 8 AS fiscal_period, round(n.net_sales, 2) AS net_sales_last_year, round(p.net_sales, 2) AS net_sales_year_before, round(100.0 * (n.net_sales - p.net_sales) / p.net_sales, 1) AS growth_pct FROM net n JOIN net p ON p.category = n.category AND p.fiscal_year = 'FY2024/25' WHERE n.fiscal_year = 'FY2025/26' ORDER BY n.category",
+  "result": {
+    "columns": ["category", "fiscal_year", "fiscal_period", "net_sales_last_year", "net_sales_year_before", "growth_pct"],
+    "rows": [
+      ["Electrical", "FY2025/26", 8, 171626.77, 162645.09, 5.5],
+      ["Garden", "FY2025/26", 8, 36696.93, 37134.56, -1.2]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal period 8 taken from ref_fiscal_calendar: FY2025/26 P08 is 2025-11-24 to 2025-12-21, and FY2024/25 P08 is 2024-11-25 to 2024-12-22. Both are 4 weeks and fully loaded.",
+    "Net sales = line net_amount (EUR excluding VAT, after line discounts) minus refund_net on returns booked in the period, as in rpt_daily_store_sales. Returns count in the period they were refunded, not the period of the original sale.",
+    "All channels included: stores, web home delivery and click and collect. The channel field changed at the web-platform migration (channel_code on FY2024/25 lines, channel_id on FY2025/26 lines), so I did not filter on channel.",
+    "Staff purchases are included. The company's own daily sales report matches the fact table with staff purchases included.",
+    "Web lines on cancelled orders would be excluded. None of the Garden or Electrical web lines in these two periods turned out to be cancelled.",
+    "Category taken from the current version of each SKU in dim_product (is_current), not the version at the sale date, so both years use the same product hierarchy."
+  ],
+  "assumptions": [
+    "'Last year' means FY2025/26 and 'the year before' means FY2024/25. The request is dated 2026-10-05, which falls in FY2026/27.",
+    "'Period 8' means fiscal period 8 of the company fiscal calendar, not calendar month 8.",
+    "'Garden and Electrical' means the two product categories in dim_product, shown as two separate rows with no combined total.",
+    "Growth is year on year in percent: (FY2025/26 / FY2024/25 - 1) x 100, on EUR net sales excluding VAT.",
+    "Product keys were mapped to categories by SKU, so returns follow the same current-category mapping as sales."
+  ],
+  "caveats": [
+    "Correction for a category reclassification: Outdoor Lighting (about 60 SKUs) was recorded under Garden until about 2025-10-27 and under Electrical afterwards. As recorded, FY2024/25 P08 shows it in Garden and FY2025/26 P08 in Electrical, which would overstate Electrical growth and understate Garden's. I restated both years with Outdoor Lighting in Electrical, its current home. As recorded, Garden P08 sales were about 2,128 + 346 lines in FY2024/25 against 1,946 in FY2025/26, a much bigger fall in Garden than the like-for-like -1.2% above.",
+    "If Outdoor Lighting were left in Garden for both years, the figures would differ. This restatement is the main driver of the numbers, so Commercial should confirm Electrical is the right home for Outdoor Lighting.",
+    "Staff purchases are included (about 1% of these categories' sales). Excluding them would lower both years slightly, and I did not compute the growth that gives.",
+    "I could not fully reconcile web sales to the daily sales report. For FY2025/26 P08 the report shows about 6.0k EUR less web sales than the fact table across all categories. Store sales match exactly. I did not find the cause, and it does not show up as cancelled orders in Garden or Electrical.",
+    "No store was closed for a refit during either period. The only refit in the 2024-11 to 2025-12 window (Pori, 2025-09-08 to 2025-10-12) ended before P08, so store comparability is not affected.",
+    "Test articles (category 'ZZ Test') and the backup, staging and temp tables were not used. Test articles are not in Garden or Electrical anyway."
+  ]
+}
+```

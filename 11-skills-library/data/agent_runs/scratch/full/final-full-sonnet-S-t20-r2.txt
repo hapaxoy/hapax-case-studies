@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH cur AS (SELECT store_id, region FROM dim_store WHERE is_current AND store_id &lt; 900), lines AS (SELECT d.store_id, f.sale_date AS d, f.net_amount AS amt FROM (SELECT * FROM fact_sales_line QUALIFY row_number() OVER (PARTITION BY receipt_id, line_no ORDER BY etl_loaded_at, sales_line_id) = 1) f JOIN dim_store d USING (store_key) WHERE d.store_id &lt; 900 UNION ALL SELECT d.store_id, r.return_date, -r.refund_net FROM fact_return_line r JOIN dim_store d USING (store_key) WHERE d.store_id &lt; 900), x AS (SELECT c.region, l.store_id, CASE WHEN l.d BETWEEN DATE '2026-05-04' AND DATE '2026-10-04' THEN 'TY' WHEN l.d BETWEEN DATE '2025-04-28' AND DATE '2025-10-05' THEN 'LY' END AS yr, l.amt FROM lines l JOIN cur c USING (store_id)) SELECT rank() OVER (ORDER BY sum(CASE WHEN yr='TY' AND store_id NOT IN (119,125,129) THEN amt END) / sum(CASE WHEN yr='LY' AND store_id NOT IN (119,125,129) THEN amt END) DESC) AS rank, region, round(sum(CASE WHEN yr='TY' THEN amt END), 2) AS net_sales_ytd_eur, round(100 * (sum(CASE WHEN yr='TY' AND store_id NOT IN (119,125,129) THEN amt END) / sum(CASE WHEN yr='LY' AND store_id NOT IN (119,125,129) THEN amt END) - 1), 2) AS like_for_like_growth_pct FROM x WHERE yr IS NOT NULL GROUP BY region ORDER BY rank",
+  "result": {
+    "columns": ["rank", "region", "net_sales_ytd_eur", "like_for_like_growth_pct"],
+    "rows": [
+      [1, "North", 730386.24, -0.04],
+      [2, "Capital Region", 948667.5, -1.33],
+      [3, "West", 1815139.47, -1.86],
+      [4, "South", 1309213.51, -1.97],
+      [5, "East", 959424.31, -4.73]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal year FY2026/27 year to date: fiscal weeks 1 to 22, 4 May 2026 to 4 October 2026",
+    "Comparison period: the same fiscal weeks of FY2025/26 (28 April 2025 to 5 October 2025), aligned by fiscal week because FY2025/26 was a 53-week year",
+    "Net sales = line net_amount (EUR excl. VAT, after line discounts) minus refund_net, with refunds counted on the return date and in the store where they were booked (same basis as rpt_daily_store_sales.net_sales)",
+    "Stores only: store_id below 900 (web shop 900 excluded, training store 999 excluded)",
+    "Regions as currently defined in dim_store (is_current = true), which gives five regions after the April 2025 reorganisation: Capital Region, South, East, West, North",
+    "Like-for-like (LFL) stores: stores trading in full in both periods, so excluding the three stores in the list below",
+    "Ranking by LFL growth in net sales vs the same fiscal weeks last year"
+  ],
+  "assumptions": [
+    "'How they are doing this year so far' is read as sales performance against last year, not size. I ranked by LFL net sales growth versus the same fiscal weeks of last year, because regions differ greatly in size and some stores were closed or refitted. If a ranking by absolute net sales was wanted, the order is West (1,815,139), South (1,309,214), East (959,424), Capital Region (948,668), North (730,386). The YTD net sales column shows these totals.",
+    "'This year' is the current fiscal year FY2026/27, not the calendar year. YTD runs to the last complete fiscal week (week 22, ending Sunday 4 October 2026). The warehouse is loaded through 4 October. FY2026/27 P06 is flagged not fully loaded because the period runs to 1 November.",
+    "The net_sales_ytd_eur column covers all stores in each region that traded this year, including the Kuopio store that was shut for a refit. The growth column uses LFL stores only.",
+    "Staff purchases in real stores are kept in sales (same as the Data &amp; Analytics daily report). Only the training store 999, where most of the staff-flagged lines sit, is excluded.",
+    "Regions are restated on today's mapping for both years, so last year's figures are not distorted by the reorganisation.",
+    "LFL excludes the stores wholly: Pori (119, West) because of the refit 8 Sep to 12 Oct 2025 that falls in last year's comparison period, Kuopio (125, East) because of the refit 15 Jun to 26 Jul 2026 in this year's period, and Savonlinna (129, East) because it closed on 25 Jan 2026 and has no sales this year."
+  ],
+  "caveats": [
+    "Duplicate load corrected: store 116 Tampere Lielahti (West) has 418 sales lines (836 rows, 178 receipts, about EUR 20.8k net in total) loaded twice for 15 to 21 September 2025, the second load on 23 September 2025. I removed the second copy of each. This affects only last year's comparison base for West; without the correction West's comparison base would be overstated by about EUR 10.4k, and its LFL growth would look about 0.6 points worse. The reporting table rpt_daily_store_sales already carries the de-duplicated figures, and my totals match it exactly.",
+    "Region reorganisation corrected: from 28 April 2025 the Helsinki-area stores (101 to 105) moved from South to a new 'Capital Region', and Kouvola (114) moved from East to South. The warehouse schema describes four regions (North, South, East, West), but the data holds five. Last year's sales lines carry the old store version, so grouping by the region on the sale line would have put them in the wrong region. I mapped every store to its current region in both years.",
+    "East looks worst, but only part of that is a trading problem. Its total net sales are down 14.8% on last year (959k vs 1,126k), but that includes the Kuopio refit closure (6 weeks) and the closed Savonlinna store. On a like-for-like basis East is down 4.73%, which is still the weakest region.",
+    "The like-for-like gaps between regions are small, apart from East. North is flat (-0.04%) and Capital Region, West and South are down about 1.3 to 2.0%. Ranks 3 and 4 (West -1.86% and South -1.97%) are close enough that I would not read much into their order.",
+    "Pori (119, West) is excluded from LFL growth because of last year's refit. Its total sales are still in the West YTD net sales figure.",
+    "Returns are booked in the period of the return, not the period of the original sale, so net sales follow the same basis as the daily sales report. Web-shop returns are excluded because they are booked on the web-shop pseudo-location.",
+    "The warehouse tables contain unmaintained backup, staging and temporary tables (bak_*, stg_*, tmp_*, *_old), which I did not use. The channel_code column on the sales lines is empty for the recent data I checked, so I identified stores by store_id, not by channel."
+  ]
+}
+```

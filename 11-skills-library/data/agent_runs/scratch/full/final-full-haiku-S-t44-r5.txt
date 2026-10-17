@@ -1,0 +1,27 @@
+```json
+{
+  "sql": "WITH sales_data AS (\n  SELECT \n    p.category,\n    SUM(f.net_amount) AS total_net_sales,\n    SUM(f.standard_cost) AS total_cost_of_sales\n  FROM fact_sales_line f\n  JOIN dim_product p ON f.product_key = p.product_key\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE d.fiscal_year = 'FY2024/25' \n    AND d.fiscal_period = 6\n    AND p.category IN ('Garden', 'Electrical')\n  GROUP BY p.category\n),\nreturns_data AS (\n  SELECT \n    p.category,\n    SUM(r.refund_net) AS total_refund_net,\n    SUM(r.standard_cost_returned) AS total_cost_returned\n  FROM fact_return_line r\n  JOIN dim_product p ON r.product_key = p.product_key\n  JOIN dim_date d ON r.return_date = d.calendar_date\n  WHERE d.fiscal_year = 'FY2024/25' \n    AND d.fiscal_period = 6\n    AND p.category IN ('Garden', 'Electrical')\n  GROUP BY p.category\n)\nSELECT \n  s.category,\n  ROUND(s.total_net_sales - COALESCE(r.total_refund_net, 0), 2) AS net_sales,\n  ROUND(100 * (1 - (s.total_cost_of_sales - COALESCE(r.total_cost_returned, 0)) / \n    (s.total_net_sales - COALESCE(r.total_refund_net, 0))), 2) AS gross_margin_pct\nFROM sales_data s\nLEFT JOIN returns_data r ON s.category = r.category\nORDER BY s.category",
+  "result": {
+    "columns": ["category", "net_sales", "gross_margin_pct"],
+    "rows": [
+      ["Electrical", 175370.45, 41.9],
+      ["Garden", 137282.28, 39.47]
+    ]
+  },
+  "definitions_applied": [
+    "Net Sales = sales net_amount less returns refund_net, excluding VAT per warehouse definition",
+    "Gross Margin % = (Net Sales - COGS) / Net Sales * 100",
+    "Cost of Goods Sold = standard_cost of sales less standard_cost_returned for returns",
+    "Period 6, FY2024/25 = fiscal period 2024-09-23 to 2024-10-27"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2024/25, the prior year to current FY2025/26",
+    "Period 6 refers to fiscal period 6 of FY2024/25",
+    "Gross margin calculated on net sales (excl VAT) basis, consistent with warehouse net_sales definition"
+  ],
+  "caveats": [
+    "Period FY2024/25 P06 is fully loaded in the warehouse (verified)",
+    "No returned lines were found in returns_data for any Electrical or Garden category items outside the joining logic; all returns were successfully matched to their sales lines by product category"
+  ]
+}
+```

@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-D-t04-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T04",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "6b006ec5a07d34b37ccec1e32e3ed1ef481a52f3e3855514fd45d5430e83da20",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:16",
+   "statement": "SELECT strftime(f.sale_date,'%Y-%m') AS ym, COUNT(*) AS line_rows, COUNT(DISTINCT f.sales_line_id) AS dist_line_id, COUNT(DISTINCT (f.receipt_id, f.line_no)) AS dist_receipt_line, COUNT(DISTINCT f.etl_loaded_at) AS loads, SUM(f.gross_amount) AS gross_all, SUM(f.net_amount) AS net_all\nFROM fact_sales_line f\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "ym | line_rows | dist_line_id | dist_receipt_line | loads | gross_all | net_all\n2024-08 | 47269 | 47269 | 47269 | 31 | 1543774.59 | 1246019.68\n2024-09 | 43684 | 43684 | 43684 | 30 | 1372659.50 | 1094571.26\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:21",
+   "statement": "SELECT strftime(f.sale_date,'%Y-%m') AS ym, s.store_id = 900 AS is_web, s.store_id = 999 AS is_999, p.category = 'ZZ Test' AS is_test, f.vat_rate, p.vat_class,\n COUNT(*) AS n, SUM(f.net_amount) AS net, SUM(f.gross_amount) AS gross,\n SUM(CASE WHEN ABS(f.gross_amount - ROUND(f.net_amount*(1+f.vat_rate),2)) > 0.02 THEN 1 ELSE 0 END) AS inconsistent,\n SUM(CASE WHEN f.staff_purchase_flag THEN 1 ELSE 0 END) AS staff_lines\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY ALL ORDER BY 1,2,3,4,5,6\n",
+   "n": 2,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "ym | is_web | is_999 | is_test | vat_rate | vat_class | n | net | gross | inconsistent | staff_lines\n2024-08 | false | false | false | 0.1000 | reduced10 | 54 | 1546.85 | 1701.57 | 0 | 0\n2024-08 | false | false | false | 0.1400 | reduced14 | 1885 | 9406.75 | 10724.62 | 0 | 28\n2024-08 | false | false | false | 0.2400 | standard | 40818 | 1090854.31 | 1352655.70 | 0 | 576\n2024-08 | false | true | false | 0.1400 | reduced14 | 5 | 23.90 | 27.24 | 0 | 5\n2024-08 | false | true | false | 0.2400 | standard | 112 | 3280.69 | 4068.06 | 0 | 112\n2024-08 | false | true | true | 0.2400 | standard | 41 | 150.75 | 186.93 | 0 | 0\n2024-08 | true | false | false | 0.1000 | reduced10 | 8 | 201.87 | 222.06 | 0 | 0\n2024-08 | true | false | false | 0.1400 | reduced14 | 192 | 993.38 | 1132.47 | 0 | 0\n2024-08 | true | false | false | 0.2400 | standard | 4153 | 139554.68 | 173047.88 | 0 | 0\n2024-08 | true | false | true | 0.2400 | standard | 1 | 6.50 | 8.06 | 0 | 0\n2024-09 | false | false | false | 0.1000 | reduced10 | 57 | 1868.21 | 2055.10 | 0 | 2\n2024-09 | false | false | false | 0.1400 | reduced14 | 1128 | 5570.91 | 6351.26 | 0 | 17\n2024-09 | false | false | false | 0.2550 | standard | 38049 | 956576.97 | 1200505.80 | 0 | 606\n2024-09 | false | true | false | 0.1400 | reduced14 | 1 | 2.68 | 3.06 | 0 | 1\n2024-09 | false | true | false | 0.2550 | standard | 99 | 2590.14 | 3250.61 | 0 | 99\n2024-09 | false | true | true | 0.2550 | standard | 25 | 78.10 | 98.04 | 0 | 0\n2024-09 | true | false | false | 0"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:29",
+   "statement": "WITH l AS (\n SELECT f.sale_date, s.store_id, f.net_amount, f.gross_amount, f.sale_ts_utc,\n        CAST(timezone('Europe/Helsinki', f.sale_ts_utc AT TIME ZONE 'UTC') AS DATE) AS hel_date\n FROM fact_sales_line f\n JOIN dim_store s ON s.store_key = f.store_key\n JOIN dim_product p ON p.product_key = f.product_key\n WHERE s.store_id < 900 AND p.category <> 'ZZ Test' AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\n)\nSELECT strftime(sale_date,'%Y-%m') ym, COUNT(*) n, SUM(net_amount) net, SUM(gross_amount) gross,\n SUM(CASE WHEN hel_date <> sale_date THEN 1 ELSE 0 END) AS date_mismatch,\n (SELECT SUM(net_sales_before_returns) FROM rpt_daily_store_sales r WHERE r.store_id < 900 AND strftime(r.business_date,'%Y-%m') = strftime(l.sale_date,'%Y-%m')) AS rpt_net_before_returns\nFROM l GROUP BY 1, 6 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "ym | n | net | gross | date_mismatch | rpt_net_before_returns\n2024-08 | 42757 | 1101807.91 | 1365081.89 | 0 | 1101807.91\n2024-09 | 39234 | 964016.09 | 1208912.16 | 0 | 964016.09\n(2 rows)"
+  }
+ ]
+}

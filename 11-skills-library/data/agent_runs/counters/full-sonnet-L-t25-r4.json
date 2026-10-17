@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t25-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T25",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "eb57844aa71a90ac34f1ec9761fb0fb9d62f0e7bca892da6155f176393c8975e",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:56:26",
+   "statement": "fiscal-calendar/scripts/fiscal.py FY2025/26 --as-of 2026-10-07",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: FY2025/26    as of: 2026-10-07    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P01, FY2025/26 P02, FY2025/26 P03, FY2025/26 P04, FY2025/26 P05, FY2025/26 P06, FY2025/26 P07, FY2025/26 P08, FY2025/26 P09, FY2025/26 P10, FY2025/26 P11, FY2025/26 P12\n  fiscal_weeks                       1-53\n  start_date                         2025-04-28\n  end_date                           2026-05-03\n  weeks                              53\n  days                               371\n  includes_week_53                   True\n  complete_as_of                     True\n  loaded_through                     2026-05-03\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 1 AND 53)\n  note: Includes week 53 (27 Apr - 3 May 2026), which has no prior-year comparator (CAL-WEEK53). Drop it from both years when comparing (REQ-D04); keep it when no comparison is asked (REQ-D12).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:56:32",
+   "statement": "WITH fv AS (\n  SELECT *, ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) rn,\n         COUNT(*) OVER (PARTITION BY member_id) nver\n  FROM dim_member\n)\nSELECT\n  COUNT(*) AS first_versions,\n  COUNT(DISTINCT member_id) AS distinct_members,\n  SUM(CASE WHEN valid_from <> join_date THEN 1 ELSE 0 END) AS first_valid_from_ne_join,\n  SUM(CASE WHEN join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03' THEN 1 ELSE 0 END) AS joined_fy2526,\n  SUM(CASE WHEN join_date BETWEEN DATE '2025-01-01' AND DATE '2025-12-31' THEN 1 ELSE 0 END) AS joined_cal2025,\n  SUM(CASE WHEN nver>1 THEN 1 ELSE 0 END) AS multi_version,\n  SUM(CASE WHEN home_store_id NOT IN (SELECT store_id FROM dim_store) THEN 1 ELSE 0 END) AS unknown_store,\n  MIN(join_date), MAX(join_date),\n  (SELECT COUNT(*) FROM (SELECT member_id FROM dim_member GROUP BY member_id, join_date HAVING COUNT(*)>1 AND COUNT(DISTINCT valid_from)<COUNT(*))) dupver,\n  (SELECT COUNT(*) FROM (SELECT member_id FROM dim_member GROUP BY member_id HAVING COUNT(DISTINCT join_date)>1)) multi_join\nFROM fv WHERE rn=1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "first_versions | distinct_members | first_valid_from_ne_join | joined_fy2526 | joined_cal2025 | multi_version | unknown_store | min(join_date) | max(join_date) | dupver | multi_join\n60000 | 60000 | 0 | 14854 | 14629 | 25526 | 0 | 2019-01-01 | 2026-10-04 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:56:38",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) rn\n  FROM dim_member\n), cur AS (\n  SELECT member_id, home_store_id AS cur_home FROM dim_member WHERE is_current\n), s AS (\n  SELECT store_id, ANY_VALUE(store_name) FILTER (WHERE is_current) AS store_name, ANY_VALUE(region) FILTER (WHERE is_current) AS region,\n         MIN(open_date) od, MAX(close_date) cd, COUNT(*) vers\n  FROM dim_store GROUP BY store_id\n)\nSELECT fv.home_store_id, s.store_name, s.region, s.od, s.cd, s.vers, COUNT(*) AS new_members,\n       SUM(CASE WHEN cur.cur_home<>fv.home_store_id THEN 1 ELSE 0 END) AS differs_now\nFROM fv JOIN cur USING (member_id) LEFT JOIN s ON s.store_id=fv.home_store_id\nWHERE fv.rn=1 AND fv.join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03'\nGROUP BY ALL ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "home_store_id | store_name | region | od | cd | vers | new_members | differs_now\n101 | Helsinki Vuosaari | Capital Region | NULL | NULL | 2 | 351 | 22\n102 | Helsinki Pitäjänmäki | Capital Region | NULL | NULL | 2 | 597 | 49\n103 | Espoo Lommila | Capital Region | NULL | NULL | 2 | 281 | 19\n104 | Vantaa Tammisto | Capital Region | NULL | NULL | 2 | 485 | 32\n105 | Kerava | Capital Region | NULL | NULL | 2 | 147 | 8\n106 | Porvoo | South | NULL | NULL | 1 | 171 | 9\n107 | Hyvinkää | South | NULL | NULL | 1 | 287 | 17\n108 | Lahti | South | NULL | NULL | 1 | 500 | 38\n109 | Hämeenlinna | South | NULL | NULL | 1 | 295 | 12\n110 | Turku Kupittaa | South | NULL | NULL | 1 | 500 | 27\n111 | Turku Härmälä | South | NULL | NULL | 1 | 261 | 9\n112 | Raisio | South | NULL | NULL | 1 | 156 | 9\n113 | Salo | South | NULL | NULL | 1 | 133 | 10\n114 | Kouvola | South | NULL | NULL | 2 | 249 | 14\n115 | Tampere Hervanta | West | NULL | NULL | 1 | 696 | 44\n116 | Tampere Lielahti | West | NULL | NULL | 1 | 459 | 23\n117 | Tampere Kaleva | West | NULL | NULL | 1 | 447 | 18\n118 | Nokia | West | NULL | NULL | 1 | 373 | 17\n119 | Pori | West | NULL | NULL | 1 | 342 | 23\n120 | Rauma | West | NULL | NULL | 1 | 144 | 3\n121 | Vaasa | West | NULL | NULL | 1 | 344 | 19\n122 | Seinäjoki | West | NULL | NULL | 1 | 331 | 21\n123 | Kokkola | West | NULL | NULL | 1 | 167 | 8\n124 | Jyväskylä Palokka | East | NULL | NULL | 1 | 309 | 18\n125 | Kuopio | East | NULL | NULL | 1 | 484 | 33\n126 | Joensuu | East | NULL | NULL | 1 | 3"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:56:46",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain store_id --start 2025-04-28 --end 2026-05-03 --date-col last_join_date",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 40 rows, 4 columns: store_id, store_name, new_members, last_join_date\n\n== Duplicate keys ==\n  [PASS] Unique at grain (store_id): 40 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-04-28 to 2026-05-03 (371 days; fiscal: FY2025/26 P01, FY2025/26 P02, FY2025/26 P09, FY2025/26 P10, FY2025/26 P03, FY2025/26 P05, FY2025/26 P06, FY2025/26 P07, FY2025/26 P12, FY2025/26 P11, FY2025/26 P08, FY2025/26 P04).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 7 rows in the range only in Helsinki time, 6 only in UTC; fact_sales_line.sale_ts_utc: 17 rows in the range only in Helsinki time, 13 only in UTC.\n  [INFO] Result covers 2026-01-24 to 2026-05-03 on last_join_date (6 distinct dates).\n  [INFO] 11 missing dates are closed days (is_trading_day false, CAL-CLOSED-DAYS): 2025-05-01, 2025-06-20, 2025-06-21, 2025-12-06, 2025-12-24, 2025-12-25, 2025-12-26, 2026-01-01.\n  [WARN] 354 trading days in the range have no rows: 2025-04-28, 2025-04-29, 2025-04-30, 2025-05-02, 2025-05-03, 2025-05-04, 2025-05-05, 2025-05-06 ....\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  store_id "
+  }
+ ]
+}

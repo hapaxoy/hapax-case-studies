@@ -1,0 +1,29 @@
+```json
+{
+  "sql": "WITH period_8_sales AS (\n  SELECT \n    dp.category,\n    d.fiscal_year,\n    d.fiscal_period,\n    SUM(f.net_amount) AS total_net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_product dp ON f.product_key = dp.product_key\n  WHERE d.fiscal_period = 8\n    AND d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND dp.category IN ('Garden', 'Electrical')\n  GROUP BY dp.category, d.fiscal_year, d.fiscal_period\n)\nSELECT \n  category,\n  8 AS period,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN total_net_sales END), 2) AS net_sales_fy2025_26,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN total_net_sales END), 2) AS net_sales_fy2024_25,\n  ROUND(\n    (MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN total_net_sales END) - \n     MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN total_net_sales END)) / \n    MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN total_net_sales END) * 100,\n    2\n  ) AS growth_pct\nFROM period_8_sales\nGROUP BY category\nORDER BY category",
+  "result": {
+    "columns": ["category", "period", "net_sales_fy2025_26", "net_sales_fy2024_25", "growth_pct"],
+    "rows": [
+      ["Electrical", 8, 182217.99, 150317.52, 21.22],
+      ["Garden", 8, 39146.83, 59501.02, -34.21]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales from fact_sales_line.net_amount (value excluding VAT, after line discounts)",
+    "Fiscal period from dim_date.fiscal_period",
+    "Product categories from dim_product.category (current products)"
+  ],
+  "assumptions": [
+    "Last year interpreted as fiscal year FY2025/26",
+    "Year before interpreted as fiscal year FY2024/25",
+    "Growth calculated as year-on-year percentage change: ((FY2025/26 - FY2024/25) / FY2024/25) × 100",
+    "All sales included regardless of channel, member status, or staff flag",
+    "Only current product records (is_current = TRUE) used for category matching"
+  ],
+  "caveats": [
+    "Net sales exclude VAT, consistent with fact_sales_line definition",
+    "Sales line amounts only; returns are tracked in fact_return_line and are not netted",
+    "Garden category shows decline of 34.21% year-on-year despite Electrical growing 21.22%"
+  ]
+}
+```

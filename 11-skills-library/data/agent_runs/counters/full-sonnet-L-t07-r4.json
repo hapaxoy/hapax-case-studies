@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-L-t07-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T07",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "e3188e14cb294f728c9770df829f71ece9869c329de432d89b2025b04eb1d1e5",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:54",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, p.sku, f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND s.store_id < 900\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND s.store_id < 900\n)\nSELECT cp.sku, cp.product_name, cp.category, SUM(n.net_sales) AS net_sales, SUM(n.net_sales - n.cost) AS gross_margin\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 10 AND 12 AND cs.region = 'South'\nGROUP BY 1,2,3\nORDER BY gross_margin DESC\nLIMIT 15\n",
+   "n": 1,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sku | product_name | category | net_sales | gross_margin\n103075 | Cushions & Throws Tuulikki 338 | Home Textiles & Decor | 5292.14 | 2927.42\n100955 | Interior Paint Norvik 298 | Paint & Decorating | 6816.15 | 2138.48\n101763 | Fixings & Fasteners Nordhem 594 | Tools & Hardware | 3418.53 | 2074.88\n103390 | Bedroom Peltola 793 | Furniture | 5877.95 | 1859.55\n100953 | Interior Paint Tuulikki 224 | Paint & Decorating | 4005.86 | 1383.86\n103062 | Cushions & Throws Kuusela 657 | Home Textiles & Decor | 2494.08 | 1346.56\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | 2317.30 | 1342.48\n102538 | Cookware Nordhem 469 | Kitchen & Dining | 3196.78 | 1177.39\n101398 | Power Tools Havu Pro 689 | Tools & Hardware | 3371.57 | 1095.66\n101888 | Indoor Lighting Havu 419 | Electrical | 2340.12 | 978.84\n102116 | Smart Home Tuulikki 855 | Electrical | 3032.49 | 935.46\n103415 | Home Office Peltola 918 | Furniture | 2726.78 | 925.28\n101512 | Hand Tools Havu 907 | Tools & Hardware | 1600.80 | 899.28\n102359 | Bathroom Furniture Mäntylä 246 | Bathroom & Plumbing | 1695.51 | 799.71\n103161 | Candles & Frames Selkämaa 320 | Home Textiles & Decor | 1407.69 | 793.03\n(15 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:10",
+   "statement": "WITH rng AS (SELECT MIN(calendar_date) a, MAX(calendar_date) b FROM dim_date WHERE fiscal_year='FY2024/25' AND fiscal_period BETWEEN 10 AND 12),\nsl AS (SELECT f.* FROM fact_sales_line f, rng WHERE f.sale_date BETWEEN rng.a AND rng.b),\ndups AS (SELECT receipt_id, line_no, COUNT(*) c FROM sl GROUP BY 1,2 HAVING COUNT(*)>1),\ndupid AS (SELECT sales_line_id, COUNT(*) c FROM sl GROUP BY 1 HAVING COUNT(*)>1),\nrd AS (SELECT return_line_id, COUNT(*) c FROM fact_return_line r, rng WHERE r.return_date BETWEEN rng.a AND rng.b GROUP BY 1 HAVING COUNT(*)>1),\nrs AS (SELECT sales_line_id, COUNT(*) c FROM fact_return_line r, rng WHERE r.return_date BETWEEN rng.a AND rng.b GROUP BY 1 HAVING COUNT(*)>1)\nSELECT (SELECT a FROM rng) a, (SELECT b FROM rng) b, (SELECT COUNT(*) FROM sl) lines, (SELECT COUNT(*) FROM dups) dup_receipt_line, (SELECT COUNT(*) FROM dupid) dup_id,\n (SELECT COUNT(*) FROM rd) dup_return_id, (SELECT COUNT(*) FROM rs) multi_returns_per_line,\n (SELECT COUNT(*) FROM sl WHERE etl_loaded_at IS NULL) null_etl, (SELECT COUNT(DISTINCT CAST(etl_loaded_at AS DATE)) FROM sl) etl_days,\n (SELECT COUNT(*) FROM sl WHERE net_amount<=0 OR quantity<=0) nonpos,\n (SELECT COUNT(*) FROM (SELECT sku FROM dim_product WHERE is_current GROUP BY 1 HAVING COUNT(*)>1)) multi_current\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "a | b | lines | dup_receipt_line | dup_id | dup_return_id | multi_returns_per_line | null_etl | etl_days | nonpos | multi_current\n2025-01-27 | 2025-04-27 | 129694 | 0 | 0 | 0 | 0 | 0 | 91 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:04:19",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain business_date,store_id --period FY2024/25 P10-P12 --control --control-stores physical",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n[stderr]\n--period 'FY2024/25 P10-P12' not found in ref_fiscal_calendar (format: 'FY2026/27 P05').\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:04:28",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain business_date,store_id --start 2025-01-27 --end 2025-04-27 --control --control-stores physical",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 888 rows, 3 columns: business_date, store_id, net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (business_date, store_id): 888 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-01-27 to 2025-04-27 (91 days; fiscal: FY2024/25 P11, FY2024/25 P10, FY2024/25 P12).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 8 rows in the range only in Helsinki time, 17 only in UTC.\n  [INFO] Result covers 2025-01-27 to 2025-04-27 on business_date (89 distinct dates).\n  [INFO] 2 missing dates are closed days (is_trading_day false, CAL-CLOSED-DAYS): 2025-04-18, 2025-04-20.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2025-01-27 to 2025-04-27, stores: physical, at level: business_date x store_id.\n  [INFO] Result total 593,853.56; control total 2,636,850.18; gap -2,042,996.62.\n  [FAIL] 2581 cells differ by more than 0.01. Largest: {'business_date': datetime.date(2025, 3, 15), 'store_id': 115}: result 0.00 vs control 3,677.28 (gap -3,677.28); {'business_date': datetime.date(2025, 3, 8), 'store_id': 102}: result 0.00 vs control 3,527.42 "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:38",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND s.store_id < 900\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND s.store_id < 900\n),\nmine AS (\n  SELECT n.store_id, SUM(n.net_sales) AS mine\n  FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date\n  WHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 10 AND 12\n  GROUP BY 1),\nctl AS (SELECT store_id, SUM(net_sales) AS ctl FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' GROUP BY 1)\nSELECT cs.store_id, cs.store_name, cs.region, m.mine, c.ctl, m.mine - c.ctl AS gap\nFROM dim_store cs LEFT JOIN mine m USING (store_id) LEFT JOIN ctl c USING (store_id)\nWHERE cs.is_current AND cs.region IN ('South') OR cs.store_id IN (SELECT store_id FROM dim_store WHERE region='South')\nORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 21,
+   "output_preview": "store_id | store_name | region | mine | ctl | gap\n101 | Helsinki Vuosaari | Capital Region | 83649.58 | 83649.58 | 0.00\n101 | Helsinki Vuosaari | South | 83649.58 | 83649.58 | 0.00\n102 | Helsinki Pitäjänmäki | Capital Region | 143601.61 | 143601.61 | 0.00\n102 | Helsinki Pitäjänmäki | South | 143601.61 | 143601.61 | 0.00\n103 | Espoo Lommila | Capital Region | 66579.25 | 66579.25 | 0.00\n103 | Espoo Lommila | South | 66579.25 | 66579.25 | 0.00\n104 | Vantaa Tammisto | Capital Region | 112840.57 | 112840.57 | 0.00\n104 | Vantaa Tammisto | South | 112840.57 | 112840.57 | 0.00\n105 | Kerava | Capital Region | 27637.51 | 27637.51 | 0.00\n105 | Kerava | South | 27637.51 | 27637.51 | 0.00\n106 | Porvoo | South | 30140.14 | 30140.14 | 0.00\n107 | Hyvinkää | South | 72588.63 | 72588.63 | 0.00\n108 | Lahti | South | 114098.08 | 114098.08 | 0.00\n109 | Hämeenlinna | South | 61579.44 | 61579.44 | 0.00\n110 | Turku Kupittaa | South | 121982.77 | 121982.77 | 0.00\n111 | Turku Härmälä | South | 54427.35 | 54427.35 | 0.00\n112 | Raisio | South | 32088.17 | 32088.17 | 0.00\n113 | Salo | South | 27487.59 | 27487.59 | 0.00\n114 | Kouvola | South | 59789.82 | 59789.82 | 0.00\n114 | Kouvola | East | 59789.82 | 59789.82 | 0.00\n137 | Lohja | South | 19671.57 | 19671.57 | 0.00\n(21 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:47",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, p.sku, f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND s.store_id < 900\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND s.store_id < 900\n)\nSELECT RANK() OVER (ORDER BY SUM(n.net_sales - n.cost) DESC) AS rank, cp.sku, cp.product_name, ROUND(SUM(n.net_sales - n.cost), 2) AS gross_margin\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 10 AND 12 AND cs.region = 'South'\nGROUP BY cp.sku, cp.product_name\nORDER BY gross_margin DESC\nLIMIT 10\n",
+   "n": 6,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "rank | sku | product_name | gross_margin\n1 | 103075 | Cushions & Throws Tuulikki 338 | 2927.42\n2 | 100955 | Interior Paint Norvik 298 | 2138.48\n3 | 101763 | Fixings & Fasteners Nordhem 594 | 2074.88\n4 | 103390 | Bedroom Peltola 793 | 1859.55\n5 | 100953 | Interior Paint Tuulikki 224 | 1383.86\n6 | 103062 | Cushions & Throws Kuusela 657 | 1346.56\n7 | 102468 | Plumbing Parts Ahvenisto 279 | 1342.48\n8 | 102538 | Cookware Nordhem 469 | 1177.39\n9 | 101398 | Power Tools Havu Pro 689 | 1095.66\n10 | 101888 | Indoor Lighting Havu 419 | 978.84\n(10 rows)"
+  }
+ ]
+}

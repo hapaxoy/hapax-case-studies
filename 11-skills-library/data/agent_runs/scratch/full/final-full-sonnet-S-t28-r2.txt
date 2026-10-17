@@ -1,0 +1,48 @@
+```json
+{
+  "sql": "WITH stock AS (SELECT p.category, sum(f.closing_units) AS stock_units FROM fact_stock_week f JOIN dim_product p ON p.product_key = f.product_key JOIN dim_store s ON s.store_key = f.store_key WHERE f.week_ending_date = DATE '2026-09-27' AND s.store_id &lt; 900 GROUP BY 1), sold AS (SELECT p.category, sum(f.quantity) AS units_sold FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key JOIN dim_store s ON s.store_key = f.store_key WHERE f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND s.store_id &lt; 900 AND NOT f.staff_purchase_flag GROUP BY 1), returned AS (SELECT p.category, sum(r.quantity_returned) AS units_returned FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_product p ON p.product_key = r.product_key JOIN dim_store s ON s.store_key = r.store_key WHERE r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND s.store_id &lt; 900 AND NOT f.staff_purchase_flag GROUP BY 1) SELECT st.category, round(st.stock_units / ((sd.units_sold - coalesce(rt.units_returned, 0)) / 4.0), 1) AS weeks_of_cover FROM stock st JOIN sold sd USING (category) LEFT JOIN returned rt USING (category) ORDER BY st.category",
+  "result": {
+    "columns": ["category", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 12.0],
+      ["Cleaning &amp; Household", 7.7],
+      ["Electrical", 8.9],
+      ["Furniture", 33.2],
+      ["Garden", 19.4],
+      ["Home Textiles &amp; Decor", 12.4],
+      ["Kitchen &amp; Dining", 14.6],
+      ["Paint &amp; Decorating", 14.0],
+      ["Seasonal", 43.5],
+      ["Tools &amp; Hardware", 7.8]
+    ]
+  },
+  "definitions_applied": [
+    "Last period = last fully loaded fiscal period: FY2026/27 P05 (2026-08-31 to 2026-09-27, 4 weeks); P06 is in progress and not fully loaded",
+    "Weeks of cover = closing units in stock at the end of the period divided by average weekly units sold",
+    "Stock counted at the week ending 2026-09-27 (last Sunday of P05) from fact_stock_week",
+    "Real stores only (store_id below 900): web shop (900) and training store (999) excluded",
+    "Staff purchases excluded from the sales rate (staff_purchase_flag)",
+    "Units sold net of units returned in stores (returns tied to staff-purchase lines also excluded)",
+    "Category taken from the product version valid at the sale or stock date (dim_product via product_key)",
+    "Average weekly sales = the 4 weeks of P05 divided by 4"
+  ],
+  "assumptions": [
+    "Read 'last period' as FY2026/27 P05, since the request is dated 2026-10-07 and P06 (from 2026-09-28) is still running",
+    "Measured cover in units, not value, so category price levels do not distort it",
+    "Used the most recent 4 weeks of sales as the sales rate, so cover reflects the current seasonal run rate (autumn ramp in Seasonal and Electrical, Garden easing) rather than a longer average",
+    "Stock exists only for physical stores, so the sales rate is store sales only; web sales excluded because the web shop holds no stock in the warehouse",
+    "Returned units are counted as back in sellable stock, so they reduce the net sales rate",
+    "Rows are categories as in dim_product; the 'ZZ Test' category is excluded as it has no stock and sales only in the training store"
+  ],
+  "caveats": [
+    "Web shop sales are not in the sales rate, so cover is overstated if web orders are picked from store stock; the warehouse does not say where web orders are fulfilled from",
+    "Cover is very sensitive to the chosen sales window for seasonal categories: Seasonal (43.5 weeks) and Garden (19.4) rest on a 4-week rate that is moving fast (Seasonal units rose from about 250 to about 620 a week; Garden fell from about 6,000 to about 2,500 over 3 months)",
+    "Netting returns changes the result most for Furniture (about 29 weeks gross vs 33 net); returns of defective or damaged goods may not be resellable, so net may overstate sales slightly",
+    "The existing view rpt.v_daily_sales filters on channel_code = 'WB', which is null for recent lines, so it misses web sales; I did not use it",
+    "Outdoor Lighting SKUs moved from Garden to Electrical on 2025-10-27; the product version valid on each date was used, so P05 figures all sit in Electrical, but any comparison with earlier periods needs the same treatment",
+    "Savonlinna (store 129, closed 2026-01-25) holds no stock and was not part of the result",
+    "No stock rows were found for delisted products or for the test category at 2026-09-27, so no adjustment was needed",
+    "Staff purchases are about 1.5% of store units; including them would lower cover by about 1.5% in each category"
+  ]
+}
+```

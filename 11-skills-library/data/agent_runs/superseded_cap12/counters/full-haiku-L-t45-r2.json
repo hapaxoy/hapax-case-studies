@@ -1,0 +1,121 @@
+{
+ "run_id": "full-haiku-L-t45-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T45",
+ "budget": 12,
+ "used": 12,
+ "refused": 0,
+ "packet_sha256": "5d31c867e214b99ea97638dd01b63ea2e5f93a53260288ad49be8553cfd5d7e0",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:56:22",
+   "statement": "fiscal-calendar/scripts/fiscal.py today",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'today'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:56:26",
+   "statement": "fiscal-calendar/scripts/fiscal.py this year",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: this year    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P01, FY2026/27 P02, FY2026/27 P03, FY2026/27 P04, FY2026/27 P05, FY2026/27 P06\n  fiscal_weeks                       1-22\n  start_date                         2026-05-04\n  end_date                           2027-05-02\n  weeks                              22\n  days                               364\n  includes_week_53                   False\n  complete_as_of                     False\n  loaded_through                     2026-10-04\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 22)\n  note: 'This year' = the current fiscal year (CAL-RELATIVE).\n  note: Only 22 of the 52 fiscal weeks are in dim_date.\n  note: The range runs past the last loaded date (2026-10-04); only data through 2026-10-04 exists (CAL-DATA-THROUGH).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:32",
+   "statement": "SELECT COUNT(DISTINCT dm.member_id) as customer_count\nFROM dim_member dm\nJOIN dim_store ds ON dm.home_store_id = ds.store_id\nWHERE ds.city = 'Tampere'\n  AND dm.is_current = TRUE\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "customer_count\n19203\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:39",
+   "statement": "-- Find the last Sunday in the loaded data\nSELECT DISTINCT fiscal_week_end_date\nFROM dim_date\nWHERE calendar_date = (SELECT MAX(calendar_date) FROM dim_date WHERE fiscal_week_end_date <= calendar_date)\nLIMIT 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_week_end_date\n2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:43",
+   "statement": "-- Count active members in Tampere (made at least one purchase in trailing 52 weeks)\n-- As-of date: 2026-10-04 (last complete fiscal week Sunday)\nWITH as_of AS (\n  SELECT DATE '2026-10-04' as as_of_date\n),\nactive_members AS (\n  SELECT DISTINCT fsl.member_id\n  FROM fact_sales_line fsl\n  CROSS JOIN as_of\n  WHERE fsl.member_id IS NOT NULL\n    AND fsl.sale_date > as_of.as_of_date - 364\n    AND fsl.sale_date <= as_of.as_of_date\n)\nSELECT COUNT(DISTINCT am.member_id) as customer_count\nFROM active_members am\nJOIN dim_member dm ON am.member_id = dm.member_id AND dm.is_current = TRUE\nJOIN dim_store ds ON dm.home_store_id = ds.store_id\nWHERE ds.city = 'Tampere'\n",
+   "n": 5,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Table \"fsl\" does not have a column named \"member_id\"\n\nCandidate bindings: : \"member_key\"\n\nLINE 10:   WHERE fsl.member_id IS NOT NULL\n                 ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:47",
+   "statement": "-- Count active members in Tampere (made at least one purchase in trailing 52 weeks)\n-- As-of date: 2026-10-04 (last complete fiscal week Sunday)\nWITH as_of AS (\n  SELECT DATE '2026-10-04' as as_of_date\n),\nactive_member_ids AS (\n  SELECT DISTINCT dm.member_id\n  FROM fact_sales_line fsl\n  JOIN dim_member dm ON fsl.member_key = dm.member_key\n  CROSS JOIN as_of\n  WHERE fsl.sale_date > as_of.as_of_date - 364\n    AND fsl.sale_date <= as_of.as_of_date\n)\nSELECT COUNT(DISTINCT am.member_id) as customer_count\nFROM active_member_ids am\nJOIN dim_member dm ON am.member_id = dm.member_id AND dm.is_current = TRUE\nJOIN dim_store ds ON dm.home_store_id = ds.store_id\nWHERE ds.city = 'Tampere'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "customer_count\n9139\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:56:55",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain member_id",
+   "n": 7,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n  [WARN] Sales lines used without a filter on category 'ZZ Test' (REG-TEST-SKU, TEAM-EXCLUSIONS).\n  [WARN] dim_store ds is joined on store_id without is_current or validity dates; one row per version will multiply rows (REG-SCD-KEYS).\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 1 rows, 1 columns: customer_count\n\n== Duplicate keys ==\n  [FAIL] Grain column(s) not in the result: member_id.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  customer_count\n  9139\n\nResult: FAILED - fix before sending\n\n[exit code 1]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:06",
+   "statement": "-- Count active members in Tampere (made at least one purchase in trailing 52 weeks)\n-- As-of date: 2026-10-04 (last complete fiscal week Sunday)\n-- Home store measured as of the as-of date\nWITH as_of AS (\n  SELECT DATE '2026-10-04' as as_of_date\n),\nactive_member_ids AS (\n  SELECT DISTINCT fsl.member_key\n  FROM fact_sales_line fsl\n  JOIN dim_product dp ON fsl.product_key = dp.product_key\n  CROSS JOIN as_of\n  WHERE fsl.sale_date > as_of.as_of_date - 364\n    AND fsl.sale_date <= as_of.as_of_date\n    AND fsl.member_key IS NOT NULL\n    AND dp.category != 'ZZ Test'\n),\nmember_versions_on_as_of AS (\n  SELECT member_id, home_store_id\n  FROM dim_member\n  WHERE DATE '2026-10-04' BETWEEN valid_from AND valid_to\n)\nSELECT COUNT(DISTINCT am.member_key) as customer_count\nFROM active_member_ids am\nJOIN member_versions_on_as_of mv ON am.member_key = (\n  SELECT member_key FROM dim_member \n  WHERE member_id = (SELECT member_id FROM dim_member WHERE member_key = am.member_key LIMIT 1)\n    AND DATE '2026-10-04' BETWEEN valid_from AND valid_to\n)\nJOIN dim_store ds ON mv.home_store_id = ds.store_id AND ds.is_current = TRUE\nWHERE ds.city = 'Tampere'\n",
+   "n": 8,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: INTERRUPT Error: Interrupted!"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:11",
+   "statement": "-- Count active members in Tampere\n-- Active = made at least one purchase in trailing 52 weeks as of 2026-10-04\nWITH active_members AS (\n  SELECT DISTINCT dm.member_id\n  FROM fact_sales_line fsl\n  JOIN dim_member dm ON fsl.member_key = dm.member_key\n  JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE fsl.sale_date > DATE '2026-10-04' - 364\n    AND fsl.sale_date <= DATE '2026-10-04'\n    AND dp.category != 'ZZ Test'\n)\nSELECT COUNT(*) as customer_count\nFROM active_members am\nJOIN dim_member dm ON am.member_id = dm.member_id \n  AND DATE '2026-10-04' BETWEEN dm.valid_from AND dm.valid_to\nJOIN dim_store ds ON dm.home_store_id = ds.store_id \n  AND ds.is_current = TRUE\nWHERE ds.city = 'Tampere'\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "customer_count\n9139\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:59:16",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 10,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 1 rows, 1 columns: customer_count\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  customer_count\n  9139\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:22",
+   "statement": "SELECT store_id, store_name, city FROM dim_store WHERE store_id IN (999, 900) AND is_current = TRUE\n",
+   "n": 11,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_id | store_name | city\n900 | Tuomimetsä web shop | Tampere\n999 | Training store | Tampere\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:29",
+   "statement": "-- Count active members in Tampere (physical stores only, store_id < 900)\n-- Active = made at least one purchase in trailing 52 weeks as of 2026-10-04\nWITH active_members AS (\n  SELECT DISTINCT dm.member_id\n  FROM fact_sales_line fsl\n  JOIN dim_member dm ON fsl.member_key = dm.member_key\n  JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE fsl.sale_date > DATE '2026-10-04' - 364\n    AND fsl.sale_date <= DATE '2026-10-04'\n    AND dp.category != 'ZZ Test'\n)\nSELECT COUNT(*) as customer_count\nFROM active_members am\nJOIN dim_member dm ON am.member_id = dm.member_id \n  AND DATE '2026-10-04' BETWEEN dm.valid_from AND dm.valid_to\nJOIN dim_store ds ON dm.home_store_id = ds.store_id \n  AND ds.is_current = TRUE\nWHERE ds.city = 'Tampere'\n  AND ds.store_id < 900\n",
+   "n": 12,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "customer_count\n4441\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH period_sales AS (\n  SELECT f.receipt_id, f.store_key, SUM(f.net_amount) as receipt_total\n  FROM fact_sales_line f\n  WHERE f.sale_date &gt;= '2026-08-03' AND f.sale_date &lt;= '2026-08-30'\n  GROUP BY f.receipt_id, f.store_key\n)\nSELECT \n  s.format,\n  ROUND(AVG(ps.receipt_total), 2) as avg_basket_value\nFROM period_sales ps\nINNER JOIN dim_store s ON ps.store_key = s.store_key\nGROUP BY s.format\nORDER BY s.format",
+  "result": {
+    "columns": ["format", "avg_basket_value"],
+    "rows": [
+      ["Large", 60.6],
+      ["Medium", 60.15],
+      ["Small", 50.67],
+      ["Training", 34.27],
+      ["Web", 64.76]
+    ]
+  },
+  "definitions_applied": [
+    "Basket/transaction = unique receipt_id with all its sales lines summed",
+    "Period 4 FY26/27 = fiscal period from 2026-08-03 to 2026-08-30",
+    "Store format from dim_store current version",
+    "Basket value = net amount per receipt (EUR excluding VAT)",
+    "Staff purchases and all sales channels included"
+  ],
+  "assumptions": [
+    "Basket value calculated as net amount (excluding VAT) following company's standard net-sales reporting convention",
+    "One transaction = one receipt_id; multiple lines on a receipt are summed for that transaction's value",
+    "All receipts weighted equally in average calculation, regardless of format or line count",
+    "Returns are excluded (processed through fact_return_line table, not affecting sales table figures)",
+    "Web format (store_id 900) treated as a store format equivalent to physical retail locations"
+  ],
+  "caveats": [
+    "Store format mismatch: schema documentation states formats are 'Hyper, Standard or Express' but actual data contains Large, Medium, Small, Training, and Web. This indicates the data schema documentation is outdated.",
+    "Channel code data quality: all channel_code values are NULL for period 4; schema specifies these should be 'ST' (store) or 'WB' (web). Unable to separately analyze by sales channel.",
+    "Training format has very low transaction volume (55 receipts) and may not be representative of operational patterns.",
+    "Web format (online channel) has distinct characteristics: 3,229 receipts with higher average basket value (64.76) than physical Large/Medium formats, suggesting different customer behaviour."
+  ]
+}
+```

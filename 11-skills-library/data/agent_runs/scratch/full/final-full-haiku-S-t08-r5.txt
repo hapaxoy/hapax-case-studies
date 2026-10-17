@@ -1,0 +1,34 @@
+Based on my investigation, I've found a critical data issue. The FY2025/26 Q3 data is incomplete in the warehouse - it only contains transactions from October 27 to November 2, 2025, while the full quarter should extend through January 25, 2026.
+
+However, the request asked for "Q3 last year," which could be interpreted as the prior year quarter. Let me calculate the like-for-like growth comparing the same stores in both years:
+
+```json
+{
+  "sql": "WITH fy25_sales AS (SELECT 'FY2024/25' AS fiscal_year, s.region, s.store_id, SUM(f.net_amount) AS net_sales FROM fact_sales_line f JOIN dim_date d ON f.sale_date = d.calendar_date JOIN dim_store s ON f.store_key = s.store_key WHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 3 AND s.store_id < 900 AND f.channel_code = 'ST' GROUP BY s.region, s.store_id), fy26_sales AS (SELECT 'FY2025/26' AS fiscal_year, s.region, s.store_id, SUM(f.net_amount) AS net_sales FROM fact_sales_line f JOIN dim_date d ON f.sale_date = d.calendar_date JOIN dim_store s ON f.store_key = s.store_key WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_quarter = 3 AND s.store_id < 900 AND f.channel_code = 'ST' GROUP BY s.region, s.store_id), lfl_comparison AS (SELECT COALESCE(fy25.region, fy26.region) AS region, fy25.store_id, COALESCE(fy25.net_sales, 0) AS fy25_sales, COALESCE(fy26.net_sales, 0) AS fy26_sales FROM fy25_sales fy25 FULL OUTER JOIN fy26_sales fy26 ON fy25.store_id = fy26.store_id AND fy25.region = fy26.region) SELECT region, COUNT(*) AS store_count, ROUND(SUM(fy25_sales), 2) AS sales_fy2024_25, ROUND(SUM(fy26_sales), 2) AS sales_fy2025_26, ROUND(((SUM(fy26_sales) - SUM(fy25_sales)) / SUM(fy25_sales)) * 100, 2) AS growth_percent FROM lfl_comparison WHERE fy25_sales > 0 AND fy26_sales > 0 GROUP BY region ORDER BY region",
+  "result": {
+    "columns": ["region", "store_count", "sales_fy2024_25", "sales_fy2025_26", "growth_percent"],
+    "rows": [
+      ["East", 8, 614095.24, 46296.01, -92.46],
+      ["North", 6, 403062.74, 30677.83, -92.39],
+      ["South", 9, 667927.61, 47425.17, -92.90],
+      ["West", 10, 994191.81, 69344.43, -93.03]
+    ]
+  },
+  "definitions_applied": [
+    "Like-for-like (LFL): stores that had sales in Q3 of both FY2024/25 and FY2025/26 and remained in the same region",
+    "Store selection: store_id < 900 (physical stores only, excluding online channel 900)",
+    "Channel filter: store channel only (ST), excluding web (WB)",
+    "Sales measure: net_amount, net of line discounts and VAT"
+  ],
+  "assumptions": [
+    "'Q3 last year' interpreted as Q3 of the prior fiscal year: FY2024/25 compared to FY2025/26",
+    "Only stores with sales in both periods and in the same region are included (excludes stores that moved regions or were closed)"
+  ],
+  "caveats": [
+    "CRITICAL: FY2025/26 Q3 data in the warehouse is incomplete. The ref_fiscal_calendar shows the quarter should run through 2026-01-25, but fact_sales_line contains data only through 2025-11-02 (7 days of the 91-day quarter). The fully_loaded flag is marked true but data is not present.",
+    "The massive decline (~92-93%) is due to the incomplete data for FY2025/26. This result is not reliable for business decisions until the missing data is loaded.",
+    "Capital Region does not appear in this result because stores 101-105 were in the South region in FY2024/25 but moved to Capital Region in FY2025/26, making region-year pairing impossible.",
+    "Request should be re-run once FY2025/26 Q3 data is fully loaded into the warehouse."
+  ]
+}
+```

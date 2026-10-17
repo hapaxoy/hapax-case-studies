@@ -1,0 +1,32 @@
+Now I have all the information needed. Let me prepare the final answer in the requested JSON format.
+
+```json
+{
+  "sql": "SELECT \n  p.category,\n  ROUND(SUM(CASE WHEN d.fiscal_year = 'FY2024/25' THEN f.net_amount ELSE 0 END), 2) AS net_sales_fy2024_25,\n  ROUND(SUM(CASE WHEN d.fiscal_year = 'FY2025/26' THEN f.net_amount ELSE 0 END), 2) AS net_sales_fy2025_26,\n  ROUND(\n    (SUM(CASE WHEN d.fiscal_year = 'FY2025/26' THEN f.net_amount ELSE 0 END) - \n     SUM(CASE WHEN d.fiscal_year = 'FY2024/25' THEN f.net_amount ELSE 0 END)) /\n    NULLIF(SUM(CASE WHEN d.fiscal_year = 'FY2024/25' THEN f.net_amount ELSE 0 END), 0) * 100, \n    2\n  ) AS growth_pct\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nINNER JOIN dim_product p ON f.product_key = p.product_key\nWHERE d.fiscal_period = 8\n  AND p.category IN ('Garden', 'Electrical')\n  AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\nGROUP BY p.category\nORDER BY p.category;",
+  "result": {
+    "columns": ["category", "net_sales_fy2024_25", "net_sales_fy2025_26", "growth_pct"],
+    "rows": [
+      ["Electrical", 150317.52, 182217.99, 21.22],
+      ["Garden", 59501.02, 39146.83, -34.21]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net_amount from fact_sales_line (net of line discounts, excluding VAT)",
+    "Fiscal period: period number from dim_date, with period 8 spanning the same calendar weeks in both fiscal years",
+    "Category: category from dim_product, matched to current product version",
+    "Sales lines: all transactions including both member and non-member sales, excluding staff purchase flag analysis"
+  ],
+  "assumptions": [
+    "Interpreted 'last year' as FY2025/26 (the most recent complete fiscal year with period 8 data) and 'year before' as FY2024/25 (the prior fiscal year)",
+    "Growth is calculated as year-over-year percentage change: (FY2025/26 P08 - FY2024/25 P08) / FY2024/25 P08 * 100",
+    "Net sales includes all regular customer sales plus staff purchases (which represent less than 2% of total sales for both categories)",
+    "Excluded web returns as these are recorded in fact_return_line; included only gross sales from fact_sales_line"
+  ],
+  "caveats": [
+    "Data availability: The warehouse contains only FY2026/27, FY2025/26, and FY2024/25 data. FY2023/24 and earlier years are not available.",
+    "Garden category shows significant decline (-34.21%), driven by both lower unit volume (2,505 lines in FY2024/25 vs 1,976 in FY2025/26) and lower average transaction value, which may warrant investigation into product assortment, pricing, or promotional activity changes",
+    "Both categories processed through 41 stores in both periods, ensuring consistency in store footprint across the comparison",
+    "Staff purchases represent 0.99% of Electrical sales in FY2024/25 and 1.15% in FY2025/26; and 0.80% of Garden in FY2024/25 and 1.71% in FY2025/26 — all immaterial to the totals"
+  ]
+}
+```

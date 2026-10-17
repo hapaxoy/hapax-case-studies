@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-L-t19-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T19",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "0b65841e14fb8039793a73491b9315dc1297345374b242c45f448f7e78b10bdd",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:59:44",
+   "statement": "fiscal-calendar/scripts/fiscal.py Q3 FY2025/26 --compare",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: Q3 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P07, FY2025/26 P08, FY2025/26 P09\n  fiscal_weeks                       27-39\n  start_date                         2025-10-27\n  end_date                           2026-01-25\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-01-25\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 27 AND 39)\n  note: Q1 = P1-P3 (weeks 1-13), Q2 = P4-P6, Q3 = P7-P9, Q4 = P10-P12 (CAL-PERIODS).\n\nPrior-year comparator (same fiscal week numbers)\n------------------------------------------------\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P07, FY2024/25 P08, FY2024/25 P09\n  fiscal_weeks                       27-39\n  start_date                         2024-10-28\n  end_date                           2025-01-26\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-01-26\n  aligned_on                         fiscal week number (CAL-COMPARE)\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETW"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:09",
+   "statement": "-- Net sales by region for Q3 FY2025/26 vs Q3 FY2024/25, with web as its own line\nWITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: stores on the sale date, web on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nby_region AS (\n    -- as-is: region from the current store version (web shop 900 appears as 'Online')\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    WHERE (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 27 AND 39)\n       OR (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 27 AND 39)\n    GROUP BY 1, 2\n)\nSELECT fy26.region,\n       fy26.net_sales AS fy2025_26_net_sales,\n       fy25.net_sales AS fy2024_25_net_sales,\n       ROUND(100.0 * (fy26.net_sales / fy25.net_sales - 1), 1) AS growth_pct\nFROM by_region fy26\nJOIN by_region fy25 ON fy25.region = fy26.region AND fy25.fiscal_year = 'FY2024/25'\nWHERE fy26.fiscal_year = 'FY2025/26'\nORDER BY fy26.region;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | fy2025_26_net_sales | fy2024_25_net_sales | growth_pct\nCapital Region | 527026.01 | 525151.30 | 0.4\nEast | 597583.01 | 588069.69 | 1.6\nNorth | 413618.24 | 387519.62 | 6.7\nOnline | 580450.93 | 447645.43 | 29.7\nSouth | 729021.20 | 710020.17 | 2.7\nWest | 997953.07 | 952479.50 | 4.8\n(6 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:00:24",
+   "statement": "query-check/scripts/query_check.py --file q.sql --control",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.2 s.\n\n== Row count ==\n  [PASS] 6 rows, 4 columns: region, fy2025_26_net_sales, fy2024_25_net_sales, growth_pct\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [FAIL] --control needs the requested range (--start/--end or --period).\n\n== Preview (first 6 rows) ==\n  region | fy2025_26_net_sales | fy2024_25_net_sales | growth_pct\n  Capital Region | 527026.01 | 525151.30 | 0.4\n  East | 597583.01 | 588069.69 | 1.6\n  North | 413618.24 | 387519.62 | 6.7\n  Online | 580450.93 | 447645.43 | 29.7\n  South | 729021.20 | 710020.17 | 2.7\n  West | 997953.07 | 952479.50 | 4.8\n\nResult: FAILED - fix before sending\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:00:33",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain region --period FY2025/26 P07-P09 --control",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n[stderr]\n--period 'FY2025/26 P07-P09' not found in ref_fiscal_calendar (format: 'FY2026/27 P05').\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:00:44",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain region --start 2025-10-27 --end 2026-01-25 --control",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 6 rows, 4 columns: region, fy2025_26_net_sales, fy2024_25_net_sales, growth_pct\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 6 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-10-27 to 2026-01-25 (91 days; fiscal: FY2025/26 P08, FY2025/26 P07, FY2025/26 P09).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 3 rows in the range only in Helsinki time, 5 only in UTC; fact_sales_line.sale_ts_utc: 5 rows in the range only in Helsinki time, 11 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [FAIL] Value column not found; give --value-col (columns: region, fy2025_26_net_sales, fy2024_25_net_sales, growth_pct).\n\n== Preview (first 6 rows) ==\n  region | fy2025_26_net_sales | fy2024_25_net_sales | growth_pct\n  Capital Region | 527026.01 | 525151.30 | 0.4\n  East | 597583.01 | 588069.69 | 1.6\n  North | 413618.24 | 387519.62 | 6.7\n  Online | 580450.93 | 447645.43 | 29.7\n  South | 729021.20 | 710020.17 | 2.7\n  West | 997953.07 | 952479.50 | 4.8\n\nResult: FAILED - fix before sending\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:00:57",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain region --start 2025-10-27 --end 2026-01-25 --value-col fy2025_26_net_sales --control",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.2 s.\n\n== Row count ==\n  [PASS] 6 rows, 4 columns: region, fy2025_26_net_sales, fy2024_25_net_sales, growth_pct\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 6 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-10-27 to 2026-01-25 (91 days; fiscal: FY2025/26 P08, FY2025/26 P09, FY2025/26 P07).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 3 rows in the range only in Helsinki time, 5 only in UTC; fact_sales_line.sale_ts_utc: 5 rows in the range only in Helsinki time, 11 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared fy2025_26_net_sales with rpt_daily_store_sales.net_sales, 2025-10-27 to 2026-01-25, stores: all, at level: total.\n  [INFO] Result total 3,845,652.46; control total 3,845,652.46; gap -0.00.\n  [PASS] No gap above 0.01 at level total.\n\n== Preview (first 6 rows) ==\n  region | fy2025_26_net_sales | fy2024_25_net_sales | growth_pct\n  Capital Region | 527026.01 | 525151.30 | 0.4\n  East | 597583.01 | 588069.69 | 1.6\n  North | 413618.24 | 387519.62 | 6.7\n  Online | 580450.93 | 447645.43 | 29.7\n  South | 729021.20 | 710020.17 |"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:01:09",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain region --start 2024-10-28 --end 2025-01-26 --value-col fy2024_25_net_sales --control",
+   "n": 7,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 6 rows, 4 columns: region, fy2025_26_net_sales, fy2024_25_net_sales, growth_pct\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 6 keys.\n\n== Date coverage ==\n  [INFO] Requested 2024-10-28 to 2025-01-26 (91 days; fiscal: FY2024/25 P08, FY2024/25 P09, FY2024/25 P07).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 5 rows in the range only in Helsinki time, 6 only in UTC; fact_sales_line.sale_ts_utc: 8 rows in the range only in Helsinki time, 8 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared fy2024_25_net_sales with rpt_daily_store_sales.net_sales, 2024-10-28 to 2025-01-26, stores: all, at level: total.\n  [INFO] Result total 3,610,885.71; control total 3,610,885.71; gap 0.00.\n  [PASS] No gap above 0.01 at level total.\n\n== Preview (first 6 rows) ==\n  region | fy2025_26_net_sales | fy2024_25_net_sales | growth_pct\n  Capital Region | 527026.01 | 525151.30 | 0.4\n  East | 597583.01 | 588069.69 | 1.6\n  North | 413618.24 | 387519.62 | 6.7\n  Online | 580450.93 | 447645.43 | 29.7\n  South | 729021.20 | 710020.17 | 2"
+  }
+ ]
+}

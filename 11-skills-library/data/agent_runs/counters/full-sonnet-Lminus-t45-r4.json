@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t45-r4",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T45",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "6dcd22bb4daad424c1504fc326ff2523673983162de88157b4b805bc271c3ee8",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:27",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE '%Tampere%' OR store_name ILIKE '%Tampere%' OR store_name ILIKE '%Tammer%' ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n21 | 115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n23 | 117 | Tampere Kaleva | Tampere | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n42 | 136 | Tampere Lamminpää | Tampere | West | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n46 | 900 | Tuomimetsä web shop | Tampere | Online | Web | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n47 | 999 | Training store | Tampere | Head office | Training | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:32",
+   "statement": "SELECT m.home_store_id, count(*) AS rows_, count(DISTINCT m.member_id) AS members, count(DISTINCT CASE WHEN m.is_current THEN m.member_id END) AS current_members, min(m.join_date) AS min_join, max(m.join_date) AS max_join, count(DISTINCT CASE WHEN m.is_current AND m.marketing_consent THEN m.member_id END) AS consenting\nFROM dim_member m WHERE m.home_store_id IN (115,116,117,136,900,999) OR m.home_store_id NOT IN (SELECT store_id FROM dim_store)\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "home_store_id | rows_ | members | current_members | min_join | max_join | consenting\n115 | 4264 | 3109 | 2788 | 2019-01-02 | 2026-10-02 | 1892\n116 | 2670 | 1929 | 1721 | 2019-01-02 | 2026-10-02 | 1155\n117 | 2582 | 1856 | 1692 | 2019-01-02 | 2026-10-04 | 1138\n136 | 1405 | 1007 | 974 | 2019-01-12 | 2026-10-04 | 656\n900 | 17048 | 12028 | 12028 | 2019-01-01 | 2026-10-04 | 8214\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:38",
+   "statement": "WITH cur AS (SELECT member_id, home_store_id FROM dim_member WHERE is_current),\ntamp AS (SELECT DISTINCT store_id FROM dim_store WHERE city = 'Tampere' AND store_id < 900)\nSELECT (SELECT count(*) FROM cur) AS current_rows, (SELECT count(DISTINCT member_id) FROM cur) AS current_distinct,\n (SELECT count(*) FROM dim_member WHERE valid_to='9999-12-31') AS open_rows,\n (SELECT count(*) FROM cur c JOIN tamp t ON t.store_id=c.home_store_id) AS tampere_rows,\n (SELECT count(DISTINCT c.member_id) FROM cur c JOIN tamp t ON t.store_id=c.home_store_id) AS tampere_members,\n (SELECT count(DISTINCT member_id) FROM dim_member m JOIN tamp t ON t.store_id=m.home_store_id) AS ever_tampere,\n (SELECT count(*) FROM stg_member_updates) AS stg_rows\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "current_rows | current_distinct | open_rows | tampere_rows | tampere_members | ever_tampere | stg_rows\n60000 | 60000 | 60000 | 7175 | 7175 | 7515 | 4061\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:42",
+   "statement": "SELECT count(DISTINCT m.member_id) AS members_bought_in_tampere_stores, count(DISTINCT CASE WHEN f.sale_date > DATE '2025-10-08' THEN m.member_id END) AS last_12m, max(f.sale_date) AS last_sale\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key AND s.city='Tampere' AND s.store_id<900\nJOIN dim_member m ON m.member_key=f.member_key\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_bought_in_tampere_stores | last_12m | last_sale\n11967 | 7621 | 2026-10-04\n(1 row)"
+  }
+ ]
+}

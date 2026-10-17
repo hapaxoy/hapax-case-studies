@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-S-t06-r2",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T06",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "9f2c5a99f63710b87c7e8d4dd746a34b5df41fc176488604b709c2438dfd655f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:42:55",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date \nFROM ref_fiscal_calendar \nWHERE fiscal_period = 2\nORDER BY fiscal_year DESC\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2026/27 | 2 | FY2026/27 P02 | 2026-06-01 | 2026-06-28\nFY2025/26 | 2 | FY2025/26 P02 | 2025-05-26 | 2025-06-22\nFY2024/25 | 2 | FY2024/25 P02 | 2024-05-27 | 2024-06-23\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:43:01",
+   "statement": "SELECT \n  ds.format,\n  COUNT(DISTINCT fsl.sales_line_id) as sales_lines,\n  SUM(fsl.quantity) as units_sold,\n  SUM(fsl.net_amount) as net_sales\nFROM fact_sales_line fsl\nINNER JOIN dim_store ds ON fsl.store_key = ds.store_key\nINNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nWHERE dd.fiscal_year = 'FY2025/26' \n  AND dd.fiscal_period = 2\n  AND ds.store_id < 900\nGROUP BY ds.format\nORDER BY ds.format\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | sales_lines | units_sold | net_sales\nLarge | 16624 | 27468 | 400763.11\nMedium | 22644 | 36996 | 552936.25\nSmall | 7349 | 12232 | 147668.20\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:43:05",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY format\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:43:09",
+   "statement": "SELECT \n  ds.format,\n  COUNT(DISTINCT frl.return_line_id) as return_lines,\n  SUM(frl.quantity_returned) as units_returned,\n  SUM(frl.refund_net) as net_returns\nFROM fact_return_line frl\nINNER JOIN fact_sales_line fsl ON frl.sales_line_id = fsl.sales_line_id\nINNER JOIN dim_store ds ON fsl.store_key = ds.store_key\nINNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nWHERE dd.fiscal_year = 'FY2025/26'\n  AND dd.fiscal_period = 2\n  AND ds.store_id < 900\nGROUP BY ds.format\nORDER BY ds.format\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | return_lines | units_returned | net_returns\nLarge | 536 | 652 | 17707.57\nMedium | 736 | 901 | 25030.11\nSmall | 242 | 292 | 6319.09\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:43:15",
+   "statement": "WITH sales_data AS (\n  SELECT \n    ds.format,\n    SUM(fsl.quantity) as units_sold,\n    SUM(fsl.net_amount) as net_sales\n  FROM fact_sales_line fsl\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26' \n    AND dd.fiscal_period = 2\n    AND ds.store_id < 900\n  GROUP BY ds.format\n),\nreturn_data AS (\n  SELECT \n    ds.format,\n    SUM(frl.quantity_returned) as units_returned,\n    SUM(frl.refund_net) as net_returns\n  FROM fact_return_line frl\n  INNER JOIN fact_sales_line fsl ON frl.sales_line_id = fsl.sales_line_id\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 2\n    AND ds.store_id < 900\n  GROUP BY ds.format\n)\nSELECT \n  s.format,\n  s.units_sold,\n  COALESCE(r.units_returned, 0) as units_returned,\n  ROUND(COALESCE(r.units_returned, 0) * 100.0 / s.units_sold, 2) as return_rate_pct,\n  s.net_sales,\n  COALESCE(r.net_returns, 0) as net_returns\nFROM sales_data s\nLEFT JOIN return_data r ON s.format = r.format\nORDER BY s.format\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | units_sold | units_returned | return_rate_pct | net_sales | net_returns\nLarge | 27468 | 652 | 2.37 | 400763.11 | 17707.57\nMedium | 36996 | 901 | 2.44 | 552936.25 | 25030.11\nSmall | 12232 | 292 | 2.39 | 147668.20 | 6319.09\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:43:23",
+   "statement": "WITH sales_data AS (\n  SELECT \n    ds.format,\n    SUM(fsl.quantity) as units_sold\n  FROM fact_sales_line fsl\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26' \n    AND dd.fiscal_period = 2\n    AND ds.store_id < 900\n  GROUP BY ds.format\n),\nreturn_data AS (\n  SELECT \n    ds.format,\n    SUM(frl.quantity_returned) as units_returned\n  FROM fact_return_line frl\n  INNER JOIN fact_sales_line fsl ON frl.sales_line_id = fsl.sales_line_id\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 2\n    AND ds.store_id < 900\n  GROUP BY ds.format\n)\nSELECT \n  s.format,\n  ROUND(COALESCE(r.units_returned, 0) * 100.0 / s.units_sold, 2) as return_rate\nFROM sales_data s\nLEFT JOIN return_data r ON s.format = r.format\nORDER BY s.format\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | return_rate\nLarge | 2.37\nMedium | 2.44\nSmall | 2.39\n(3 rows)"
+  }
+ ]
+}

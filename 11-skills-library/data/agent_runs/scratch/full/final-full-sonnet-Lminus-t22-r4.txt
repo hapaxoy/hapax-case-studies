@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH contacted AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = 19), web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), spend AS (SELECT m.member_id, f.net_amount FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key JOIN contacted c ON c.member_id = m.member_id JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id AND s.store_id = 900 WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND CASE WHEN s.store_id = 900 THEN w.dispatch_date ELSE f.sale_date END BETWEEN DATE '2026-05-04' AND DATE '2026-05-24') SELECT 19 AS campaign_id, 'Spring Garden Launch 2026' AS campaign_name, (SELECT count(*) FROM contacted) AS members_contacted, (SELECT sum(net_amount) FROM spend) AS net_sales_before_returns_eur",
+  "result": {
+    "columns": ["campaign_id", "campaign_name", "members_contacted", "net_sales_before_returns_eur"],
+    "rows": [[19, "Spring Garden Launch 2026", 15001, 190687.59]]
+  },
+  "definitions_applied": [
+    "Targeted/contacted member = at least one fact_campaign_exposure row in the campaign, counted as distinct member_id (exposure carries member_key, so it was reduced through dim_member to one row per member)",
+    "Spend = net sales excluding VAT, before returns, on lines linked to the member (the campaign-uplift convention)",
+    "Web sales recognised on the Helsinki dispatch date, only for delivered or collected orders",
+    "Store 999 (training store) and category ZZ Test excluded; staff purchases included",
+    "Member versions: member_key on lines and exposures mapped to the stable member_id",
+    "Guest web orders have no member key, so they are not attributed to any member",
+    "Dates in Helsinki time; not rpt.v_daily_sales and no stg_, bak_ or tmp_ tables used"
+  ],
+  "assumptions": [
+    "Reading of 'contacted': any member with at least one contact row in the campaign, whether or not the contact was delivered or opened.",
+    "The mailing is Spring Garden Launch 2026 (campaign_id 19, 4-24 May 2026, email+sms). Its window is exactly the 4-24 May range the requester gave, so I used 4-24 May inclusive and did not add the 7-day tail that the uplift definition uses.",
+    "'Spend' means purchases (net sales before returns, excluding VAT, in EUR), in all channels (stores and web), not only garden products.",
+    "'Those members' is the set of contacted members, whatever their purchase history. Their purchases were counted in 4-24 May whether or not they came after the member's contact."
+  ],
+  "caveats": [
+    "The 15,001 contacted members are fewer than the 15,027 you get from mailing_list_size minus holdout_size (16,624 - 1,597). I counted from the contact records, so members with no contact row are not included. I did not trace the 26 members.",
+    "Of the 15,001 members, 14,814 had at least one delivered contact. If 'contacted' should mean delivered only, the count is 14,814 and the spend figure would change. I did not recompute the spend for that group.",
+    "No holdout member appears among the contacted members. Contacted members come from 31,685 contact rows (email and sms), reduced to one row per member. Some members changed version during the campaign (15,063 member keys for 15,001 members), so counting member_key would overstate the number of members.",
+    "Spend is before returns, in line with the campaign definition. The company's general net sales definition is after returns. Refunds booked 4-24 May to these members were 8,231.32 EUR net, which would bring the figure to about 182,456.27 EUR. That is an approximate cross-check, not a separate validated query: it removes refunds booked in the window regardless of when the item was sold.",
+    "Only 2,605 of the 15,001 contacted members bought anything in the window. The rest count as zero spend.",
+    "Web orders are dated on their dispatch date, not their order date. An order placed before 4 May but dispatched in the window is included, and one placed in the window but dispatched after 24 May is not. Using order dates instead would give a different figure: web lines dated by order date sum to about 36,057 EUR against about 35,169 EUR by dispatch date.",
+    "This figure is for these members' own purchases. It is not the uplift attributable to the campaign. Measuring that would need the holdout comparison, which was not asked.",
+    "The template for the uplift query in the library would count cancelled or still-processing web orders at their order date. I excluded them, though none of the contacted members had such lines in this period.",
+    "Sales data for the period is fully loaded (loaded up to 1 July 2026). No test-store or test-article lines appeared for these members in the window, so those exclusions did not change the total."
+  ]
+}
+```

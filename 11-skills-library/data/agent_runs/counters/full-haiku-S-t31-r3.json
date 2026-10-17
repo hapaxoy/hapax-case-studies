@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t31-r3",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T31",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "93829715e2dd7fd8c342b3d51d9627c1130a10578e04ac72ee10533cf5666772",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:48",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_period = 8\nORDER BY fiscal_year DESC\nLIMIT 10\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21\nFY2024/25 | 8 | FY2024/25 P08 | 2024-11-25 | 2024-12-22\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:57",
+   "statement": "-- Find active members by tier as of the end of FY2024/25 P08 (2024-12-22)\n-- Active = had a transaction during the period\nWITH period_members AS (\n  -- Members with sales transactions\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    \n  UNION\n  \n  -- Members with returns\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_return_line f\n  INNER JOIN dim_date d ON f.return_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    \n  UNION\n  \n  -- Members with web orders\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_web_order f\n  INNER JOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    \n  UNION\n  \n  -- Members with campaign exposure\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_campaign_exposure f\n  INNER JOIN dim_date d ON CAST(f.contact_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n)\nSELECT tier, COUNT(DISTINCT member_id) AS active_members\nFROM period_members\nGROUP BY tier\nORDER BY tier\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members\nBasic | 12826\nGold | 2369\nSilver | 6380\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:05",
+   "statement": "-- Verify: check if any active members from period 8 had invalid membership as of end date\nWITH period_members AS (\n  SELECT DISTINCT m.member_id, m.tier, m.valid_from, m.valid_to\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier, m.valid_from, m.valid_to\n  FROM fact_return_line f\n  INNER JOIN dim_date d ON f.return_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier, m.valid_from, m.valid_to\n  FROM fact_web_order f\n  INNER JOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier, m.valid_from, m.valid_to\n  FROM fact_campaign_exposure f\n  INNER JOIN dim_date d ON CAST(f.contact_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n)\nSELECT COUNT(*) as members_checked,\n       COUNT(CASE WHEN valid_to >= CAST('2024-12-22' AS DATE) THEN 1 END) as valid_at_period_end\nFROM period_members\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_checked | valid_at_period_end\n21609 | 21294\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:12",
+   "statement": "-- Active members by tier as of end of FY2024/25 P08 (2024-12-22)\n-- Includes only members valid as of that date\nWITH period_members AS (\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2024-12-22' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_return_line f\n  INNER JOIN dim_date d ON f.return_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2024-12-22' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_web_order f\n  INNER JOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2024-12-22' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_campaign_exposure f\n  INNER JOIN dim_date d ON CAST(f.contact_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2024-12-22' AS DATE)\n)\nSELECT tier, COUNT(DISTINCT member_id) AS active_members\nFROM period_members\nGROUP BY tier\nORDER BY tier\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members\nBasic | 12624\nGold | 2346\nSilver | 6324\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:17",
+   "statement": "SELECT DISTINCT fiscal_year, calendar_date\nFROM dim_date\nWHERE calendar_date IN (CAST('2026-10-15' AS DATE), CAST('2025-10-15' AS DATE))\nORDER BY calendar_date DESC\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | calendar_date\nFY2025/26 | 2025-10-15\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:20",
+   "statement": "SELECT MIN(calendar_date) as min_date, MAX(calendar_date) as max_date\nFROM dim_date\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min_date | max_date\n2024-04-29 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:24",
+   "statement": "SELECT DISTINCT fiscal_year, MIN(calendar_date) as min_date, MAX(calendar_date) as max_date\nFROM dim_date\nGROUP BY fiscal_year\nORDER BY fiscal_year DESC\n",
+   "n": 7,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | min_date | max_date\nFY2026/27 | 2026-05-04 | 2026-10-04\nFY2025/26 | 2025-04-28 | 2026-05-03\nFY2024/25 | 2024-04-29 | 2025-04-27\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:32",
+   "statement": "-- Active members by tier as of end of FY2025/26 P08 (2025-12-21)\n-- This is the \"last year\" from current FY2026/27\nWITH period_members AS (\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2025-12-21' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_return_line f\n  INNER JOIN dim_date d ON f.return_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2025-12-21' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_web_order f\n  INNER JOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2025-12-21' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_campaign_exposure f\n  INNER JOIN dim_date d ON CAST(f.contact_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2025-12-21' AS DATE)\n)\nSELECT tier, COUNT(DISTINCT member_id) AS active_members\nFROM period_members\nGROUP BY tier\nORDER BY tier\n",
+   "n": 8,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members\nBasic | 16127\nGold | 3344\nSilver | 10248\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:50:39",
+   "statement": "-- Final check: total active members and distribution\nWITH period_members AS (\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2025-12-21' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_return_line f\n  INNER JOIN dim_date d ON f.return_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2025-12-21' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_web_order f\n  INNER JOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2025-12-21' AS DATE)\n    \n  UNION\n  \n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_campaign_exposure f\n  INNER JOIN dim_date d ON CAST(f.contact_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to >= CAST('2025-12-21' AS DATE)\n)\nSELECT COUNT(DISTINCT member_id) AS total_active_members\nFROM period_members\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_active_members\n29719\n(1 row)"
+  }
+ ]
+}

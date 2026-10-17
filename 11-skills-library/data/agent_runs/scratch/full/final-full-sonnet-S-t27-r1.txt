@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "SELECT s.region, ROUND(SUM(CASE WHEN f.sale_date &lt; DATE '2024-09-01' THEN f.gross_amount END), 2) AS aug_2024_gross_sales_incl_vat, ROUND(SUM(CASE WHEN f.sale_date &gt;= DATE '2024-09-01' THEN f.gross_amount END), 2) AS sep_2024_gross_sales_incl_vat FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key WHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND s.store_id &lt;&gt; 999 GROUP BY s.region ORDER BY s.region",
+  "result": {
+    "columns": ["region", "aug_2024_gross_sales_incl_vat", "sep_2024_gross_sales_incl_vat"],
+    "rows": [
+      ["East", 296762.31, 249751.64],
+      ["North", 175960.85, 149625.27],
+      ["Online", 174410.47, 160395.63],
+      ["South", 489776.38, 445837.96],
+      ["West", 402582.35, 363697.29]
+    ]
+  },
+  "definitions_applied": [
+    "Gross sales = fact_sales_line.gross_amount (EUR including VAT), before returns (fact_return_line not used)",
+    "Region as at the time of sale: the store version in fact_sales_line.store_key, not the current dim_store row",
+    "Calendar months, with sale_date as the date of sale",
+    "Web shop (store 900) shown as its own region 'Online', as in rpt.v_daily_sales",
+    "Staff purchases kept in, since they are taxable sales"
+  ],
+  "assumptions": [
+    "'August and September 2024' means calendar months 1-31 August and 1-30 September, not fiscal periods.",
+    "'Regions as they were at the time' means the region on the store version valid on the sale date. In 2024 the five Capital Region stores (101-105) were still in South, and Kouvola (114) was in East. These changed on 2025-04-28.",
+    "Web sales have no geographic region in the warehouse, so they are reported as a separate 'Online' row. The VAT filing needs them, and the old reports kept web separate from the store regions.",
+    "Staff purchases are included in gross sales because VAT applies to them. They are not separately identifiable in the answer table.",
+    "Gross sales are taken as stored in gross_amount. I checked every line: gross equals net times (1 + VAT rate) to within 2 cents."
+  ],
+  "caveats": [
+    "Correction: I excluded the 'Training store' (store 999, region 'Head office'), which is a non-trading test location. It has 283 lines worth EUR 7,633.94 gross (August 4,282.23, September 3,351.71), and 217 of them are flagged as staff purchases. The warehouse total for the two months is EUR 2,916,434.09. The table sums to EUR 2,908,800.15, which is that total less the training store.",
+    "Using current store regions would give a different split. Stores 101-105 would show as 'Capital Region' and Kouvola would move from East to South. I did not do this, as requested.",
+    "Finnish VAT rates changed on 2024-09-01, from 24% to 25.5%. The August lines carry 24% and the September lines carry 25.5%, as the law requires. The rates are applied correctly in the data, so I made no adjustment. Reduced-rate lines (14% and 10%) run through both months.",
+    "Tampere Lamminpää (136, West) opened on 2024-09-02, so it contributes to September only.",
+    "Vantaa Tammisto (104) was closed for a refit from 2024-07-08 to 2024-08-11 and has no sales in that window. This is expected and nothing was imputed. There are no sales on non-trading days.",
+    "I found no duplicate sales lines or orphaned store keys, and no sale_date values that disagree with Helsinki local time. Web order timestamps are in UTC, but sale_date is already the local date, so month boundaries are right.",
+    "The online figures use the web lines in fact_sales_line, which are the same lines rpt.v_daily_sales counts as WB. Web orders that were cancelled are not separately excluded because fact_sales_line holds only the lines as booked. Check this with Finance if cancelled orders should come out."
+  ]
+}
+```

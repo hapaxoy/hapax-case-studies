@@ -1,0 +1,31 @@
+Perfect! The query has been validated and checks pass. Now let me prepare the final response.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year_filter,\n           18 AS week_start,\n           34 AS week_end\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period,\n       SUM(n.net_sales) AS web_net_sales\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nCROSS JOIN params\nWHERE n.store_id = 900\n  AND d.fiscal_year = params.fiscal_year_filter\n  AND d.fiscal_week BETWEEN params.week_start AND params.week_end\nGROUP BY 1, 2\nORDER BY 1, 2;",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_net_sales"],
+    "rows": [
+      ["FY2025/26", 5, 145626.90],
+      ["FY2025/26", 6, 175588.62],
+      ["FY2025/26", 7, 154977.27],
+      ["FY2025/26", 8, 225265.08]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales (net amount excluding VAT, after returns; store 999 and ZZ Test category excluded)",
+    "Web sales recognised on dispatch date in Helsinki time",
+    "Web channel identified by store_id 900",
+    "Returns reduce net sales on return date, not on original sale date"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (fiscal year prior to current FY2026/27)",
+    "Periods 5-8 correspond to FY2025/26 fiscal periods P05 through P08 (25 August to 21 December 2025)",
+    "Web includes all fulfilment types (home delivery and click-and-collect)"
+  ],
+  "caveats": [
+    "Returns can arrive up to 30 days after a sale; all requested periods are complete as of the warehouse load date (4 October 2026)",
+    "Query validated against rpt_daily_store_sales control totals with zero gap"
+  ]
+}
+```

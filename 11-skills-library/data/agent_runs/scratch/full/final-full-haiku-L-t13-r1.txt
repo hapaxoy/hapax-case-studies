@@ -1,0 +1,29 @@
+Based on my analysis, I have successfully calculated the average transaction value by store format for period 4 of FY2026/27 (2026-08-03 to 2026-08-30). Let me verify that my final query is clean and ready:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period\n)\nSELECT s.format,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900\n  AND NOT f.staff_purchase_flag\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY s.format\nORDER BY atv DESC;",
+  "result": {
+    "columns": ["format", "atv"],
+    "rows": [
+      ["Large", 60.67],
+      ["Medium", 60.27],
+      ["Small", 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV: net sales before returns divided by number of sales receipts",
+    "Store measure: physical stores only, staff purchases excluded, test articles excluded",
+    "Fiscal period and calendar dates from dim_date"
+  ],
+  "assumptions": [
+    "Period 4 this year interpreted as FY2026/27 P04 (current fiscal year as of request date 2026-10-06)",
+    "Store format reported as-is (current dimension version)"
+  ],
+  "caveats": [
+    "Warehouse schema comment indicates format values should be Hyper/Standard/Express, but actual warehouse contains Large/Medium/Small values",
+    "Web shop (store 900) excluded per ATV definition; store 999 (training) excluded per policy",
+    "Staff purchases excluded from ATV per company definition"
+  ]
+}
+```

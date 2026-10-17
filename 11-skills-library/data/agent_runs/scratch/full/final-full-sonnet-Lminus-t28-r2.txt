@@ -1,0 +1,43 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2026-09-27' AS week_ending), closing AS (SELECT cp.category, SUM(fs.closing_units) AS closing_units FROM fact_stock_week fs JOIN dim_store s ON s.store_key = fs.store_key JOIN dim_product p ON p.product_key = fs.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current CROSS JOIN params WHERE fs.week_ending_date = params.week_ending AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' GROUP BY 1), sold AS (SELECT cp.category, SUM(f.quantity) AS units_sold_4w FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current CROSS JOIN params WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7 AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' GROUP BY 1) SELECT c.category, ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) AS weeks_of_cover FROM closing c LEFT JOIN sold s USING (category) ORDER BY c.category",
+  "result": {
+    "columns": ["category", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 11.6],
+      ["Cleaning &amp; Household", 7.6],
+      ["Electrical", 9.2],
+      ["Furniture", 29.5],
+      ["Garden", 16.4],
+      ["Home Textiles &amp; Decor", 12.2],
+      ["Kitchen &amp; Dining", 14.6],
+      ["Paint &amp; Decorating", 12.6],
+      ["Seasonal", 48.8],
+      ["Tools &amp; Hardware", 7.7]
+    ]
+  },
+  "definitions_applied": [
+    "Weeks of cover = closing stock units at the end of the week / average weekly units sold over the prior four fiscal weeks",
+    "Closing stock is a week-end snapshot, summed across stores and products (single week, so nothing summed across weeks)",
+    "Last period = last completed fiscal period (FY2026/27 P05, ended Sunday 27 September 2026)",
+    "Units sold = quantity on sales lines by sale date",
+    "Physical stores only (store_id below 900); web shop (900) has no stock and is excluded; store 999 excluded",
+    "Category ZZ Test excluded from stock and sales",
+    "Category as-is (current dim_product version)",
+    "Ranged articles only (fact_stock_week holds rows only for articles a store ranges)"
+  ],
+  "assumptions": [
+    "'End of last period' read as the closing stock snapshot of the last week of FY2026/27 P05, week ending Sunday 27 September 2026 (the request was received 7 October 2026; P06 has only just started).",
+    "'Prior four fiscal weeks' read literally as the four weeks before the snapshot week: 24 August to 20 September 2026 (FY2026/27 weeks 18 to 21, i.e. the last week of P4 and the first three weeks of P5). The snapshot week itself (21 to 27 September) is not in the sales window. Counting the four weeks up to and including the snapshot week would change the figures, most for Seasonal (42.0 instead of 48.8), Garden (18.5 instead of 16.4) and Electrical (8.5 instead of 9.2).",
+    "Sales window units include staff purchases (about 1.5% of units), as net sales and unit definitions include them.",
+    "Categories are as-is (current hierarchy). The outdoor lighting move from Garden to Electrical (27 October 2025) predates the whole window, so as-was would give the same figures.",
+    "Weeks of cover rounded to one decimal place."
+  ],
+  "caveats": [
+    "No data corrections were needed. fact_stock_week for 27 September 2026 has 27,143 rows with no duplicates at store x article x week and a single ETL load. It has no rows for store 999, the web shop, ZZ Test articles, delisted articles or the closed Savonlinna store, so the filters changed nothing in the stock figures.",
+    "Units sold over 24 August to 20 September 2026 total 69,438 for physical stores. That matches rpt_daily_store_sales units_sold for the same days exactly, and there are no duplicate sales lines.",
+    "Seasonal (48.8 weeks), Furniture (29.5) and Garden (16.4) have very high cover. Their sales are low or falling relative to stock, and Garden and Seasonal are seasonal, so a trailing four-week rate may overstate cover.",
+    "Cover is a ratio of total stock to trailing sales for the whole category across all 38 physical stores. It says nothing about individual stores or articles, and it does not cover web demand, which is picked from the central warehouse (not in the stock table)."
+  ]
+}
+```

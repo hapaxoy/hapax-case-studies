@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, d.fiscal_period, cp.category, cp.subcategory, SUM(r.quantity_returned) AS units_returned FROM fact_return_line r JOIN dim_product p ON p.product_key = r.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_store s ON s.store_key = r.store_key JOIN dim_date d ON d.calendar_date = r.return_date WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 AND cp.category = 'Garden' AND cp.subcategory = 'Garden Furniture' AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' GROUP BY 1, 2, 3, 4",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "subcategory", "units_returned"],
+    "rows": [["FY2026/27", 4, "Garden", "Garden Furniture", 92]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 4 of FY2026/27 is fiscal weeks 14 to 17, 3 August to 30 August 2026, fully loaded",
+    "Returns counted on their own return date (return_date), not the date of the original sale",
+    "Units are quantity_returned from fact_return_line",
+    "Store 999 (training store) and category ZZ Test excluded (the filter changed nothing here)",
+    "Web returns booked to the web shop (store 900) included, as returns are booked where they are processed",
+    "Product hierarchy as-is: current category and subcategory version of each SKU"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year, FY2026/27 (request received 5 October 2026), so 'period 4' is FY2026/27 P4.",
+    "'Garden Furniture' is the subcategory of that name under the Garden category. It is not the separate Furniture category.",
+    "'Handed back and booked as returned' means return lines booked in the period (return date in P4), not goods sold in P4 that came back later. Units are physical units on the return lines, not refund value.",
+    "All reason codes are included (changed mind, defective, damaged in transit, not as described, wrong size or fit), as the request asks for every unit handed back.",
+    "Both store returns and web returns are included, with no channel split because none was asked for: 58 units from physical stores and 34 from the web shop."
+  ],
+  "caveats": [
+    "No corrections were needed. Every return line in the period is unique (one per return_line_id and per sales line), none returns more units than were sold, none is dated before its sale, none has a non-positive refund, and the Helsinki date of the return timestamp matches return_date on every line.",
+    "The as-is and as-was answers are the same, 92 units. The Garden Furniture subcategory was not affected by the outdoor lighting move to Electrical.",
+    "Returns for goods sold in P4 can still arrive up to 30 days later. That does not change this figure, since it is counted on return date and P4 is complete.",
+    "No store-level control-total check against rpt_daily_store_sales was done, because that table holds money values only and has no units or subcategory."
+  ]
+}
+```

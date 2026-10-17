@@ -1,0 +1,33 @@
+```json
+{
+  "sql": "WITH sold AS (SELECT p.sku, SUM(f.quantity) AS units_sold FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id = 102 AND p.category &lt;&gt; 'ZZ Test' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' GROUP BY p.sku) SELECT 'FY2026/27' AS fiscal_year, 5 AS fiscal_period, 102 AS store_id, 'Helsinki Pitäjänmäki' AS store_name, so.sku, cp.product_name, so.units_sold FROM sold so JOIN dim_product cp ON cp.sku = so.sku AND cp.is_current ORDER BY so.units_sold DESC, so.sku LIMIT 3",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_id", "store_name", "sku", "product_name", "units_sold"],
+    "rows": [
+      ["FY2026/27", 5, 102, "Helsinki Pitäjänmäki", 101624, "Fixings &amp; Fasteners Raudikko 251", 52],
+      ["FY2026/27", 5, 102, "Helsinki Pitäjänmäki", 101778, "Fixings &amp; Fasteners Nordhem 349", 44],
+      ["FY2026/27", 5, 102, "Helsinki Pitäjänmäki", 102244, "Batteries &amp; Bulbs Havu Pro 791", 42]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 5 of FY2026/27 is 31 Aug to 27 Sep 2026, 4 weeks, fully loaded",
+    "Units sold = quantity on sales lines, by sale date (Helsinki business date)",
+    "Store scope: physical store 102 Helsinki Pitäjänmäki only; web shop (store 900) lines are not in this store",
+    "Test articles (category ZZ Test) and store 999 excluded; none occurred in this store and period, so no total changed",
+    "Staff purchases included (they count in sales; no exclusion applies to units sold)",
+    "Product identified by stable sku, named from the current product version (is_current)",
+    "Control check against rpt_daily_store_sales: units sold and net sales before returns for store 102 agree exactly over the 28 days"
+  ],
+  "assumptions": [
+    "'Period 5 this year' read as FY2026/27 P05 (31 Aug to 27 Sep 2026), the current fiscal year and the last completed period at the request date (7 Oct 2026)",
+    "'Products' read as individual articles (sku), not subcategories or brands",
+    "'Units sold' read as gross units on sales lines, before returns, as the company definition of units sold in the weeks-of-cover metric; the ranking does not change if returned units are deducted",
+    "Ties were not an issue: the fourth-ranked article sold 30 units, well below the third at 42"
+  ],
+  "caveats": [
+    "No data problem found in this store and period: no duplicate sales lines (sales_line_id and receipt_id + line_no both unique, 2,121 lines, 3,740 units) and no sales dated outside the period",
+    "Returns were not netted off. If returned units were deducted, Batteries &amp; Bulbs Havu Pro 791 would drop from 42 to 41 units (1 unit returned), still third; the other two had no returns",
+    "Cumulative units are for sales dated in P5 only; sales in the first week of period 6 are not included"
+  ]
+}
+```

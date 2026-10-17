@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t60-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T60",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "384d02db5b466021a75c897a0ce06d04dff3c2844bfba0cb2ccb3c33e96cfbd6",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:35:44",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5-P8 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5-P8 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P05, FY2025/26 P06, FY2025/26 P07, FY2025/26 P08\n  fiscal_weeks                       18-34\n  start_date                         2025-08-25\n  end_date                           2025-12-21\n  weeks                              17\n  days                               119\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 18 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:50",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT w.dispatch_date AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS web_net_sales, COUNT(*) AS n_rows\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY 1, 2\nORDER BY 2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | web_net_sales | n_rows\nFY2025/26 | 5 | 145626.90 | 5602\nFY2025/26 | 6 | 175588.62 | 7111\nFY2025/26 | 7 | 154977.27 | 6537\nFY2025/26 | 8 | 225265.08 | 9825\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:56",
+   "statement": "SELECT d.fiscal_year, d.fiscal_period, SUM(r.net_sales) AS control_net_sales, SUM(r.net_sales_before_returns) AS before_ret, SUM(r.returns_net) AS rets\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\nWHERE r.store_id = 900 AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY 1,2 ORDER BY 2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | control_net_sales | before_ret | rets\nFY2025/26 | 5 | 145626.90 | 158717.41 | 13090.51\nFY2025/26 | 6 | 175588.62 | 193190.55 | 17601.93\nFY2025/26 | 7 | 154977.27 | 167120.98 | 12143.71\nFY2025/26 | 8 | 225265.08 | 243086.38 | 17821.30\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:00",
+   "statement": "SELECT 'dup_sales_lines' AS chk, COUNT(*) AS n FROM (SELECT receipt_id, line_no FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=900 AND f.sale_date BETWEEN DATE '2025-08-01' AND DATE '2025-12-31' GROUP BY 1,2 HAVING COUNT(*)>1)\nUNION ALL SELECT 'dup_web_orders', COUNT(*) FROM (SELECT web_order_id FROM fact_web_order GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL SELECT 'dup_returns', COUNT(*) FROM (SELECT return_line_id FROM fact_return_line GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL SELECT 'dup_sales_line_id', COUNT(*) FROM (SELECT sales_line_id FROM fact_sales_line GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL SELECT 'web_lines_no_dispatch_order', COUNT(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key LEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id=900 AND o.web_order_id IS NULL\nUNION ALL SELECT 'web_lines_not_dispatched_status', COUNT(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id=900 AND o.status NOT IN ('delivered','collected')\nUNION ALL SELECT 'test_cat_web_lines_in_range', COUNT(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE s.store_id=900 AND p.category='ZZ Test'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "chk | n\ndup_sales_lines | 0\ndup_web_orders | 0\ndup_returns | 0\ndup_sales_line_id | 0\nweb_lines_no_dispatch_order | 0\nweb_lines_not_dispatched_status | 0\ntest_cat_web_lines_in_range | 19\n(7 rows)"
+  }
+ ]
+}

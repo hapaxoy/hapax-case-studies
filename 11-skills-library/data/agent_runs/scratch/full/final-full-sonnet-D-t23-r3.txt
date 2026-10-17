@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH sold AS (SELECT f.sales_line_id, f.net_amount, s.format FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT 'FY2025/26' AS fiscal_year, 2 AS fiscal_period, s.format AS store_format, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(s.net_amount), 2) AS return_rate_pct FROM sold s LEFT JOIN refunds r ON r.sales_line_id = s.sales_line_id GROUP BY s.format ORDER BY s.format",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_format", "return_rate_pct"],
+    "rows": [
+      ["FY2025/26", 2, "Large", 4.42],
+      ["FY2025/26", 2, "Medium", 4.53],
+      ["FY2025/26", 2, "Small", 4.28],
+      ["FY2025/26", 2, "Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate = refunded net (refund_net) divided by sold net, both excluding VAT",
+    "Sale-week cohort: sold lines are selected by the fiscal period of fact_sales_line.sale_date, then every refund on those lines is added through sales_line_id, whenever and wherever it was booked",
+    "Store 999 (training store) and category ZZ Test left out",
+    "Fiscal calendar from dim_date: FY2025/26 period 2 runs 26 May 2025 to 22 June 2025 (4 weeks)",
+    "Format taken from the store version on the sale line; the web shop (store 900) is format Web",
+    "Staff purchases kept in, as in net sales",
+    "Deprecated objects (rpt.v_daily_sales, stg_, bak_, tmp_, _old tables) not used"
+  ],
+  "assumptions": [
+    "'Period 2 last year' was read as FY2025/26 P2. The request is dated 6 October 2026, which falls in FY2026/27, and past requests asked in FY2026/27 read 'last year' as FY2025/26.",
+    "'What share of what was sold came back' was read as the company's return rate, by value: refunded net divided by sold net. It is not a share of units or of lines.",
+    "'Split by store format' was read as the formats Large, Medium and Small plus Web, which is a format value in the warehouse. The web shop is shown as its own row, not folded into the stores.",
+    "The training format (store 999 only) has no row because store 999 is excluded from all sales reporting."
+  ],
+  "caveats": [
+    "The 'Training' format (store 999, 126 lines, 2,222.21 EUR net) was excluded. The test-article exclusion (ZZ Test) also removed one web line, about 3.82 EUR net, which lowers the Web sold total slightly (183,102.31 to 183,098.49).",
+    "The dim_store.format column comment is out of date. The real values are Large, Medium, Small, Web and Training.",
+    "The period is fully complete. The latest return is dated 276 days after 1 January 2026, and the longest gap between a sale and its return is 56 days, so the rates are final. Some returns arrive later than the 30 days the wiki mentions.",
+    "Return rate here is a sale-week cohort figure. It counts a refund in the period the item was sold, not the period it came back, so it will not match net sales, where a return reduces sales on its own return date.",
+    "Web has a much higher return rate (12.23%) than the stores (4.28% to 4.53%). Web returns are booked to the web shop, but I attributed each refund to the format of the original sale line, so no web refund is counted against a store.",
+    "I found 418 duplicated receipt_id and line_no pairs in fact_sales_line, all in September 2025 (about 836 rows, 178 receipts). None are in the period 2 window, so no correction was needed. I found no duplicate sales_line_id, no orphan returns, no refund larger than its sold line, and no VAT mismatches in the period.",
+    "As a check on the control totals, sold net per format agrees with the line-level data. The rpt_daily_store_sales control check was not run, because it only holds net sales per store per day and has no format or refund-by-sale-week view."
+  ]
+}
+```

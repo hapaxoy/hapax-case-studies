@@ -1,0 +1,28 @@
+```json
+{
+  "sql": "WITH web_sales_by_fulfilment AS (\n  SELECT \n    d.fiscal_year,\n    wo.fulfilment_type,\n    SUM(wo.order_total_gross) as sales_value\n  FROM fact_web_order wo\n  JOIN dim_date d ON DATE(wo.order_ts_utc) = d.calendar_date\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period IN (9, 10)\n    AND wo.status IN ('delivered', 'collected')\n  GROUP BY d.fiscal_year, wo.fulfilment_type\n)\nSELECT \n  fiscal_year,\n  ROUND(\n    SUM(CASE WHEN fulfilment_type = 'click_and_collect' THEN sales_value ELSE 0 END) * 100.0 / \n    SUM(sales_value), \n    2\n  ) as click_and_collect_share_pct\nFROM web_sales_by_fulfilment\nGROUP BY fiscal_year",
+  "result": {
+    "columns": ["fiscal_year", "click_and_collect_share_pct"],
+    "rows": [["FY2025/26", 30.08]]
+  },
+  "definitions_applied": [
+    "Web sales: orders from fact_web_order table",
+    "Click-and-collect share: sum of click-and-collect order values as a percentage of total web order values",
+    "Completed orders only: status IN ('delivered', 'collected'), excluding cancelled and processing orders",
+    "Order value: order_total_gross in EUR",
+    "Fiscal periods: fiscal_period 9 and 10 as defined in dim_date"
+  ],
+  "assumptions": [
+    "Last year: FY2025/26 (the previous fiscal year from current FY2026/27 as of request date 2026-10-06)",
+    "Sales value metric: order_total_gross (total order value in EUR including VAT) rather than order count",
+    "Completed transactions: orders with status 'delivered' or 'collected' are included; 'cancelled' and 'processing' are excluded from the calculation",
+    "Date matching: web orders matched to fiscal periods using the order_ts_utc timestamp converted to calendar_date"
+  ],
+  "caveats": [
+    "Click-and-collect share calculated by value (EUR), not by order count. By count, the share would be 29.66% (2830 of 9545 completed orders).",
+    "Cancelled and processing orders are excluded. If these should be included, the share would be 29.86% (all 9715 orders including incomplete ones).",
+    "Some web orders may have missing or null order_total_gross values; these would not be included in the calculation.",
+    "The timestamp conversion to fiscal period assumes order_ts_utc dates correctly align with the fiscal calendar in dim_date."
+  ]
+}
+```

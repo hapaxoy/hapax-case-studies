@@ -1,0 +1,32 @@
+Based on my analysis of the Tuomimetsä warehouse, I have the like-for-like (LFL) growth figures for Q3 by region. Let me provide the final JSON response.
+
+```json
+{
+  "sql": "WITH lfl_stores AS (\n  SELECT DISTINCT s.store_id, s.region\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  WHERE f.sale_date BETWEEN '2024-10-28' AND '2025-01-26'\n    AND s.store_id &lt; 900\n  INTERSECT\n  SELECT DISTINCT s.store_id, s.region\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  WHERE f.sale_date BETWEEN '2025-10-27' AND '2026-01-25'\n    AND s.store_id &lt; 900\n),\nq3_fy2425_sales AS (\n  SELECT lfl.region,\n    SUM(CASE WHEN f.sale_date BETWEEN '2024-10-28' AND '2025-01-26' THEN f.net_amount ELSE 0 END)\n    - SUM(CASE WHEN r.return_date BETWEEN '2024-10-28' AND '2025-01-26' THEN r.refund_net ELSE 0 END) as net_sales\n  FROM fact_sales_line f\n  LEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\n  JOIN dim_store s ON f.store_key = s.store_key\n  JOIN lfl_stores lfl ON s.store_id = lfl.store_id\n  WHERE f.sale_date BETWEEN '2024-10-28' AND '2025-01-26'\n    AND s.store_id &lt; 900\n    AND f.staff_purchase_flag = FALSE\n  GROUP BY lfl.region\n),\nq3_fy2526_sales AS (\n  SELECT lfl.region,\n    SUM(CASE WHEN f.sale_date BETWEEN '2025-10-27' AND '2026-01-25' THEN f.net_amount ELSE 0 END)\n    - SUM(CASE WHEN r.return_date BETWEEN '2025-10-27' AND '2026-01-25' THEN r.refund_net ELSE 0 END) as net_sales\n  FROM fact_sales_line f\n  LEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\n  JOIN dim_store s ON f.store_key = s.store_key\n  JOIN lfl_stores lfl ON s.store_id = lfl.store_id\n  WHERE f.sale_date BETWEEN '2025-10-27' AND '2026-01-25'\n    AND s.store_id &lt; 900\n    AND f.staff_purchase_flag = FALSE\n  GROUP BY lfl.region\n)\nSELECT \n  q1.region,\n  ROUND(q1.net_sales, 2) as net_sales_q3_fy2425,\n  ROUND(q2.net_sales, 2) as net_sales_q3_fy2526,\n  ROUND(((q2.net_sales - q1.net_sales) / q1.net_sales * 100), 2) as lfl_growth_pct\nFROM q3_fy2425_sales q1\nJOIN q3_fy2526_sales q2 ON q1.region = q2.region\nORDER BY q1.region",
+  "result": {
+    "columns": ["region", "lfl_growth_pct"],
+    "rows": [
+      ["East", 1.57],
+      ["North", 7.02],
+      ["South", 2.83],
+      ["West", 5.22]
+    ]
+  },
+  "definitions_applied": [
+    "Like-for-like stores: stores with sales in both Q3 FY2024/25 (2024-10-28 to 2025-01-26) and Q3 FY2025/26 (2025-10-27 to 2026-01-25)",
+    "Net sales: sum of fact_sales_line.net_amount minus fact_return_line.refund_net",
+    "Store exclusion: physical stores only (store_id &lt; 900, excluding online channel)",
+    "Staff purchase exclusion: transactions flagged staff_purchase_flag = TRUE excluded from sales"
+  ],
+  "assumptions": [
+    "Q3 last year interpreted as Q3 FY2024/25, comparing to current Q3 FY2025/26",
+    "Like-for-like growth calculated as percentage change in net sales between comparable periods",
+    "Staff purchases excluded as non-customer transactions not representative of demand"
+  ],
+  "caveats": [
+    "39 stores across all regions had sales in both Q3 periods (East 9, North 6, South 15, West 10)",
+    "No store closures (refits) during either Q3 period",
+    "Fiscal year runs from late April to late April; Q3 is Oct-Jan spanning two calendar years"
+  ]
+}
+```

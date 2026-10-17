@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "SELECT d.calendar_year AS calendar_year, d.calendar_month AS calendar_month, ROUND(SUM(f.gross_amount), 2) AS store_sales_incl_vat_before_returns FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' GROUP BY 1, 2 ORDER BY 1, 2",
+  "result": {
+    "columns": ["calendar_year", "calendar_month", "store_sales_incl_vat_before_returns"],
+    "rows": [
+      [2024, 8, 1365081.89],
+      [2024, 9, 1208912.16]
+    ]
+  },
+  "definitions_applied": [
+    "Store sales means physical stores only (store_id below 900); the web shop (store 900) is left out",
+    "Including VAT: sum of gross_amount per line, so each line keeps its own VAT rate (24% standard before 1 September 2024, 25.5% from then; 14% and 10% reduced rates)",
+    "Before returns: fact_return_line is not used",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Staff purchases kept in (they count in sales; only ATV excludes them)",
+    "Stores dated on sale_date (Helsinki business date)",
+    "Control total: net amounts for the same selection reconciled to rpt_daily_store_sales.net_sales_before_returns by store and day",
+    "Deprecated objects (rpt.v_daily_sales, channel_code across the migration, stg_/bak_/tmp_ tables) not used"
+  ],
+  "assumptions": [
+    "August 2024 and September 2024 are read as calendar months (1 to 31 August and 1 to 30 September 2024), because the request names calendar months and not fiscal periods",
+    "Store sales is read as physical stores only, with web excluded; including the web shop would add 174,410.47 for August and 160,395.63 for September (gross, order date, web is normally dated on dispatch)",
+    "Staff purchases are included in the figures (15% staff discount already in the line values); they carry 16,949.92 of the August figure and 16,438.40 of the September figure",
+    "No restatement of regions or categories is needed because the figures are company-wide totals"
+  ],
+  "caveats": [
+    "The VAT rate change on 1 September 2024 (standard 24% to 25.5%) falls between the two months, so September is not directly comparable with August on a gross basis. Line-level checks show gross_amount equals net_amount times (1 + vat_rate) on every line in both months",
+    "Net amounts for the same selection (stores, test articles out) match rpt_daily_store_sales.net_sales_before_returns exactly for every store and day (August 1,101,807.91; September 964,016.09), with no gaps",
+    "Store 999 and ZZ Test lines were filtered out. Store 999 lines: 158 in August and 125 in September; ZZ Test lines: 42 and 26, in all stores including 999. The filter changes the totals slightly",
+    "Returns are not deducted, as requested. These are not net sales",
+    "No duplicate sales lines were found (sales_line_id and receipt_id plus line_no are unique in both months)"
+  ]
+}
+```

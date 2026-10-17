@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "SELECT \n    p.sku,\n    p.product_name,\n    ROUND(SUM(f.net_amount) - COALESCE(SUM(r.refund_net), 0), 2) as web_net_sales\nFROM fact_sales_line f\nJOIN fact_web_order o ON f.receipt_id = o.web_order_id\nJOIN dim_product p ON f.product_key = p.product_key\nJOIN dim_store s ON f.store_key = s.store_key\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE s.store_id = 900\n  AND CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) &gt;= DATE '2025-11-03'\n  AND p.category &lt;&gt; 'ZZ Test'\n  AND o.status &lt;&gt; 'cancelled'\nGROUP BY p.sku, p.product_name\nORDER BY web_net_sales DESC\nLIMIT 10;",
+  "result": {
+    "columns": ["sku", "product_name", "web_net_sales"],
+    "rows": [
+      [100955, "Interior Paint Norvik 298", 14415.82],
+      [103774, "Christmas Decorations Poutaranta Home 601", 13216.31],
+      [103390, "Bedroom Peltola 793", 10137.07],
+      [100529, "Garden Furniture Raudikko 536", 10104.50],
+      [103747, "Christmas Decorations Mäntylä 402", 9207.01],
+      [103791, "Christmas Decorations Havu 430", 9049.06],
+      [100573, "Garden Furniture Ahvenisto 564", 6957.22],
+      [103928, "Sauna &amp; Winter Havu 699", 6957.04],
+      [103861, "Christmas Decorations Kuusela 620", 6679.65],
+      [100528, "Garden Furniture Norvik 499", 6610.15]
+    ]
+  },
+  "definitions_applied": [
+    "Web net sales: net amount excluding VAT, after returns",
+    "Web sales recognised on dispatch date in Helsinki time",
+    "Web identified by store_id 900",
+    "Cancelled orders excluded from sales",
+    "Test articles (category ZZ Test) excluded",
+    "Returns subtracted from sales totals"
+  ],
+  "assumptions": [
+    "Web sales measured on dispatch date (from fact_web_order.dispatch_ts_utc converted to Helsinki time), not order date",
+    "Returns are left-joined and subtracted line-by-line from corresponding sales",
+    "Products ranked by total net sales amount (EUR)"
+  ],
+  "caveats": [
+    "Returns can arrive up to 30 days after sale; sales within the last month may have incomplete return data",
+    "Warehouse loaded through 4 October 2026",
+    "Figures are net of VAT; use-of-proceeds calculations may require gross amounts",
+    "Products are ranked solely by sales value; no volume, order count or margin weighting"
+  ]
+}
+```

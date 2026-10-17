@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-Lminus-t50-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T50",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "e768aab793440585b515c8b1eb9437cd508e532aed9b5257c12c88d9f719c40a",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:31:34",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 6 AS first_period, 8 AS last_period\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n    SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, o.fulfilment_type, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period,\n       SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) AS click_collect_net,\n       SUM(l.net_sales) AS web_net,\n       ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 1) AS click_collect_share_pct\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.business_date\nCROSS JOIN params\nWHERE d.fiscal_year = params.fiscal_year AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1,2\nORDER BY 1,2;\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | click_collect_net | web_net | click_collect_share_pct\nFY2025/26 | 6 | 48901.47 | 175588.62 | 27.9\nFY2025/26 | 7 | 39403.04 | 154977.27 | 25.4\nFY2025/26 | 8 | 60899.16 | 225265.08 | 27.0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:31:40",
+   "statement": "SELECT d.fiscal_year, d.fiscal_period, MIN(d.calendar_date) AS pstart, MAX(d.calendar_date) AS pend,\n       ROUND(SUM(r.net_sales),2) AS ctrl_net, ROUND(SUM(r.returns_net),2) AS ctrl_returns, ROUND(SUM(r.net_sales_before_returns),2) AS ctrl_before\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\nWHERE r.store_id = 900 AND d.fiscal_year='FY2025/26' AND d.fiscal_period BETWEEN 6 AND 8\nGROUP BY 1,2 ORDER BY 2;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | pstart | pend | ctrl_net | ctrl_returns | ctrl_before\nFY2025/26 | 6 | 2025-09-22 | 2025-10-26 | 175588.62 | 17601.93 | 193190.55\nFY2025/26 | 7 | 2025-10-27 | 2025-11-23 | 154977.27 | 12143.71 | 167120.98\nFY2025/26 | 8 | 2025-11-24 | 2025-12-21 | 225265.08 | 17821.30 | 243086.38\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:31:41",
+   "statement": "SELECT d.fiscal_period, COUNT(*) AS lines, COUNT(DISTINCT (f.receipt_id, f.line_no)) AS distinct_lines, COUNT(DISTINCT f.sales_line_id) AS distinct_ids,\n SUM(CASE WHEN o.web_order_id IS NULL THEN 1 ELSE 0 END) AS no_order, SUM(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS testlines\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_date d ON d.calendar_date=f.sale_date\nLEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id\nWHERE s.store_id=900 AND d.fiscal_year='FY2025/26' AND d.fiscal_period BETWEEN 6 AND 8\nGROUP BY 1 ORDER BY 1;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | lines | distinct_lines | distinct_ids | no_order | testlines\n6 | 6750 | 6750 | 6750 | 0 | 1\n7 | 6203 | 6203 | 6203 | 0 | 0\n8 | 9553 | 9553 | 9553 | 0 | 0\n(3 rows)"
+  }
+ ]
+}

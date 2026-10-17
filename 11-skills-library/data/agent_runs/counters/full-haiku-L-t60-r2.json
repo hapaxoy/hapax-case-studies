@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-L-t60-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T60",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "a0295496cd0c4d7fb25698a5542b59bdf63c99363f1a9f360783c1c6971f1fa0",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:11:37",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5-P8 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5-P8 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P05, FY2025/26 P06, FY2025/26 P07, FY2025/26 P08\n  fiscal_weeks                       18-34\n  start_date                         2025-08-25\n  end_date                           2025-12-21\n  weeks                              17\n  days                               119\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 18 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:11:51",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- web sales on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS web_net_sales\nFROM net_lines n\nJOIN dim_date d  ON d.calendar_date = n.business_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (5, 6, 7, 8)\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | web_net_sales\nFY2025/26 | 5 | 145626.90\nFY2025/26 | 6 | 175588.62\nFY2025/26 | 7 | 154977.27\nFY2025/26 | 8 | 225265.08\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:11:58",
+   "statement": "query-check/scripts/query_check.py --period FY2025/26 P5-P8 --control --control-stores web --value-col web_net_sales",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "\n[stderr]\nusage: query_check.py [-h] (--sql SQL | --file FILE) [--grain GRAIN]\n                      [--date-col DATE_COL] [--start START] [--end END]\n                      [--period PERIOD] [--ts-col TS_COL] [--control]\n                      [--value-col VALUE_COL]\n                      [--control-measure CONTROL_MEASURE]\n                      [--store-col STORE_COL]\n                      [--control-stores CONTROL_STORES]\n                      [--tolerance TOLERANCE] [--show SHOW] [--json]\n                      db\nquery_check.py: error: one of the arguments --sql --file is required\n\n[exit code 2]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:12:05",
+   "statement": "query-check/scripts/query_check.py --period FY2025/26 P5-P8 --control --control-stores web --value-col web_net_sales --sql WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category <> 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, p.sku, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id = 900 AND p.category <> 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS web_net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (5, 6, 7, 8) GROUP BY d.fiscal_year, d.fiscal_period ORDER BY d.fiscal_period",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n[stderr]\n--period 'FY2025/26 P5-P8' not found in ref_fiscal_calendar (format: 'FY2026/27 P05').\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:12:12",
+   "statement": "query-check/scripts/query_check.py --period FY2025/26 P05-P08 --control --control-stores web --value-col web_net_sales --sql WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category <> 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, p.sku, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id = 900 AND p.category <> 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS web_net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (5, 6, 7, 8) GROUP BY d.fiscal_year, d.fiscal_period ORDER BY d.fiscal_period",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n[stderr]\n--period 'FY2025/26 P05-P08' not found in ref_fiscal_calendar (format: 'FY2026/27 P05').\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:12:18",
+   "statement": "query-check/scripts/query_check.py --start 2025-08-25 --end 2025-12-21 --control --control-stores web --value-col web_net_sales --sql WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category <> 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, p.sku, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id = 900 AND p.category <> 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS web_net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (5, 6, 7, 8) GROUP BY d.fiscal_year, d.fiscal_period ORDER BY d.fiscal_period",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 4 rows, 3 columns: fiscal_year, fiscal_period, web_net_sales\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2025-08-25 to 2025-12-21 (119 days; fiscal: FY2025/26 P08, FY2025/26 P06, FY2025/26 P05, FY2025/26 P07).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 8 rows in the range only in Helsinki time, 13 only in UTC; fact_sales_line.sale_ts_utc: 15 rows in the range only in Helsinki time, 24 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared web_net_sales with rpt_daily_store_sales.net_sales, 2025-08-25 to 2025-12-21, stores: web, at level: total.\n  [INFO] Result total 701,457.87; control total 701,457.87; gap 0.00.\n  [PASS] No gap above 0.01 at level total.\n\n== Preview (first 4 rows) ==\n  fiscal_year | fiscal_period | web_net_sales\n  FY2025/26 | 5 | 145626.90\n  FY2025/26 | 6 | 175588.62\n  FY2025/26 | 7 | 154977.27\n  FY2025/26 | 8 | 225265.08\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

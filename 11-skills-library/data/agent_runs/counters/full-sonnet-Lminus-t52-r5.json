@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t52-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T52",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "948e2fe35b739e1ead67171a55aa207599600d24e0c988202589f50d722bd9b2",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:02",
+   "statement": "SELECT 'cal' AS k, fiscal_year, CAST(fiscal_period AS VARCHAR) AS a, CAST(period_start_date AS VARCHAR) AS b, CAST(period_end_date AS VARCHAR) AS c, CAST(fully_loaded AS VARCHAR) AS d FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=5\nUNION ALL\nSELECT 'store', CAST(store_key AS VARCHAR), CAST(store_id AS VARCHAR), store_name, city || '/' || region || '/' || format, CAST(valid_from AS VARCHAR) || '..' || CAST(valid_to AS VARCHAR) FROM dim_store WHERE store_name ILIKE '%Pit%' OR city ILIKE '%Pit%' OR store_id=102\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "k | fiscal_year | a | b | c | d\ncal | FY2026/27 | 5 | 2026-08-31 | 2026-09-27 | true\nstore | 3 | 102 | Helsinki Pitäjänmäki | Helsinki/South/Large | 2000-01-01..2025-04-27\nstore | 4 | 102 | Helsinki Pitäjänmäki | Helsinki/Capital Region/Large | 2025-04-28..9999-12-31\nstore | 15 | 110 | Turku Kupittaa | Turku/South/Large | 2000-01-01..9999-12-31\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:08",
+   "statement": "WITH base AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.quantity, f.net_amount, f.staff_purchase_flag, f.etl_loaded_at, p.sku, p.category, f.sale_date\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT 'lines' AS k, COUNT(*) AS n, COUNT(DISTINCT sales_line_id) AS d_line, COUNT(DISTINCT (receipt_id, line_no)) AS d_rl, SUM(quantity) AS units, SUM(CASE WHEN category='ZZ Test' THEN quantity ELSE 0 END) AS test_units, SUM(CASE WHEN quantity<=0 THEN 1 ELSE 0 END) AS nonpos, MIN(sale_date) AS mn, MAX(sale_date) AS mx FROM base\nUNION ALL\nSELECT 'control', COUNT(*), NULL, NULL, SUM(units_sold), NULL, NULL, MIN(business_date), MAX(business_date) FROM rpt_daily_store_sales WHERE store_id=102 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "k | n | d_line | d_rl | units | test_units | nonpos | mn | mx\nlines | 2121 | 2121 | 2121 | 3740 | 0 | 0 | 2026-08-31 | 2026-09-27\ncontrol | 28 | NULL | NULL | 3740 | NULL | NULL | 2026-08-31 | 2026-09-27\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:12",
+   "statement": "SELECT cp.sku, cp.product_name, cp.category, SUM(f.quantity) AS units_sold, COUNT(DISTINCT p.product_key) AS versions, COUNT(DISTINCT p.product_name) AS names\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 102 AND p.category <> 'ZZ Test'\n  AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nGROUP BY 1,2,3\nORDER BY units_sold DESC, cp.sku\nLIMIT 8\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "sku | product_name | category | units_sold | versions | names\n101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | 52 | 1 | 1\n101778 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | 44 | 1 | 1\n102244 | Batteries & Bulbs Havu Pro 791 | Electrical | 42 | 1 | 1\n102233 | Batteries & Bulbs Havu Pro 384 | Electrical | 30 | 1 | 1\n103670 | Storage Boxes Vesikko 753 | Cleaning & Household | 30 | 1 | 1\n102213 | Batteries & Bulbs Kuusela 444 | Electrical | 29 | 1 | 1\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | 29 | 1 | 1\n103545 | Cleaning Products Poutaranta Home 928 | Cleaning & Household | 29 | 1 | 1\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:15",
+   "statement": "SELECT p.sku, SUM(r.quantity_returned) AS returned_units_in_period\nFROM fact_return_line r\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key\nWHERE s.store_id = 102 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND p.sku IN (101624,101778,102244,102233,103670)\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sku | returned_units_in_period\n102244 | 1\n(1 row)"
+  }
+ ]
+}

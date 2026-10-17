@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-L-t49-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T49",
+ "budget": 30,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "bc50cebc34e789663a4a5c91117335f67f7632c99ffbdc336a096e77746d52ec",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:45:46",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:51",
+   "statement": "SELECT store_id, format, store_name, region, count(*) versions, min(valid_from), max(valid_to), min(open_date), max(close_date) FROM dim_store GROUP BY ALL ORDER BY store_id, format\n",
+   "n": 2,
+   "ok": true,
+   "rows": 47,
+   "output_preview": "store_id | format | store_name | region | versions | min(valid_from) | max(valid_to) | min(open_date) | max(close_date)\n101 | Medium | Helsinki Vuosaari | Capital Region | 1 | 2025-04-28 | 9999-12-31 | NULL | NULL\n101 | Medium | Helsinki Vuosaari | South | 1 | 2000-01-01 | 2025-04-27 | NULL | NULL\n102 | Large | Helsinki Pitäjänmäki | South | 1 | 2000-01-01 | 2025-04-27 | NULL | NULL\n102 | Large | Helsinki Pitäjänmäki | Capital Region | 1 | 2025-04-28 | 9999-12-31 | NULL | NULL\n103 | Medium | Espoo Lommila | Capital Region | 1 | 2025-04-28 | 9999-12-31 | NULL | NULL\n103 | Medium | Espoo Lommila | South | 1 | 2000-01-01 | 2025-04-27 | NULL | NULL\n104 | Large | Vantaa Tammisto | Capital Region | 1 | 2025-04-28 | 9999-12-31 | NULL | NULL\n104 | Large | Vantaa Tammisto | South | 1 | 2000-01-01 | 2025-04-27 | NULL | NULL\n105 | Small | Kerava | Capital Region | 1 | 2025-04-28 | 9999-12-31 | NULL | NULL\n105 | Small | Kerava | South | 1 | 2000-01-01 | 2025-04-27 | NULL | NULL\n106 | Small | Porvoo | South | 1 | 2000-01-01 | 9999-12-31 | NULL | NULL\n107 | Medium | Hyvinkää | South | 1 | 2000-01-01 | 9999-12-31 | NULL | NULL\n108 | Large | Lahti | South | 1 | 2000-01-01 | 9999-12-31 | NULL | NULL\n109 | Medium | Hämeenlinna | South | 1 | 2000-01-01 | 9999-12-31 | NULL | NULL\n110 | Large | Turku Kupittaa | South | 1 | 2000-01-01 | 9999-12-31 | NULL | NULL\n111 | Medium | Turku Härmälä | South | 1 | 2000-01-01 | 9999-12-31 | NULL | NULL\n112 | Small | Raisio | South | 1 | 2000-01-01 | 9999-12-3"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:56",
+   "statement": "SELECT count(*) AS n, count(DISTINCT sales_line_id) AS d_line, count(DISTINCT (receipt_id, line_no)) AS d_rl,\n  count(DISTINCT receipt_id) AS receipts, min(sale_date), max(sale_date), min(etl_loaded_at), max(etl_loaded_at),\n  sum(CASE WHEN net_amount<=0 THEN 1 ELSE 0 END) AS nonpos, sum(CASE WHEN staff_purchase_flag THEN 1 ELSE 0 END) staff,\n  count(DISTINCT CASE WHEN channel_code IS NULL THEN 1 END) nullchan\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d_line | d_rl | receipts | min(sale_date) | max(sale_date) | min(etl_loaded_at) | max(etl_loaded_at) | nonpos | staff | nullchan\n48107 | 48107 | 48107 | 21311 | 2026-08-03 | 2026-08-30 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00 | 0 | 737 | 1\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:01",
+   "statement": "WITH params AS (SELECT 'FY2026/27' AS fiscal_year, 4 AS first_period, 4 AS last_period)\nSELECT cs.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv,\n       COUNT(DISTINCT s.store_id) AS stores\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900 AND NOT f.staff_purchase_flag AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | receipts | net_sales_before_returns | atv | stores\nLarge | 6508 | 394865.46 | 60.67 | 8\nMedium | 8641 | 520763.45 | 60.27 | 18\nSmall | 2598 | 131841.05 | 50.75 | 12\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:02",
+   "statement": "SELECT count(*) AS receipts_multi_store FROM (SELECT receipt_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY receipt_id HAVING count(DISTINCT store_key)>1 OR count(DISTINCT sale_date)>1 OR count(DISTINCT staff_purchase_flag)>1)\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "receipts_multi_store\n0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:09",
+   "statement": "WITH a AS (SELECT s.store_id, sum(f.net_amount) n, count(DISTINCT f.receipt_id) r FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND p.category<>'ZZ Test' GROUP BY 1),\nb AS (SELECT store_id, sum(net_sales_before_returns) n, sum(receipts) r FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id<900 GROUP BY 1)\nSELECT count(*) stores, sum(a.n) mine, sum(b.n) ctrl, sum(a.n)-sum(b.n) diff, sum(a.r) r_mine, sum(b.r) r_ctrl, sum(CASE WHEN abs(a.n-b.n)>0.5 THEN 1 ELSE 0 END) mismatched\nFROM a FULL JOIN b USING (store_id)\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "stores | mine | ctrl | diff | r_mine | r_ctrl | mismatched\n38 | 1062266.72 | 1062266.72 | 0.00 | 18027 | 18027 | 0\n(1 row)"
+  }
+ ]
+}

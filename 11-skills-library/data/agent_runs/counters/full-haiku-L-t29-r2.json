@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-L-t29-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T29",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "a30eab2130acf868738f188827276ef01e1ce6dbd5b6672372dd941e7785185f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:23:51",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 FY2024/25",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P05\n  fiscal_weeks                       18-21\n  start_date                         2024-08-26\n  end_date                           2024-09-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2024-09-22\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 18 AND 21)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:21",
+   "statement": "WITH store_period_sales AS (\n  SELECT \n    f.vat_rate,\n    f.gross_amount - f.net_amount AS vat_amount\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  INNER JOIN dim_product p ON f.product_key = p.product_key\n  WHERE d.fiscal_year = 'FY2024/25' \n    AND d.fiscal_week BETWEEN 18 AND 21\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n),\nstore_period_returns AS (\n  SELECT \n    r.vat_rate,\n    -(r.refund_gross - r.refund_net) AS vat_amount\n  FROM fact_return_line r\n  INNER JOIN dim_date d ON r.return_date = d.calendar_date\n  INNER JOIN dim_store s ON r.store_key = s.store_key\n  INNER JOIN dim_product p ON r.product_key = p.product_key\n  WHERE d.fiscal_year = 'FY2024/25' \n    AND d.fiscal_week BETWEEN 18 AND 21\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n),\ncombined AS (\n  SELECT vat_rate, vat_amount FROM store_period_sales\n  UNION ALL\n  SELECT vat_rate, vat_amount FROM store_period_returns\n)\nSELECT \n  CAST(ROUND(vat_rate * 100, 1) AS VARCHAR) AS vat_rate_percent,\n  ROUND(SUM(vat_amount), 2) AS total_vat_charged\nFROM combined\nGROUP BY vat_rate\nORDER BY vat_rate DESC\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_rate_percent | total_vat_charged\n25.5 | 173987.66\n24.0 | 49010.48\n14.0 | 807.14\n10.0 | 149.47\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:24:27",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 4 rows, 2 columns: vat_rate_percent, total_vat_charged\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 4 rows) ==\n  vat_rate_percent | total_vat_charged\n  25.5 | 173987.66\n  24.0 | 49010.48\n  14.0 | 807.14\n  10.0 | 149.47\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

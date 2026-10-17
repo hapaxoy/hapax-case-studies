@@ -1,0 +1,85 @@
+{
+ "run_id": "full-sonnet-L-t10-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T10",
+ "budget": 30,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "e398458939f75572ebf68e7f7fddd653bbe0fab37c02ef168c1268a1a39e0583",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:43:51",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 --as-of 2026-10-05",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5    as of: 2026-10-05    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:43:56",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE 'Hyvink%' OR store_name ILIKE '%Hyvink%' ORDER BY store_key\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n12 | 107 | Hyvinkää | Hyvinkää | South | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:43:57",
+   "statement": "SELECT category, subcategory, count(*) n, count(distinct sku) skus, min(valid_from), max(valid_to) FROM dim_product WHERE category ILIKE '%clean%' OR subcategory ILIKE '%clean%' OR category ILIKE '%ZZ%' GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "category | subcategory | n | skus | min(valid_from) | max(valid_to)\nCleaning & Household | Cleaning Products | 131 | 131 | 2000-01-01 | 9999-12-31\nCleaning & Household | Laundry & Ironing | 63 | 62 | 2000-01-01 | 9999-12-31\nCleaning & Household | Storage Boxes | 94 | 92 | 2000-01-01 | 9999-12-31\nZZ Test | Test Articles | 12 | 12 | 2000-01-01 | 9999-12-31\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:03",
+   "statement": "WITH s AS (\n  SELECT f.sales_line_id, f.sale_date, f.quantity, f.net_amount, f.channel_code, f.staff_purchase_flag, f.etl_loaded_at, cp.subcategory AS cur_sub, p.subcategory AS was_sub, p.category AS was_cat, cp.category AS cur_cat\n  FROM fact_sales_line f\n  JOIN dim_store st ON st.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE st.store_id = 107 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT cur_cat, cur_sub, was_sub, count(*) lines, count(distinct sales_line_id) dl, sum(quantity) units, sum(net_amount) net, min(sale_date), max(sale_date), sum(CASE WHEN staff_purchase_flag THEN quantity ELSE 0 END) staff_units, min(quantity), max(quantity)\nFROM s WHERE cur_sub = 'Cleaning Products' OR was_sub = 'Cleaning Products'\nGROUP BY ALL\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "cur_cat | cur_sub | was_sub | lines | dl | units | net | min(sale_date) | max(sale_date) | staff_units | min(quantity) | max(quantity)\nCleaning & Household | Cleaning Products | Cleaning Products | 63 | 63 | 136 | 560.58 | 2026-08-31 | 2026-09-27 | 4 | 1 | 6\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:04",
+   "statement": "SELECT st.store_id, count(*) lines, count(distinct f.sales_line_id) dist_lines, sum(f.quantity) units, count(*) FILTER (WHERE f.quantity<=0) nonpos, min(f.etl_loaded_at), max(f.etl_loaded_at)\nFROM fact_sales_line f JOIN dim_store st ON st.store_key=f.store_key\nWHERE st.store_id=107 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nGROUP BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | lines | dist_lines | units | nonpos | min(f.etl_loaded_at) | max(f.etl_loaded_at)\n107 | 978 | 978 | 1626 | 0 | 2026-09-01T01:00:00 | 2026-09-28T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:12",
+   "statement": "WITH f AS (\n  SELECT f.* FROM fact_sales_line f JOIN dim_store st ON st.store_key=f.store_key\n  WHERE st.store_id=107 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT\n (SELECT count(*) FROM (SELECT receipt_id, line_no FROM f GROUP BY 1,2 HAVING count(*)>1)) AS dup_receipt_lines,\n (SELECT sum(quantity) FROM f) AS fact_units,\n (SELECT sum(units_sold) FROM rpt_daily_store_sales WHERE store_id=107 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') AS rpt_units,\n (SELECT count(distinct business_date) FROM rpt_daily_store_sales WHERE store_id=107 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') AS rpt_days,\n (SELECT count(distinct sale_date) FROM f) AS fact_days,\n (SELECT sum(net_amount) FROM f) AS fact_net,\n (SELECT sum(net_sales_before_returns) FROM rpt_daily_store_sales WHERE store_id=107 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') AS rpt_net,\n (SELECT count(*) FROM f WHERE channel_code <> 'ST' OR channel_code IS NULL) AS nonST\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_receipt_lines | fact_units | rpt_units | rpt_days | fact_days | fact_net | rpt_net | nonST\n0 | 1626 | 1626 | 28 | 28 | 27297.68 | 27297.68 | 978\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:12",
+   "statement": "SELECT sum(r.quantity_returned) ret_units_by_returndate, count(*) n\nFROM fact_return_line r JOIN dim_store st ON st.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\nWHERE st.store_id=107 AND p.subcategory='Cleaning Products' AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "ret_units_by_returndate | n\nNULL | 0\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:44:18",
+   "statement": "query-check/scripts/query_check.py --file q.sql --period FY2026/27 P05",
+   "n": 8,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 1 rows, 4 columns: store_id, store_name, subcategory, units_sold\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2026-08-31 to 2026-09-27 (28 days; fiscal: FY2026/27 P05).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 8 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 14 rows in the range only in Helsinki time, 15 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  store_id | store_name | subcategory | units_sold\n  107 | Hyvink�� | Cleaning Products | 136\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-S-t05-r4",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T05",
+ "budget": 30,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "fcc96ee506d745f3ac933e063f7792440d8bb85e0c663751876d853e7f40ee59",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:13:42",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_quarter, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week\nFROM ref_fiscal_calendar\nWHERE fiscal_period = 2 AND fiscal_year IN ('FY2024/25', 'FY2025/26')\nORDER BY fiscal_year\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_quarter | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week\nFY2024/25 | 2 | 1 | 2024-05-27 | 2024-06-23 | 4 | 5 | 8\nFY2025/26 | 2 | 1 | 2025-05-26 | 2025-06-22 | 4 | 5 | 8\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:13:46",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date\nFROM dim_date\nWHERE fiscal_year IN ('FY2024/25', 'FY2025/26') AND fiscal_week IN (5, 6, 7, 8)\nORDER BY fiscal_year, fiscal_week\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | fiscal_week_start_date | fiscal_week_end_date\nFY2024/25 | 5 | 2024-05-27 | 2024-06-02\nFY2024/25 | 6 | 2024-06-03 | 2024-06-09\nFY2024/25 | 7 | 2024-06-10 | 2024-06-16\nFY2024/25 | 8 | 2024-06-17 | 2024-06-23\nFY2025/26 | 5 | 2025-05-26 | 2025-06-01\nFY2025/26 | 6 | 2025-06-02 | 2025-06-08\nFY2025/26 | 7 | 2025-06-09 | 2025-06-15\nFY2025/26 | 8 | 2025-06-16 | 2025-06-22\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:13:50",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_week,\n  d.fiscal_week_start_date,\n  d.fiscal_week_end_date,\n  SUM(f.net_amount) as gross_sales\nFROM fact_sales_line f\nINNER JOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  AND d.fiscal_week IN (5, 6, 7, 8)\n  AND f.staff_purchase_flag = FALSE\nGROUP BY d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\nORDER BY d.fiscal_year, d.fiscal_week\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | fiscal_week_start_date | fiscal_week_end_date | gross_sales\nFY2024/25 | 5 | 2024-05-27 | 2024-06-02 | 326656.22\nFY2024/25 | 6 | 2024-06-03 | 2024-06-09 | 322405.91\nFY2024/25 | 7 | 2024-06-10 | 2024-06-16 | 323989.16\nFY2024/25 | 8 | 2024-06-17 | 2024-06-23 | 215931.95\nFY2025/26 | 5 | 2025-05-26 | 2025-06-01 | 342319.81\nFY2025/26 | 6 | 2025-06-02 | 2025-06-08 | 345852.99\nFY2025/26 | 7 | 2025-06-09 | 2025-06-15 | 343026.01\nFY2025/26 | 8 | 2025-06-16 | 2025-06-22 | 240524.08\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:13:54",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_week,\n  SUM(r.refund_net) as total_refunds\nFROM fact_return_line r\nINNER JOIN dim_date d ON d.calendar_date = r.return_date\nWHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  AND d.fiscal_week IN (5, 6, 7, 8)\nGROUP BY d.fiscal_year, d.fiscal_week\nORDER BY d.fiscal_year, d.fiscal_week\n",
+   "n": 4,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | total_refunds\nFY2024/25 | 5 | 15501.38\nFY2024/25 | 6 | 14943.94\nFY2024/25 | 7 | 16877.29\nFY2024/25 | 8 | 14743.72\nFY2025/26 | 5 | 17440.72\nFY2025/26 | 6 | 18292.63\nFY2025/26 | 7 | 20144.15\nFY2025/26 | 8 | 17656.55\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:13:59",
+   "statement": "WITH sales_data AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    SUM(f.net_amount) as sales_amount\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND d.fiscal_week IN (5, 6, 7, 8)\n    AND f.staff_purchase_flag = FALSE\n  GROUP BY d.fiscal_year, d.fiscal_week\n),\nreturns_data AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    SUM(r.refund_net) as refund_amount\n  FROM fact_return_line r\n  INNER JOIN dim_date d ON d.calendar_date = r.return_date\n  WHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND d.fiscal_week IN (5, 6, 7, 8)\n  GROUP BY d.fiscal_year, d.fiscal_week\n),\ncombined AS (\n  SELECT \n    s.fiscal_year,\n    s.fiscal_week,\n    COALESCE(s.sales_amount, 0) - COALESCE(r.refund_amount, 0) as net_sales\n  FROM sales_data s\n  LEFT JOIN returns_data r ON s.fiscal_year = r.fiscal_year AND s.fiscal_week = r.fiscal_week\n)\nSELECT \n  fiscal_year,\n  fiscal_week,\n  net_sales\nFROM combined\nORDER BY fiscal_week, fiscal_year\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | net_sales\nFY2024/25 | 5 | 311154.84\nFY2025/26 | 5 | 324879.09\nFY2024/25 | 6 | 307461.97\nFY2025/26 | 6 | 327560.36\nFY2024/25 | 7 | 307111.87\nFY2025/26 | 7 | 322881.86\nFY2024/25 | 8 | 201188.23\nFY2025/26 | 8 | 222867.53\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:05",
+   "statement": "WITH sales_data AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    SUM(f.net_amount) as sales_amount\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND d.fiscal_week IN (5, 6, 7, 8)\n    AND f.staff_purchase_flag = FALSE\n  GROUP BY d.fiscal_year, d.fiscal_week\n),\nreturns_data AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    SUM(r.refund_net) as refund_amount\n  FROM fact_return_line r\n  INNER JOIN dim_date d ON d.calendar_date = r.return_date\n  WHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND d.fiscal_week IN (5, 6, 7, 8)\n  GROUP BY d.fiscal_year, d.fiscal_week\n),\ncombined AS (\n  SELECT \n    s.fiscal_year,\n    s.fiscal_week,\n    COALESCE(s.sales_amount, 0) - COALESCE(r.refund_amount, 0) as net_sales\n  FROM sales_data s\n  LEFT JOIN returns_data r ON s.fiscal_year = r.fiscal_year AND s.fiscal_week = r.fiscal_week\n),\npivot_data AS (\n  SELECT \n    fiscal_week,\n    MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END) as sales_fy2024_25,\n    MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) as sales_fy2025_26\n  FROM combined\n  GROUP BY fiscal_week\n)\nSELECT \n  fiscal_week as week,\n  sales_fy2024_25 as sales_last_year,\n  sales_fy2025_26 as sales_this_year,\n  ROUND(((sales_fy2025_26 - sales_fy2024_25) / sales_fy2024_25 * 100), 2) as growth_percent\nFROM pivot_data\nORDER BY fiscal_week\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "week | sales_last_year | sales_this_year | growth_percent\n5 | 311154.84 | 324879.09 | 4.41\n6 | 307461.97 | 327560.36 | 6.54\n7 | 307111.87 | 322881.86 | 5.13\n8 | 201188.23 | 222867.53 | 10.78\n(4 rows)"
+  }
+ ]
+}

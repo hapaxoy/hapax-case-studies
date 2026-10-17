@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, cp.category, cp.subcategory, SUM(r.quantity_returned) AS units_returned FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = r.return_date WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 AND s.store_id &lt;&gt; 999 AND cp.category &lt;&gt; 'ZZ Test' AND cp.subcategory = 'Garden Furniture' GROUP BY ALL",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "subcategory", "units_returned"],
+    "rows": [["FY2026/27", 4, "Garden", "Garden Furniture", 92]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2026/27 period 4 = Monday 3 August to Sunday 30 August 2026 (weeks 14-17, fully loaded)",
+    "Returns counted on their own return date (fact_return_line.return_date), not the sale date and not the sale-week cohort used for return rate",
+    "Units = quantity_returned from fact_return_line",
+    "As-is product hierarchy: current product version (dim_product is_current) for category and subcategory",
+    "Store 999 (training store) and category ZZ Test excluded (no effect on this figure)",
+    "Web returns (booked to web shop store 900) and store returns both included",
+    "Warehouse tables used: fact_return_line, dim_product, dim_store, dim_date. No deprecated, staging, backup or tmp objects",
+    "Control total: all P4 refunds (excluding store 999 and test articles) of 74,361.18 EUR net match rpt_daily_store_sales returns_net exactly, store by day"
+  ],
+  "assumptions": [
+    "'Period 4 this year' read as FY2026/27 P4 (3-30 Aug 2026), the fiscal year current on 5 Oct 2026",
+    "'Garden Furniture' read as the Garden Furniture subcategory of the Garden category",
+    "'Handed back and booked as returned' read as units on return lines (quantity_returned), dated by return date, not refund value and not units sold in P4 that were returned later",
+    "Returns of all reason codes counted (changed_mind, defective, damaged_in_transit, not_as_described, wrong_size_or_fit)",
+    "All channels counted: 58 units returned in stores and 34 units booked to the web shop",
+    "Returns of items sold before P4 count if they were returned in P4"
+  ],
+  "caveats": [
+    "No data problems found, so no corrections made. Checked: no duplicate return lines, no return line without a matching sale, no return larger than the quantity sold, no return dated before its sale, no returns booked to store 999 or test articles, no sale line returned more than once.",
+    "The Helsinki date of the return timestamp gives the same 92 units as return_date, so there is no day-edge issue.",
+    "Every Garden Furniture return in P4 sits on a Garden Furniture version of the article, so as-is and as-was give the same 92. No article moved category in that period.",
+    "All 92 return lines are one unit each, so units equal return lines.",
+    "Return reason codes were not filtered, so this includes returns for damaged_in_transit and defective goods as well as changed_mind."
+  ]
+}
+```

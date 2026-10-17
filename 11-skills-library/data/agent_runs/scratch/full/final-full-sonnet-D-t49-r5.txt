@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "SELECT cs.format AS store_format, COUNT(DISTINCT f.receipt_id) AS receipts, ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id &lt; 900 AND s.store_id &lt;&gt; 999 AND NOT f.staff_purchase_flag AND p.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 GROUP BY 1 ORDER BY 1",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_format", "atv_eur"],
+    "rows": [
+      ["FY2026/27", 4, "Large", 60.67],
+      ["FY2026/27", 4, "Medium", 60.27],
+      ["FY2026/27", 4, "Small", 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV = net sales before returns (EUR excluding VAT) divided by the number of distinct sales receipts, dated by sale_date",
+    "ATV is a store measure: physical stores only (store_id below 900), web shop (store 900) left out",
+    "Staff purchases (staff_purchase_flag) excluded from ATV",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Returns not deducted, because ATV uses net sales before returns",
+    "Fiscal calendar from dim_date: FY2026/27 P4 = Monday 3 August 2026 to Sunday 30 August 2026 (4 weeks)",
+    "Format taken from the current dim_store version (format is the same in every store version)",
+    "Control total checked against rpt_daily_store_sales (net_sales_before_returns and receipts)"
+  ],
+  "assumptions": [
+    "'Period 4 of FY26/27' is read as FY2026/27 P4, which is complete (the last complete period is P5).",
+    "'Average basket value' is read as ATV (average transaction value), as the request states, using the company definition.",
+    "'Store format' is read as dim_store.format with the values present in the warehouse: Large, Medium and Small. The schema comment (Hyper, Standard, Express) is out of date.",
+    "No total company row is given because the request asks only for a breakdown by format."
+  ],
+  "caveats": [
+    "The dim_store.format column comment is out of date. The actual values are Large, Medium, Small, plus Web (store 900) and Training (store 999), which are both excluded from ATV.",
+    "Exclusions: staff-purchase receipts removed (99 Large, 138 Medium, 43 Small in P4). Store 999 had 32 staff-flagged receipts and 23 test-article receipts, and the web shop had one test-article receipt. Test-article receipts and store 999 were left out. Staff receipts raise the three formats' net sales before returns by about 5,544 (Large), 7,273 (Medium) and 1,979 (Small) EUR.",
+    "The control total with rpt_daily_store_sales agrees store by store for 3 to 30 August 2026, for both net sales before returns and receipt counts. The report table includes staff purchases, so the check was run on all non-test lines, before the staff exclusion.",
+    "I found no duplicate lines in fact_sales_line for the period (48,107 lines, all unique by sales_line_id and by receipt_id + line_no).",
+    "The Small format counts 12 trading stores in P4. Savonlinna (129) closed on 25 January 2026 and Kuopio's refit (15 June to 26 July 2026) ended before P4, so no store in P4 had closure effects.",
+    "Receipts: Large 6,508, Medium 8,641, Small 2,598. Net sales before returns used for ATV (EUR excluding VAT): Large 394,865.46, Medium 520,763.45, Small 131,841.05.",
+    "I did not use rpt.v_daily_sales or any staging, backup or tmp table."
+  ]
+}
+```

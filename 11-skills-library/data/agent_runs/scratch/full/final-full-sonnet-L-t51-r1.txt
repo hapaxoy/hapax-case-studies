@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH campaign AS (SELECT campaign_id, campaign_name, start_date, end_date + 7 AS window_end FROM dim_campaign WHERE campaign_id = 15), targeted AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = 15), holdout AS (SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id = 15), web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), member_sales AS (SELECT m.member_id, SUM(f.net_amount) AS net_sales FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id CROSS JOIN campaign WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign.start_date AND campaign.window_end GROUP BY 1), t AS (SELECT AVG(COALESCE(ms.net_sales,0)) AS mean_t FROM targeted x LEFT JOIN member_sales ms USING (member_id)), h AS (SELECT AVG(COALESCE(ms.net_sales,0)) AS mean_h FROM holdout x LEFT JOIN member_sales ms USING (member_id)) SELECT 15 AS campaign_id, 'Black Week 2025' AS campaign_name, ROUND(t.mean_t,2) AS avg_spend_targeted_eur, ROUND(h.mean_h,2) AS avg_spend_holdout_eur, ROUND(t.mean_t - h.mean_h,2) AS uplift_eur FROM t, h",
+  "result": {
+    "columns": ["campaign_id", "campaign_name", "avg_spend_targeted_eur", "avg_spend_holdout_eur", "uplift_eur"],
+    "rows": [[15, "Black Week 2025", 9.34, 7.94, 1.41]]
+  },
+  "definitions_applied": [
+    "Campaign uplift: mean net sales per targeted member minus mean per holdout member",
+    "Campaign window plus seven days: 24 Nov 2025 to 7 Dec 2025 (window 24-30 Nov plus 7)",
+    "Targeted member: at least one exposure row in the campaign, reduced to distinct member_id (one row per contact in fact_campaign_exposure)",
+    "Holdout: campaign_holdout joined on member_id, not member_key",
+    "Net sales before returns, on lines linked to the member, in EUR excluding VAT",
+    "Members with no sales count as zero",
+    "Web lines dated on the Helsinki dispatch date; only delivered or collected orders",
+    "Store 999 and category ZZ Test excluded; staff purchases included",
+    "Member identity by distinct member_id across dim_member versions"
+  ],
+  "assumptions": [
+    "Black Week 2025 is campaign_id 15 (24-30 Nov 2025, email+sms+push); the Black Week 2024 campaign is a different one",
+    "Spend means net sales excluding VAT before returns, as the company campaign uplift definition says; the request did not say gross or net of returns",
+    "Spend is measured over the campaign window plus seven days, not the campaign week alone",
+    "Uplift is reported per member in euros (targeted mean minus holdout mean), not as a total for the whole targeted group or a percentage"
+  ],
+  "caveats": [
+    "Corrections made: exposure has one row per contact (50,043 rows for 23,818 members), so it was reduced to distinct members before averaging. Counting rows would overweight members contacted several times.",
+    "Corrections made: holdout is keyed on member_id, so it was joined through member_id rather than member_key. Store 999 and ZZ Test articles were removed, and web sales were dated on the Helsinki dispatch date.",
+    "Group sizes: 23,818 targeted and 2,747 holdout members, 26,565 in all. The mailing_list_size in dim_campaign is 26,573, so 8 listed members have no exposure row and are not in the targeted group.",
+    "Checks passed: no member is in both groups, no holdout member was contacted, and every targeted and holdout member had marketing consent on 24 Nov 2025. The two groups look alike on tier mix and tenure.",
+    "Uplift is small in euros (about 1.41 per member, 4.7 percent of the targeted mean of 9.34 per member). It is a difference of two group means with no significance test, so treat it as indicative.",
+    "Spend is before returns. Web orders placed in the window but dispatched after 7 Dec 2025 are not counted, and orders placed earlier but dispatched inside the window are."
+  ]
+}
+```

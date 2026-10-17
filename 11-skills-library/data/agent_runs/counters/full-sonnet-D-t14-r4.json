@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-D-t14-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T14",
+ "budget": 30,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "8bd3903c4fe3c0fad988bae5cf89581cbe195f078fb937264f78d06ca19826c5",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:54",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, sqm, open_date, close_date, valid_from, valid_to, is_current FROM dim_store ORDER BY sqm DESC NULLS LAST, store_id, valid_from LIMIT 80\n",
+   "n": 1,
+   "ok": true,
+   "rows": 47,
+   "output_preview": "store_key | store_id | store_name | city | region | format | sqm | open_date | close_date | valid_from | valid_to | is_current\n3 | 102 | Helsinki Pitäjänmäki | Helsinki | South | Large | 8381 | NULL | NULL | 2000-01-01 | 2025-04-27 | false\n4 | 102 | Helsinki Pitäjänmäki | Helsinki | Capital Region | Large | 8381 | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n15 | 110 | Turku Kupittaa | Turku | South | Large | 7844 | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n31 | 125 | Kuopio | Kuopio | East | Large | 7814 | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n7 | 104 | Vantaa Tammisto | Vantaa | South | Large | 7732 | NULL | NULL | 2000-01-01 | 2025-04-27 | false\n8 | 104 | Vantaa Tammisto | Vantaa | Capital Region | Large | 7732 | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n37 | 131 | Oulu Kaakkuri | Oulu | North | Large | 7613 | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n13 | 108 | Lahti | Lahti | South | Large | 7036 | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | Tampere | West | Large | 6761 | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n21 | 115 | Tampere Hervanta | Tampere | West | Large | 6705 | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n5 | 103 | Espoo Lommila | Espoo | South | Medium | 4827 | NULL | NULL | 2000-01-01 | 2025-04-27 | false\n6 | 103 | Espoo Lommila | Espoo | Capital Region | Medium | 4827 | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n34 | 128 | Lappeenranta | Lappeenranta | East | Medium | 4738 | NULL | NULL | 2000-01-01 | 9"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:19:02",
+   "statement": "WITH n AS (\nSELECT s.store_id, d.fiscal_year, f.net_amount AS v\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE s.store_id<900 AND p.category<>'ZZ Test' AND d.fiscal_year IN ('FY2025/26','FY2026/27')\nUNION ALL\nSELECT s.store_id, d.fiscal_year, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key JOIN dim_date d ON d.calendar_date=r.return_date\nWHERE s.store_id<900 AND p.category<>'ZZ Test' AND d.fiscal_year IN ('FY2025/26','FY2026/27'))\nSELECT n.store_id, c.store_name, c.sqm, ROUND(SUM(CASE WHEN fiscal_year='FY2025/26' THEN v END)) ly, ROUND(SUM(CASE WHEN fiscal_year='FY2026/27' THEN v END)) ytd\nFROM n JOIN dim_store c ON c.store_id=n.store_id AND c.is_current GROUP BY 1,2,3 ORDER BY ly DESC NULLS LAST LIMIT 15\n",
+   "n": 2,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "store_id | store_name | sqm | ly | ytd\n115 | Tampere Hervanta | 6705 | 804121 | 372968\n102 | Helsinki Pitäjänmäki | 8381 | 679652 | 335012\n131 | Oulu Kaakkuri | 7613 | 555975 | 256863\n108 | Lahti | 7036 | 543957 | 261145\n110 | Turku Kupittaa | 7844 | 539966 | 236069\n104 | Vantaa Tammisto | 7732 | 531925 | 248473\n116 | Tampere Lielahti | 6761 | 517285 | 235031\n125 | Kuopio | 7814 | 512758 | 176197\n117 | Tampere Kaleva | 4518 | 474881 | 220658\n118 | Nokia | 4116 | 415259 | 191201\n101 | Helsinki Vuosaari | 4276 | 401622 | 180089\n126 | Joensuu | 4080 | 395212 | 173686\n121 | Vaasa | 3591 | 390372 | 182149\n128 | Lappeenranta | 4738 | 385216 | 173839\n119 | Pori | 3764 | 384978 | 188889\n(15 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:19:08",
+   "statement": "SELECT RANK() OVER (ORDER BY sqm DESC) AS rank, store_id, store_name, sqm\nFROM dim_store\nWHERE is_current AND store_id < 900 AND close_date IS NULL\nQUALIFY RANK() OVER (ORDER BY sqm DESC) <= 10\nORDER BY sqm DESC\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "rank | store_id | store_name | sqm\n1 | 102 | Helsinki Pitäjänmäki | 8381\n2 | 110 | Turku Kupittaa | 7844\n3 | 125 | Kuopio | 7814\n4 | 104 | Vantaa Tammisto | 7732\n5 | 131 | Oulu Kaakkuri | 7613\n6 | 108 | Lahti | 7036\n7 | 116 | Tampere Lielahti | 6761\n8 | 115 | Tampere Hervanta | 6705\n9 | 103 | Espoo Lommila | 4827\n10 | 128 | Lappeenranta | 4738\n(10 rows)"
+  }
+ ]
+}

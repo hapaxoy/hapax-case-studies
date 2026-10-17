@@ -1,0 +1,28 @@
+```json
+{
+  "sql": "WITH w AS (SELECT min(period_start_date) AS s, max(period_end_date) AS e FROM ref_fiscal_calendar WHERE fiscal_year='FY2025/26' AND fiscal_period IN (9,10)) SELECT 'FY2025/26' AS fiscal_year, '9 and 10' AS fiscal_periods, round(100.0*sum(CASE WHEN o.fulfilment_type='click_and_collect' THEN f.net_amount END)/sum(f.net_amount), 2) AS click_and_collect_share_of_web_net_sales_pct FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id=f.receipt_id, w WHERE f.sale_date BETWEEN w.s AND w.e",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_periods", "click_and_collect_share_of_web_net_sales_pct"],
+    "rows": [["FY2025/26", "9 and 10", 30.02]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: periods 9 and 10 of FY2025/26 run 2025-12-22 to 2026-02-22 (ref_fiscal_calendar, 9 weeks, fully loaded)",
+    "Web sales = lines of web orders in fact_sales_line, linked to fact_web_order via receipt_id = web_order_id",
+    "Click-and-collect identified by fact_web_order.fulfilment_type, not by channel_id",
+    "Sales value = net_amount (EUR excluding VAT, after line discounts)",
+    "sale_date used as the date of sale (it is the Helsinki local date)",
+    "Cancelled and processing orders have no sales lines, so they are excluded"
+  ],
+  "assumptions": [
+    "'Last year' means the last completed fiscal year, FY2025/26, since the request was received on 2026-10-06 and the current fiscal year is FY2026/27. 'Periods 9 and 10' are fiscal periods, not calendar months.",
+    "'Web sales' means net sales value in EUR excluding VAT, the company's standard sales measure, before returns. The share is click-and-collect net sales divided by all web net sales (home delivery plus click-and-collect).",
+    "Returns are not deducted. Netting off returns booked in the window (the refunds are booked against the original line, whichever period it was sold in) would give 30.47%."
+  ],
+  "caveats": [
+    "Correction: dim_channel separates 'Click and collect' (channel_id 3) from 'Web home delivery' (channel_id 2), but 758 click-and-collect orders (1,473 lines, 43,819.29 EUR net, sale dates 2026-01-12 to 2026-02-08) are coded channel_id 2. Taking click-and-collect from channel_id would give 17.41% (60,496.25 of 347,431.30 EUR net) instead of 30.02%. The corrected figure classifies by fulfilment_type on the web order: 104,315.54 EUR click-and-collect net out of 347,431.30 EUR web net.",
+    "Channel coding is also unreliable for other dates. Lines before Nov 2025 have no channel_id, and channel_code is null in the periods checked, so fulfilment_type is the only reliable key.",
+    "On an order-count basis the share is 29.62% (1,830 of 6,178 orders). On a gross (VAT-inclusive) basis it is 30.03%.",
+    "No other defects were found in the window. There were no duplicate receipt lines, net and gross amounts agreed with VAT, order totals and line counts matched fact_web_order, and every delivered or collected order has sales lines."
+  ]
+}
+```

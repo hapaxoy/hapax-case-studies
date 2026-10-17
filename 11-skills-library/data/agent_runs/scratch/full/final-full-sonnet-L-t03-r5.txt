@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2026-05-04' AS d0, DATE '2026-08-02' AS d1),\ntest_keys AS (SELECT product_key FROM dim_product WHERE category = 'ZZ Test'),\nstore_lines AS (\n  SELECT f.receipt_id, f.net_amount\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  CROSS JOIN params\n  WHERE s.store_id < 900 AND NOT f.staff_purchase_flag\n    AND f.product_key NOT IN (SELECT product_key FROM test_keys)\n    AND f.sale_date BETWEEN params.d0 AND params.d1\n),\nweb_lines AS (\n  SELECT f.receipt_id, f.net_amount\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n  CROSS JOIN params\n  WHERE s.store_id = 900 AND NOT f.staff_purchase_flag\n    AND f.product_key NOT IN (SELECT product_key FROM test_keys)\n    AND CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN params.d0 AND params.d1\n),\nall_lines AS (SELECT * FROM store_lines UNION ALL SELECT * FROM web_lines)\nSELECT 'FY2026/27' AS fiscal_year,\n       ROUND(SUM(net_amount) / COUNT(DISTINCT receipt_id), 2) AS atv\nFROM all_lines",
+  "result": {
+    "columns": ["fiscal_year", "atv"],
+    "rows": [["FY2026/27", 56.14]]
+  },
+  "definitions_applied": [
+    "ATV = net sales before returns (EUR, excluding VAT) divided by the number of sales receipts",
+    "Store 999 (training store) left out",
+    "Test articles (category ZZ Test) left out",
+    "Staff purchases left out of ATV (staff_purchase_flag)",
+    "Web shop is store 900, identified by store_id and not by channel_code",
+    "Web orders dated on the Helsinki dispatch date (web sales recognition rule)",
+    "Cancelled and still-processing web orders have no sales lines, so they are not counted",
+    "Store receipts dated by sale_date (Helsinki business date)",
+    "Fiscal calendar: P1 to P3 = Q1 = fiscal weeks 1 to 13 of FY2026/27 (4 May 2026 to 2 August 2026)",
+    "Fiscal calendar: net sales before returns (returns are not deducted from ATV)"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year, FY2026/27. P1 to P3 are 4 May to 2 August 2026, 13 weeks, which is complete in the warehouse (loaded through 4 October 2026).",
+    "The metric dictionary defines ATV as a store measure with web excluded. You asked for web orders to be included, so I followed your request and added them. Each web order counts as one receipt and its net lines count as sales, the same way a store receipt does.",
+    "'Whole company' is stores plus the web shop, with the training store and test articles out.",
+    "Staff purchases stay excluded from ATV, as in the company definition. None of the web lines are staff purchases.",
+    "Web orders are placed on their Helsinki dispatch date, both for the sales and for the order count. The dictionary counts web orders on the order date. I used dispatch so the numerator and denominator cover the same orders. On order date the web figures are 12,959 orders and 771,025.31 EUR net, against 13,004 orders and 771,530.75 EUR on dispatch, so the company ATV is not materially affected.",
+    "Company ATV is reported as one figure for the three periods together, not per period, because you asked for periods 1 to 3 as a whole."
+  ],
+  "caveats": [
+    "Correction: the standard ATV definition excludes web orders. Because you asked for them, they are included, so this figure is not comparable with ATV figures reported on the standard store-only basis. Store-only ATV for the same 13 weeks is 55.52 EUR (66,984 receipts); the web shop adds 13,004 orders at about 59.33 EUR each (771,530.75 EUR), which lifts the company figure to 56.14 EUR on 79,988 receipts and 4,490,717.08 EUR net.",
+    "Correction: web orders are placed on the Helsinki dispatch date and not on the order date. The channel_code column and the views rpt.v_daily_sales and rpt.v_weekly_store_sales were not used, because they drop web from 3 November 2025.",
+    "Correction: store 999, ZZ Test articles and staff purchases were removed (staff purchases per ATV rule). I did not quantify how much each exclusion shifts the result.",
+    "Control check: web net sales before returns on the dispatch basis, 771,530.75 EUR, match rpt_daily_store_sales for store 900 exactly. The store-side control total is higher (3,767,921.27 EUR on 68,021 receipts) because that table includes staff purchases, which ATV excludes. I did not reconcile the staff gap line by line.",
+    "No duplicate sales lines were found, and store receipt numbers and web order numbers do not overlap, so distinct receipt counting is safe.",
+    "ATV is before returns, so returns processed in the period do not affect it."
+  ]
+}
+```

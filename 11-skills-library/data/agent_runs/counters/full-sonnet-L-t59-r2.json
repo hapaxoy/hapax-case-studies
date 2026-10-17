@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t59-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T59",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "589a07276b4c5fabcb98821b924c0eb9c38b696fd6f3fcfe21c3e5f884cf9811",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:05",
+   "statement": "SELECT status, COUNT(*) AS n, COUNT(DISTINCT web_order_id) AS d,\n MIN(order_ts_utc) mn, MAX(order_ts_utc) mx\nFROM fact_web_order\nWHERE CAST(order_ts_utc AS DATE) = DATE '2025-11-28'\nGROUP BY ALL ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | n | d | mn | mx\ncancelled | 20 | 20 | 2025-11-28T07:50:54 | 2025-11-28T23:39:12\ncollected | 97 | 97 | 2025-11-28T01:23:42 | 2025-11-28T22:43:33\ndelivered | 260 | 260 | 2025-11-28T00:51:12 | 2025-11-28T23:14:04\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:10",
+   "statement": "WITH o AS (\n  SELECT * FROM fact_web_order\n  WHERE CAST(order_ts_utc AS DATE) = DATE '2025-11-28' AND status <> 'cancelled'\n),\nt AS (\n  SELECT DISTINCT f.receipt_id\n  FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key\n  WHERE p.category = 'ZZ Test' AND f.receipt_id IN (SELECT web_order_id FROM o)\n)\nSELECT (SELECT COUNT(*) FROM o) AS orders,\n       (SELECT COUNT(DISTINCT web_order_id) FROM o) AS distinct_orders,\n       (SELECT COUNT(*) FROM t) AS test_orders,\n       (SELECT COUNT(*) FROM o WHERE web_order_id NOT IN (SELECT receipt_id FROM fact_sales_line)) AS no_lines,\n       (SELECT COUNT(*) FROM fact_web_order WHERE web_order_id IN (SELECT web_order_id FROM o) ) AS check_total,\n       (SELECT COUNT(*) FROM stg_web_order_load WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28') AS stg\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | distinct_orders | test_orders | no_lines | check_total | stg\n357 | 357 | 0 | 0 | 357 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:14",
+   "statement": "SELECT COUNT(*) FILTER (WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28') AS utc_day,\n       COUNT(*) FILTER (WHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE)=DATE '2025-11-28') AS helsinki_day,\n       COUNT(*) AS total_rows, COUNT(DISTINCT web_order_id) AS total_distinct\nFROM fact_web_order\nWHERE status <> 'cancelled' AND order_ts_utc >= TIMESTAMP '2025-11-27' AND order_ts_utc < TIMESTAMP '2025-11-30'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "utc_day | helsinki_day | total_rows | total_distinct\n357 | 402 | 657 | 657\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t07-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T07",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "a8569e4276278d61d256a02831de3913ec6656bb66d90751d2f750291a1c50db",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:41",
+   "statement": "SELECT 'dates' k, min(calendar_date)::VARCHAR a, max(calendar_date)::VARCHAR b, count(*)::VARCHAR c FROM dim_date WHERE fiscal_year='FY2024/25' AND fiscal_quarter=4\nUNION ALL\nSELECT 'sales_rows', count(*)::VARCHAR, count(DISTINCT sales_line_id)::VARCHAR, count(DISTINCT (receipt_id, line_no))::VARCHAR FROM fact_sales_line f JOIN dim_date d ON d.calendar_date=f.sale_date WHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4\nUNION ALL\nSELECT 'returns', count(*)::VARCHAR, count(DISTINCT return_line_id)::VARCHAR, count(DISTINCT sales_line_id)::VARCHAR FROM fact_return_line r JOIN dim_date d ON d.calendar_date=r.return_date WHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4\nUNION ALL\nSELECT 'regions', region, format, count(*)::VARCHAR FROM dim_store WHERE is_current GROUP BY region, format\nUNION ALL\nSELECT 'south_stores', store_id::VARCHAR, store_name, region||' '||valid_from::VARCHAR||' '||valid_to::VARCHAR FROM dim_store WHERE is_current AND region='South'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 30,
+   "output_preview": "k | a | b | c\ndates | 2025-01-27 | 2025-04-27 | 91\nsales_rows | 129694 | 129694 | 129694\nreturns | 4912 | 4912 | 4912\nregions | North | Small | 3\nregions | Capital Region | Large | 2\nregions | South | Small | 4\nregions | West | Small | 2\nregions | East | Small | 3\nregions | West | Large | 2\nregions | East | Large | 1\nregions | Head office | Training | 1\nregions | Online | Web | 1\nregions | North | Medium | 2\nregions | Capital Region | Small | 1\nregions | South | Large | 2\nregions | West | Medium | 6\nregions | East | Medium | 4\nregions | North | Large | 1\nregions | Capital Region | Medium | 2\nregions | South | Medium | 4\nsouth_stores | 106 | Porvoo | South 2000-01-01 9999-12-31\nsouth_stores | 107 | Hyvinkää | South 2000-01-01 9999-12-31\nsouth_stores | 108 | Lahti | South 2000-01-01 9999-12-31\nsouth_stores | 109 | Hämeenlinna | South 2000-01-01 9999-12-31\nsouth_stores | 110 | Turku Kupittaa | South 2000-01-01 9999-12-31\nsouth_stores | 111 | Turku Härmälä | South 2000-01-01 9999-12-31\nsouth_stores | 112 | Raisio | South 2000-01-01 9999-12-31\nsouth_stores | 113 | Salo | South 2000-01-01 9999-12-31\nsouth_stores | 114 | Kouvola | South 2025-04-28 9999-12-31\nsouth_stores | 137 | Lohja | South 2024-11-04 9999-12-31\n(30 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:48",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, cp.category, cp.subcategory,\n       ROUND(SUM(n.net_sales),2) AS net_sales, ROUND(SUM(n.cost),2) AS cost,\n       ROUND(SUM(n.net_sales - n.cost),2) AS gross_margin\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4 AND cs.region='South'\nGROUP BY 1,2,3,4\nORDER BY gross_margin DESC\nLIMIT 14\n",
+   "n": 2,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "sku | product_name | category | subcategory | net_sales | cost | gross_margin\n103075 | Cushions & Throws Tuulikki 338 | Home Textiles & Decor | Cushions & Throws | 5292.14 | 2364.72 | 2927.42\n100955 | Interior Paint Norvik 298 | Paint & Decorating | Interior Paint | 6816.15 | 4677.67 | 2138.48\n101763 | Fixings & Fasteners Nordhem 594 | Tools & Hardware | Fixings & Fasteners | 3418.53 | 1343.65 | 2074.88\n103390 | Bedroom Peltola 793 | Furniture | Bedroom | 5877.95 | 4018.40 | 1859.55\n100953 | Interior Paint Tuulikki 224 | Paint & Decorating | Interior Paint | 4005.86 | 2622.00 | 1383.86\n103062 | Cushions & Throws Kuusela 657 | Home Textiles & Decor | Cushions & Throws | 2494.08 | 1147.52 | 1346.56\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | Plumbing Parts | 2317.30 | 974.82 | 1342.48\n102538 | Cookware Nordhem 469 | Kitchen & Dining | Cookware | 3196.78 | 2019.39 | 1177.39\n101398 | Power Tools Havu Pro 689 | Tools & Hardware | Power Tools | 3371.57 | 2275.91 | 1095.66\n101888 | Indoor Lighting Havu 419 | Electrical | Indoor Lighting | 2340.12 | 1361.28 | 978.84\n102116 | Smart Home Tuulikki 855 | Electrical | Smart Home | 3032.49 | 2097.03 | 935.46\n103415 | Home Office Peltola 918 | Furniture | Home Office | 2726.78 | 1801.50 | 925.28\n101512 | Hand Tools Havu 907 | Tools & Hardware | Hand Tools | 1600.80 | 701.52 | 899.28\n102359 | Bathroom Furniture Mäntylä 246 | Bathroom & Plumbing | Bathroom Furniture | 1695.51 | 895.80 | 799.71\n(14 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:53",
+   "statement": "SELECT 'multi_current_sku' k, count(*)::VARCHAR v FROM (SELECT sku FROM dim_product WHERE is_current GROUP BY sku HAVING count(*)>1)\nUNION ALL SELECT 'multi_current_store', count(*)::VARCHAR FROM (SELECT store_id FROM dim_store WHERE is_current GROUP BY store_id HAVING count(*)>1)\nUNION ALL SELECT 'orphan_sales_prod', count(*)::VARCHAR FROM fact_sales_line f LEFT JOIN dim_product p ON p.product_key=f.product_key WHERE p.product_key IS NULL\nUNION ALL SELECT 'orphan_sales_store', count(*)::VARCHAR FROM fact_sales_line f LEFT JOIN dim_store p ON p.store_key=f.store_key WHERE p.store_key IS NULL\nUNION ALL SELECT 'orphan_ret_prod', count(*)::VARCHAR FROM fact_return_line f LEFT JOIN dim_product p ON p.product_key=f.product_key WHERE p.product_key IS NULL\nUNION ALL SELECT 'orphan_ret_store', count(*)::VARCHAR FROM fact_return_line f LEFT JOIN dim_store p ON p.store_key=f.store_key WHERE p.store_key IS NULL\nUNION ALL SELECT 'ret_no_sale', count(*)::VARCHAR FROM fact_return_line r LEFT JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id WHERE f.sales_line_id IS NULL\nUNION ALL SELECT 'neg_or_null_sales_Q4', count(*)::VARCHAR FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND (net_amount IS NULL OR quantity<=0 OR standard_cost IS NULL)\nUNION ALL SELECT 'sales_dates', min(sale_date)::VARCHAR||' '||max(sale_date)::VARCHAR FROM fact_sales_line\nUNION ALL SELECT 'zzcat', string_agg(DISTINCT category, ',') FROM dim_product\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "k | v\nmulti_current_sku | 0\nmulti_current_store | 0\norphan_sales_prod | 0\norphan_sales_store | 0\norphan_ret_prod | 0\norphan_ret_store | 0\nret_no_sale | 0\nneg_or_null_sales_Q4 | 0\nsales_dates | 2024-04-29 2026-10-04\nzzcat | Electrical,Tools & Hardware,Furniture,Seasonal,Garden,Home Textiles & Decor,ZZ Test,Kitchen & Dining,Cleaning & Household,Paint & Decorating,Bathroom & Plumbing\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:59",
+   "statement": "WITH mine AS (\n  SELECT s.store_id, sum(x.v) AS net FROM (\n    SELECT f.store_key, f.net_amount v FROM fact_sales_line f WHERE f.sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27'\n    UNION ALL\n    SELECT r.store_key, -r.refund_net FROM fact_return_line r WHERE r.return_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27') x\n  JOIN dim_store s ON s.store_key=x.store_key JOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\n  WHERE cs.region='South' GROUP BY 1),\nrpt AS (SELECT store_id, sum(net_sales) net FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' GROUP BY 1)\nSELECT m.store_id, round(m.net,2) mine, round(r.net,2) rpt, round(m.net-r.net,2) diff FROM mine m LEFT JOIN rpt r USING(store_id) ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | mine | rpt | diff\n106 | 30140.14 | 30140.14 | 0.00\n107 | 72588.63 | 72588.63 | 0.00\n108 | 114098.08 | 114098.08 | 0.00\n109 | 61579.44 | 61579.44 | 0.00\n110 | 121982.77 | 121982.77 | 0.00\n111 | 54427.35 | 54427.35 | 0.00\n112 | 32088.17 | 32088.17 | 0.00\n113 | 27487.59 | 27487.59 | 0.00\n114 | 59789.82 | 59789.82 | 0.00\n137 | 19671.57 | 19671.57 | 0.00\n(10 rows)"
+  }
+ ]
+}

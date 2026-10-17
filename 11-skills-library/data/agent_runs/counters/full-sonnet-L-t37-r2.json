@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t37-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T37",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "4f36ae35aa5c31a64e724ec088520c0bfdef68dd2ba54c8eae3f9b7e625e4c8b",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:12:43",
+   "statement": "SELECT 'store' k, CAST(store_key AS VARCHAR) a, CAST(store_id AS VARCHAR) b, store_name c, CAST(valid_from AS VARCHAR) d, CAST(valid_to AS VARCHAR) e, CAST(close_date AS VARCHAR) f FROM dim_store WHERE store_name ILIKE '%Palokka%' OR city ILIKE '%Jyv%'\nUNION ALL\nSELECT 'prod', CAST(product_key AS VARCHAR), CAST(sku AS VARCHAR), product_name, CAST(valid_from AS VARCHAR), CAST(valid_to AS VARCHAR), category || '/' || CAST(delisted_on AS VARCHAR) FROM dim_product WHERE sku = 100011\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "k | a | b | c | d | e | f\nstore | 30 | 124 | Jyväskylä Palokka | 2000-01-01 | 9999-12-31 | NULL\nprod | 11 | 100011 | Plants & Flowers Kuusela 570 | 2000-01-01 | 9999-12-31 | NULL\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:12:45",
+   "statement": "SELECT week_ending_date, store_key, product_key, closing_units, closing_value, receipts_units, adjustment_units, etl_loaded_at\nFROM fact_stock_week\nWHERE store_key = 30 AND product_key = 11 AND week_ending_date >= DATE '2026-09-06'\nORDER BY week_ending_date, etl_loaded_at\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | store_key | product_key | closing_units | closing_value | receipts_units | adjustment_units | etl_loaded_at\n2026-09-06 | 30 | 11 | 16 | 67.84 | 0 | 0 | 2026-09-07T01:00:00\n2026-09-13 | 30 | 11 | 13 | 55.12 | 0 | 0 | 2026-09-14T01:00:00\n2026-09-20 | 30 | 11 | 13 | 55.12 | 0 | 0 | 2026-09-21T01:00:00\n2026-09-27 | 30 | 11 | 11 | 46.64 | 0 | 0 | 2026-09-28T01:00:00\n2026-10-04 | 30 | 11 | 11 | 46.64 | 0 | 0 | 2026-10-05T01:00:00\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:12:46",
+   "statement": "fiscal-calendar/scripts/fiscal.py last completed week --as-of 2026-10-08",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: last completed week    as of: 2026-10-08    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P06\n  fiscal_weeks                       22\n  start_date                         2026-09-28\n  end_date                           2026-10-04\n  weeks                              1\n  days                               7\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-10-04\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 22 AND 22)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:12:53",
+   "statement": "WITH s AS (\n SELECT CAST(date_trunc('week', sale_date) AS DATE) + 6 AS we, SUM(quantity) AS sold, COUNT(*) AS n\n FROM fact_sales_line WHERE store_key = 30 AND product_key = 11 AND sale_date >= DATE '2026-08-31' GROUP BY 1),\nr AS (\n SELECT CAST(date_trunc('week', return_date) AS DATE) + 6 AS we, SUM(quantity_returned) AS ret\n FROM fact_return_line WHERE store_key = 30 AND product_key = 11 AND return_date >= DATE '2026-08-31' GROUP BY 1)\nSELECT f.week_ending_date, f.closing_units, f.receipts_units, f.adjustment_units, s.sold, s.n, r.ret,\n  (SELECT COUNT(*) FROM fact_stock_week g WHERE g.week_ending_date = f.week_ending_date) AS rows_that_week,\n  (SELECT MAX(etl_loaded_at) FROM fact_stock_week g WHERE g.week_ending_date = f.week_ending_date) AS maxload\nFROM fact_stock_week f LEFT JOIN s ON s.we = f.week_ending_date LEFT JOIN r ON r.we = f.week_ending_date\nWHERE f.store_key = 30 AND f.product_key = 11 AND f.week_ending_date >= DATE '2026-08-31'\nORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | closing_units | receipts_units | adjustment_units | sold | n | ret | rows_that_week | maxload\n2026-09-06 | 16 | 0 | 0 | 4 | 2 | NULL | 27143 | 2026-09-07T01:00:00\n2026-09-13 | 13 | 0 | 0 | 3 | 1 | NULL | 27143 | 2026-09-14T01:00:00\n2026-09-20 | 13 | 0 | 0 | NULL | NULL | NULL | 27143 | 2026-09-21T01:00:00\n2026-09-27 | 11 | 0 | 0 | 2 | 2 | NULL | 27143 | 2026-09-28T01:00:00\n2026-10-04 | 11 | 0 | 0 | NULL | NULL | NULL | 27143 | 2026-10-05T01:00:00\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:12:56",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain store_id,sku --start 2026-10-04 --end 2026-10-04",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 1 rows, 6 columns: store_id, store_name, sku, product_name, week_ending_date, closing_units\n\n== Duplicate keys ==\n  [PASS] Unique at grain (store_id, sku): 1 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-10-04 to 2026-10-04 (1 days; fiscal: FY2026/27 P06).\n  [WARN] Requested range is not whole fiscal weeks (Monday to Sunday) (CAL-YEAR). Fine for daily requests; check it for weekly or period figures.\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 7 rows in the range only in Helsinki time, 0 only in UTC; fact_web_order.dispatch_ts_utc: 14 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] Result covers 2026-10-04 to 2026-10-04 on week_ending_date (1 distinct dates).\n  [PASS] Every day of the requested range is present, none outside it.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  store_id | store_name | sku | product_name | week_ending_date | closing_units\n  124 | Jyv�skyl� Palokka | 100011 | Plants & Flowers Kuusela 570 | 2026-10-04 | 11\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

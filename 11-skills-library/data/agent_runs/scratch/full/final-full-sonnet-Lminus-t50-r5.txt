@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH params AS (SELECT 'FY2025/26' AS fiscal_year, 6 AS first_period, 8 AS last_period), web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), web_lines AS (SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN web_dispatch w ON w.web_order_id = f.receipt_id JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, o.fulfilment_type, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_product p ON p.product_key = f.product_key JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 1) AS click_collect_share_pct FROM web_lines l JOIN dim_date d ON d.calendar_date = l.business_date CROSS JOIN params WHERE d.fiscal_year = params.fiscal_year AND d.fiscal_period BETWEEN params.first_period AND params.last_period GROUP BY 1, 2 ORDER BY 1, 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 6, 27.9],
+      ["FY2025/26", 7, 25.4],
+      ["FY2025/26", 8, 27.0]
+    ]
+  },
+  "definitions_applied": [
+    "Click-and-collect share = click-and-collect net sales / all web net sales (click-and-collect counts as web)",
+    "Net sales: excluding VAT, after returns, with returns on their own return date",
+    "Web sales recognised on the Helsinki dispatch date (for click-and-collect, the ready-for-collection time)",
+    "Web identified by store_id 900, not channel_code",
+    "Fulfilment type taken from fact_web_order, not channel_code or channel_id",
+    "Cancelled and processing orders excluded (only delivered and collected orders have sales lines)",
+    "Store 999 and category ZZ Test excluded",
+    "Fiscal periods from dim_date (FY2025/26, periods 6 to 8)",
+    "Control total checked against rpt_daily_store_sales for store 900"
+  ],
+  "assumptions": [
+    "'Last year' read as the last completed fiscal year, FY2025/26, because the request was received on 9 October 2026 in FY2026/27. Past accepted requests read it the same way.",
+    "'Periods 6 to 8' read as fiscal periods P6, P7 and P8 of FY2025/26: 22 Sep to 26 Oct 2025, 27 Oct to 23 Nov 2025 and 24 Nov to 21 Dec 2025.",
+    "'Share of the web shop's sales' read as share of web net sales in EUR excluding VAT, not share of order counts.",
+    "Returns are included, each attributed to the fulfilment type of its original order.",
+    "Shares are in percent, rounded to one decimal."
+  ],
+  "caveats": [
+    "P7 and P8 straddle the 3 November 2025 web platform migration, which broke channel_code. The query avoids channel_code and channel_id and uses store 900 plus fact_web_order.fulfilment_type, so it is unaffected. rpt.v_daily_sales was not used because it omits web sales from 3 November 2025.",
+    "The web net sales behind each share match the rpt_daily_store_sales control total for store 900 exactly. P6 is 175,588.62, P7 is 154,977.27 and P8 is 225,265.08 EUR.",
+    "Click-and-collect net sales were 48,901.47 in P6, 39,403.04 in P7 and 60,899.16 in P8 EUR.",
+    "P6 is a five-week period and P7 and P8 are four weeks each. The shares are ratios, so this does not affect them.",
+    "P8 contains Black Friday week (24 to 30 November 2025), so its share may be affected by promotional volume.",
+    "Returns can arrive up to 30 days after a sale, so the periods are complete as of the 4 October 2026 load, but any later returns would shift the shares slightly."
+  ]
+}
+```

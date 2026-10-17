@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t07-r1",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T07",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "f361620bcdf50aea5edae8677f0acfa128e2dbf124e696186fdaeae765400da4",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:20",
+   "statement": "SELECT 'dates' k, CAST(min(calendar_date) AS VARCHAR) a, CAST(max(calendar_date) AS VARCHAR) b, CAST(count(*) AS VARCHAR) c FROM dim_date WHERE fiscal_year='FY2024/25' AND fiscal_quarter=4\nUNION ALL\nSELECT 'sales rows', CAST(count(*) AS VARCHAR), CAST(count(DISTINCT (receipt_id, line_no)) AS VARCHAR), CAST(count(DISTINCT sales_line_id) AS VARCHAR) FROM fact_sales_line f JOIN dim_date d ON d.calendar_date=f.sale_date WHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4\nUNION ALL\nSELECT 'returns rows', CAST(count(*) AS VARCHAR), CAST(count(DISTINCT return_line_id) AS VARCHAR), '' FROM fact_return_line r JOIN dim_date d ON d.calendar_date=r.return_date WHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4\nUNION ALL\nSELECT 'regions', region, CAST(count(*) AS VARCHAR), CAST(sum(CASE WHEN is_current THEN 1 ELSE 0 END) AS VARCHAR) FROM dim_store GROUP BY region\nUNION ALL\nSELECT 'south stores current', CAST(store_id AS VARCHAR), store_name, CAST(is_current AS VARCHAR) FROM dim_store WHERE is_current AND region='South'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "k | a | b | c\ndates | 2025-01-27 | 2025-04-27 | 91\nsales rows | 129694 | 129694 | 129694\nreturns rows | 4912 | 4912 | \nregions | Head office | 1 | 1\nregions | East | 9 | 8\nregions | Capital Region | 5 | 5\nregions | North | 6 | 6\nregions | West | 10 | 10\nregions | Online | 1 | 1\nregions | South | 15 | 10\nsouth stores current | 106 | Porvoo | true\nsouth stores current | 107 | Hyvinkää | true\nsouth stores current | 108 | Lahti | true\nsouth stores current | 109 | Hämeenlinna | true\nsouth stores current | 110 | Turku Kupittaa | true\nsouth stores current | 111 | Turku Härmälä | true\nsouth stores current | 112 | Raisio | true\nsouth stores current | 113 | Salo | true\nsouth stores current | 114 | Kouvola | true\nsouth stores current | 137 | Lohja | true\n(20 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:27",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, p.sku, f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, cp.category, SUM(n.net_sales) AS net_sales, SUM(n.cost) AS cost, SUM(n.net_sales - n.cost) AS gross_margin,\n       ROUND(100.0*SUM(n.net_sales - n.cost)/SUM(n.net_sales),1) AS gm_pct\nFROM net_lines n\nJOIN dim_date d  ON d.calendar_date = n.business_date\nJOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4 AND cs.region = 'South'\nGROUP BY 1,2,3\nORDER BY gross_margin DESC\nLIMIT 15\n",
+   "n": 2,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sku | product_name | category | net_sales | cost | gross_margin | gm_pct\n103075 | Cushions & Throws Tuulikki 338 | Home Textiles & Decor | 5292.14 | 2364.72 | 2927.42 | 55.3\n100955 | Interior Paint Norvik 298 | Paint & Decorating | 6816.15 | 4677.67 | 2138.48 | 31.4\n101763 | Fixings & Fasteners Nordhem 594 | Tools & Hardware | 3418.53 | 1343.65 | 2074.88 | 60.7\n103390 | Bedroom Peltola 793 | Furniture | 5877.95 | 4018.40 | 1859.55 | 31.6\n100953 | Interior Paint Tuulikki 224 | Paint & Decorating | 4005.86 | 2622.00 | 1383.86 | 34.5\n103062 | Cushions & Throws Kuusela 657 | Home Textiles & Decor | 2494.08 | 1147.52 | 1346.56 | 54.0\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | 2317.30 | 974.82 | 1342.48 | 57.9\n102538 | Cookware Nordhem 469 | Kitchen & Dining | 3196.78 | 2019.39 | 1177.39 | 36.8\n101398 | Power Tools Havu Pro 689 | Tools & Hardware | 3371.57 | 2275.91 | 1095.66 | 32.5\n101888 | Indoor Lighting Havu 419 | Electrical | 2340.12 | 1361.28 | 978.84 | 41.8\n102116 | Smart Home Tuulikki 855 | Electrical | 3032.49 | 2097.03 | 935.46 | 30.8\n103415 | Home Office Peltola 918 | Furniture | 2726.78 | 1801.50 | 925.28 | 33.9\n101512 | Hand Tools Havu 907 | Tools & Hardware | 1600.80 | 701.52 | 899.28 | 56.2\n102359 | Bathroom Furniture Mäntylä 246 | Bathroom & Plumbing | 1695.51 | 895.80 | 799.71 | 47.2\n103161 | Candles & Frames Selkämaa 320 | Home Textiles & Decor | 1407.69 | 614.66 | 793.03 | 56.3\n(15 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:30",
+   "statement": "SELECT 'cur per sku >1' k, CAST(count(*) AS VARCHAR) v FROM (SELECT sku FROM dim_product WHERE is_current GROUP BY sku HAVING count(*)>1)\nUNION ALL SELECT 'cur per store >1', CAST(count(*) AS VARCHAR) FROM (SELECT store_id FROM dim_store WHERE is_current GROUP BY store_id HAVING count(*)>1)\nUNION ALL SELECT 'South sales stores in Q4 by as-was region', s.region || ' / ' || cs.region || ' n=' || CAST(count(DISTINCT s.store_id) AS VARCHAR) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current JOIN dim_date d ON d.calendar_date=f.sale_date WHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4 AND (s.region='South' OR cs.region='South') GROUP BY s.region, cs.region\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "k | v\ncur per sku >1 | 0\ncur per store >1 | 0\nSouth sales stores in Q4 by as-was region | South / Capital Region n=5\nSouth sales stores in Q4 by as-was region | East / South n=1\nSouth sales stores in Q4 by as-was region | South / South n=9\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:37",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n), mine AS (\n    SELECT n.store_id, SUM(n.net_sales) AS mine FROM net_lines n JOIN dim_date d ON d.calendar_date=n.business_date\n    WHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4 GROUP BY 1\n), ctl AS (\n    SELECT r.store_id, SUM(r.net_sales) AS ctl FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\n    WHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4 GROUP BY 1\n)\nSELECT c.store_id, cs.region, m.mine, c.ctl, ROUND(m.mine-c.ctl,2) AS diff\nFROM ctl c LEFT JOIN mine m USING(store_id) JOIN dim_store cs ON cs.store_id=c.store_id AND cs.is_current\nWHERE cs.region='South' OR abs(m.mine-c.ctl)>1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "store_id | region | mine | ctl | diff\n106 | South | 30140.14 | 30140.14 | 0.00\n107 | South | 72588.63 | 72588.63 | 0.00\n108 | South | 114098.08 | 114098.08 | 0.00\n109 | South | 61579.44 | 61579.44 | 0.00\n110 | South | 121982.77 | 121982.77 | 0.00\n111 | South | 54427.35 | 54427.35 | 0.00\n112 | South | 32088.17 | 32088.17 | 0.00\n113 | South | 27487.59 | 27487.59 | 0.00\n114 | South | 59789.82 | 59789.82 | 0.00\n137 | South | 19671.57 | 19671.57 | 0.00\n900 | Online | 374578.65 | 374595.69 | -17.04\n(11 rows)"
+  }
+ ]
+}

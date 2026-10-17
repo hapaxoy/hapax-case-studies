@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t23-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T23",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "0dbf5ad3de2fb951659a3b9137878cfe4e228ef6c0d387a3096324ec5894dc7a",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:00:20",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P02\n  fiscal_weeks                       5-8\n  start_date                         2025-05-26\n  end_date                           2025-06-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-06-22\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:26",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, s.format, s.store_id, p.category, f.net_amount, f.sale_date\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=2 AND s.store_id<>999 AND p.category<>'ZZ Test'\n),\nrefunds AS (\n  SELECT sales_line_id, SUM(refund_net) AS refund_net, COUNT(*) AS n FROM fact_return_line GROUP BY 1\n)\nSELECT format, COUNT(*) AS lines, COUNT(DISTINCT sales_line_id) AS dist_lines, COUNT(DISTINCT (receipt_id, line_no)) AS dist_rl,\n  SUM(net_amount) AS sold_net, SUM(r.refund_net) AS ref_net, COUNT(r.sales_line_id) AS returned_lines, MAX(r.n) AS max_returns_per_line,\n  ROUND(100.0*COALESCE(SUM(r.refund_net),0)/SUM(net_amount),3) AS pct, MIN(sale_date), MAX(sale_date)\nFROM sold l LEFT JOIN refunds r USING (sales_line_id)\nGROUP BY ROLLUP(format) ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | lines | dist_lines | dist_rl | sold_net | ref_net | returned_lines | max_returns_per_line | pct | min(sale_date) | max(sale_date)\nLarge | 16624 | 16624 | 16624 | 400763.11 | 17707.57 | 536 | 1 | 4.418 | 2025-05-26 | 2025-06-22\nMedium | 22644 | 22644 | 22644 | 552936.25 | 25030.11 | 736 | 1 | 4.527 | 2025-05-26 | 2025-06-22\nSmall | 7349 | 7349 | 7349 | 147668.20 | 6319.09 | 242 | 1 | 4.279 | 2025-05-26 | 2025-06-22\nWeb | 6350 | 6350 | 6350 | 183098.49 | 22388.29 | 478 | 1 | 12.227 | 2025-05-26 | 2025-06-22\nNULL | 52967 | 52967 | 52967 | 1284466.05 | 71445.06 | 1992 | 1 | 5.562 | 2025-05-26 | 2025-06-22\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:33",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.receipt_id, f.net_amount, f.quantity, s.store_id, s.format, f.sale_date, f.etl_loaded_at, w.status\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  LEFT JOIN fact_web_order w ON w.web_order_id = f.receipt_id\n  WHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=2 AND s.store_id<>999 AND p.category<>'ZZ Test'\n)\nSELECT l.format, COALESCE(l.status,'store') AS status, COUNT(*) AS n, SUM(l.net_amount) AS sold_net, SUM(r.refund_net) AS ref_net,\n  SUM(CASE WHEN r.refund_net > l.net_amount + 0.005 THEN 1 ELSE 0 END) AS over_refund,\n  SUM(CASE WHEN r.quantity_returned > l.quantity THEN 1 ELSE 0 END) AS over_qty,\n  SUM(CASE WHEN r.return_date < l.sale_date THEN 1 ELSE 0 END) AS ret_before_sale,\n  MAX(r.return_date) AS last_return, MIN(l.net_amount) AS min_net, SUM(CASE WHEN l.net_amount<=0 THEN 1 ELSE 0 END) AS nonpos\nFROM sold l LEFT JOIN fact_return_line r USING (sales_line_id)\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | status | n | sold_net | ref_net | over_refund | over_qty | ret_before_sale | last_return | min_net | nonpos\nLarge | store | 16624 | 400763.11 | 17707.57 | 0 | 0 | 0 | 2025-07-22 | 0.77 | 0\nMedium | store | 22644 | 552936.25 | 25030.11 | 0 | 0 | 0 | 2025-07-18 | 1.01 | 0\nSmall | store | 7349 | 147668.20 | 6319.09 | 0 | 0 | 0 | 2025-07-16 | 1.02 | 0\nWeb | collected | 1669 | 49083.36 | 5113.83 | 0 | 0 | 0 | 2025-07-20 | 1.01 | 0\nWeb | delivered | 4681 | 134015.13 | 17274.46 | 0 | 0 | 0 | 2025-07-23 | 1.01 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:40",
+   "statement": "SELECT 'multi_format_stores' AS chk, CAST(COUNT(*) AS VARCHAR) AS val FROM (SELECT store_id FROM dim_store GROUP BY 1 HAVING COUNT(DISTINCT format)>1)\nUNION ALL SELECT 'formats', STRING_AGG(DISTINCT COALESCE(format,'NULL'), ',') FROM dim_store\nUNION ALL SELECT 'control_before_returns_physical', CAST(SUM(net_sales_before_returns) AS VARCHAR) FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22' AND store_id<900\nUNION ALL SELECT 'control_before_returns_web', CAST(SUM(net_sales_before_returns) AS VARCHAR) FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22' AND store_id=900\nUNION ALL SELECT 'stores_in_period_by_format', STRING_AGG(format||':'||n, ',') FROM (SELECT s.format, COUNT(DISTINCT s.store_id) n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE f.sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22' AND s.store_id<>999 GROUP BY 1)\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "chk | val\nmulti_format_stores | 0\nformats | Medium,Large,Web,Small,Training\ncontrol_before_returns_physical | 1101367.56\ncontrol_before_returns_web | 168049.19\nstores_in_period_by_format | Medium:18,Small:13,Large:8,Web:1\n(5 rows)"
+  }
+ ]
+}

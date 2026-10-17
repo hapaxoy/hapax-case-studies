@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-D-t17-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T17",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "cdbb714ff78ffb45130031a4259908c08724a77b151517b0919bf9e3230554dd",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:47",
+   "statement": "SELECT fiscal_year, fiscal_quarter, MIN(calendar_date) mn, MAX(calendar_date) mx, MIN(fiscal_week) w1, MAX(fiscal_week) w2\nFROM dim_date WHERE fiscal_year='FY2025/26' AND fiscal_quarter=1 GROUP BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_quarter | mn | mx | w1 | w2\nFY2025/26 | 1 | 2025-04-28 | 2025-07-27 | 1 | 13\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:48",
+   "statement": "SELECT category, subcategory, COUNT(*) versions, COUNT(DISTINCT sku) skus, SUM(CASE WHEN is_current THEN 1 ELSE 0 END) cur\nFROM dim_product WHERE category IN ('Garden','Electrical') OR category ILIKE '%garden%' GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 13,
+   "output_preview": "category | subcategory | versions | skus | cur\nElectrical | Batteries & Bulbs | 86 | 85 | 85\nElectrical | Cables & Plugs | 117 | 116 | 116\nElectrical | Indoor Lighting | 147 | 146 | 146\nElectrical | Outdoor Lighting | 68 | 68 | 68\nElectrical | Smart Home | 62 | 62 | 62\nGarden | Barbecue & Grills | 70 | 69 | 69\nGarden | Edible Plants & Seeds | 124 | 123 | 123\nGarden | Garden Furniture | 87 | 85 | 85\nGarden | Garden Tools | 139 | 139 | 139\nGarden | Outdoor Lighting | 70 | 70 | 5\nGarden | Plants & Flowers | 250 | 246 | 246\nGarden | Pots & Planters | 117 | 116 | 116\nGarden | Soil & Fertiliser | 85 | 85 | 85\n(13 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:53",
+   "statement": "SELECT p.sku, p.product_name, p.category, p.subcategory, p.valid_from, p.valid_to, p.is_current, p.delisted_on,\n (SELECT COUNT(*) FROM dim_product q WHERE q.sku=p.sku) n\nFROM dim_product p\nWHERE p.category='Garden' AND p.subcategory='Outdoor Lighting' AND (p.is_current OR p.sku IN (SELECT sku FROM dim_product WHERE category='Garden' AND subcategory='Outdoor Lighting' AND is_current))\nORDER BY sku, valid_from\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "sku | product_name | category | subcategory | valid_from | valid_to | is_current | delisted_on | n\n100870 | Outdoor Lighting Ahvenisto 353 | Garden | Outdoor Lighting | 2000-01-01 | 9999-12-31 | true | 2025-02-01 | 1\n100877 | Outdoor Lighting Raudikko 612 | Garden | Outdoor Lighting | 2000-01-01 | 9999-12-31 | true | 2025-03-01 | 1\n100879 | Outdoor Lighting Havu 686 | Garden | Outdoor Lighting | 2000-01-01 | 9999-12-31 | true | 2025-04-01 | 1\n100916 | Outdoor Lighting Lumiko 455 | Garden | Outdoor Lighting | 2000-01-01 | 9999-12-31 | true | 2025-06-01 | 1\n100917 | Outdoor Lighting Ahvenisto 492 | Garden | Outdoor Lighting | 2000-01-01 | 9999-12-31 | true | 2025-09-01 | 1\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:56",
+   "statement": "SELECT 'sales dup line ids' k, COUNT(*) - COUNT(DISTINCT sales_line_id) v FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-04-28' AND DATE '2025-07-27'\nUNION ALL SELECT 'sales dup receipt+line', COUNT(*) - COUNT(DISTINCT (receipt_id, line_no)) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-04-28' AND DATE '2025-07-27'\nUNION ALL SELECT 'return dup ids', COUNT(*) - COUNT(DISTINCT return_line_id) FROM fact_return_line\nUNION ALL SELECT 'return dup salesline', COUNT(*) - COUNT(DISTINCT sales_line_id) FROM fact_return_line\nUNION ALL SELECT 'returns orphan', COUNT(*) FROM fact_return_line r WHERE NOT EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.sales_line_id=r.sales_line_id)\nUNION ALL SELECT 'sales rows Q1', COUNT(*) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-04-28' AND DATE '2025-07-27'\nUNION ALL SELECT 'returns max date', CAST(EXTRACT(epoch FROM MAX(return_date)) AS BIGINT) FROM fact_return_line\n",
+   "n": 4,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "k | v\nsales dup line ids | 0\nsales dup receipt+line | 0\nreturn dup ids | 0\nreturn dup salesline | 0\nreturns orphan | 0\nsales rows Q1 | 177239\nreturns max date | 1791072000\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:38:05",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.net_amount, cp.category, cp.subcategory, s.store_id\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE d.fiscal_year='FY2025/26' AND d.fiscal_quarter=1\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test' AND cp.category <> 'ZZ Test'\n),\nref AS (SELECT sales_line_id, SUM(refund_net) refund_net, SUM(quantity_returned) q FROM fact_return_line GROUP BY 1)\nSELECT sd.category, sd.subcategory, COUNT(*) lines, ROUND(SUM(sd.net_amount),2) sold_net, ROUND(COALESCE(SUM(r.refund_net),0),2) refunded_net,\n  ROUND(100.0*COALESCE(SUM(r.refund_net),0)/SUM(sd.net_amount),2) rate\nFROM sold sd LEFT JOIN ref r ON r.sales_line_id=sd.sales_line_id\nWHERE sd.category IN ('Garden') OR sd.subcategory='Outdoor Lighting'\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "category | subcategory | lines | sold_net | refunded_net | rate\nElectrical | Outdoor Lighting | 1445 | 50442.94 | 3639.93 | 7.22\nGarden | Barbecue & Grills | 2056 | 176074.46 | 12780.47 | 7.26\nGarden | Edible Plants & Seeds | 14960 | 74584.72 | 718.18 | 0.96\nGarden | Garden Furniture | 2907 | 406939.18 | 52382.11 | 12.87\nGarden | Garden Tools | 9564 | 276601.44 | 14791.25 | 5.35\nGarden | Outdoor Lighting | 19 | 375.00 | 0.00 | 0.0\nGarden | Plants & Flowers | 33015 | 441427.45 | 12095.09 | 2.74\nGarden | Pots & Planters | 8692 | 144538.28 | 5578.93 | 3.86\nGarden | Soil & Fertiliser | 9046 | 147290.55 | 2325.81 | 1.58\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:38:09",
+   "statement": "SELECT 'Q1 sold by sku-version mismatch: product_key valid vs sale_date' k, COUNT(*) v\nFROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2025-04-28' AND DATE '2025-07-27' AND (f.sale_date < p.valid_from OR f.sale_date > p.valid_to)\nUNION ALL SELECT 'Q1 sales lines with null/unknown product', COUNT(*) FROM fact_sales_line f WHERE f.sale_date BETWEEN DATE '2025-04-28' AND DATE '2025-07-27' AND NOT EXISTS (SELECT 1 FROM dim_product p WHERE p.product_key=f.product_key)\nUNION ALL SELECT 'returns where refund_net > sold net', COUNT(*) FROM fact_return_line r JOIN fact_sales_line f USING (sales_line_id) WHERE r.refund_net > f.net_amount + 0.01\nUNION ALL SELECT 'returns before sale', COUNT(*) FROM fact_return_line r JOIN fact_sales_line f USING (sales_line_id) WHERE r.return_date < f.sale_date\nUNION ALL SELECT 'returns of Q1 lines after 2025-07-27+30', COUNT(*) FROM fact_return_line r JOIN fact_sales_line f USING (sales_line_id) WHERE f.sale_date BETWEEN DATE '2025-04-28' AND DATE '2025-07-27' AND r.return_date > DATE '2025-08-26'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "k | v\nQ1 sold by sku-version mismatch: product_key valid vs sale_date | 0\nQ1 sales lines with null/unknown product | 0\nreturns where refund_net > sold net | 0\nreturns before sale | 0\nreturns of Q1 lines after 2025-07-27+30 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:38:17",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.net_amount, cp.subcategory\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_quarter = 1\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test' AND cp.category <> 'ZZ Test'\n    AND cp.category = 'Garden' AND cp.subcategory <> 'Outdoor Lighting'\n),\nrefunds AS (\n  SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT 'FY2025/26' AS fiscal_year, 1 AS fiscal_quarter, sd.subcategory,\n       ROUND(SUM(sd.net_amount), 2) AS sold_net_eur,\n       ROUND(COALESCE(SUM(r.refund_net), 0), 2) AS returned_net_eur,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(sd.net_amount), 2) AS return_rate_pct\nFROM sold sd LEFT JOIN refunds r ON r.sales_line_id = sd.sales_line_id\nGROUP BY sd.subcategory ORDER BY sd.subcategory\n",
+   "n": 7,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "fiscal_year | fiscal_quarter | subcategory | sold_net_eur | returned_net_eur | return_rate_pct\nFY2025/26 | 1 | Barbecue & Grills | 176074.46 | 12780.47 | 7.26\nFY2025/26 | 1 | Edible Plants & Seeds | 74584.72 | 718.18 | 0.96\nFY2025/26 | 1 | Garden Furniture | 406939.18 | 52382.11 | 12.87\nFY2025/26 | 1 | Garden Tools | 276601.44 | 14791.25 | 5.35\nFY2025/26 | 1 | Plants & Flowers | 441427.45 | 12095.09 | 2.74\nFY2025/26 | 1 | Pots & Planters | 144538.28 | 5578.93 | 3.86\nFY2025/26 | 1 | Soil & Fertiliser | 147290.55 | 2325.81 | 1.58\n(7 rows)"
+  }
+ ]
+}

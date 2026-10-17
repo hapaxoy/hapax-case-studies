@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-L-t06-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T06",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "4c5bccf407adbcc1a433de1699cebbd4ecb8f50c75c0a67bdf6390d07a9efffb",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:54:01",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2025/26 --as-of 2026-10-05",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2025/26    as of: 2026-10-05    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P02\n  fiscal_weeks                       5-8\n  start_date                         2025-05-26\n  end_date                           2025-06-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-06-22\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:54:05",
+   "statement": "SELECT count(*) AS n, count(DISTINCT sales_line_id) AS d_id, count(DISTINCT (receipt_id, line_no)) AS d_rl,\n  (SELECT count(*) FROM fact_return_line) AS nret, (SELECT count(DISTINCT return_line_id) FROM fact_return_line) AS dret,\n  min(sale_date), max(sale_date), min(etl_loaded_at), max(etl_loaded_at)\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d_id | d_rl | nret | dret | min(sale_date) | max(sale_date) | min(etl_loaded_at) | max(etl_loaded_at)\n53094 | 53094 | 53094 | 57144 | 57144 | 2025-05-26 | 2025-06-22 | 2025-05-27T01:00:00 | 2025-06-23T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:54:06",
+   "statement": "SELECT format, count(DISTINCT store_id) AS stores, count(*) AS versions, count(DISTINCT region) AS regions FROM dim_store GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | stores | versions | regions\nLarge | 8 | 10 | 5\nMedium | 18 | 21 | 5\nSmall | 13 | 14 | 5\nTraining | 1 | 1 | 1\nWeb | 1 | 1 | 1\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:54:13",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.net_amount, f.quantity, s.format, s.store_id, p.category\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=2\n),\nr AS (SELECT sales_line_id, SUM(refund_net) AS refund_net, SUM(quantity_returned) AS qty_ret, count(*) AS nret FROM fact_return_line GROUP BY 1)\nSELECT format, count(*) AS lines, sum(CASE WHEN store_id=999 THEN 1 ELSE 0 END) AS l999, sum(CASE WHEN category='ZZ Test' THEN 1 ELSE 0 END) AS lzz,\n sum(net_amount) AS sold, sum(r.refund_net) AS ref, sum(CASE WHEN r.refund_net > net_amount+0.005 THEN 1 ELSE 0 END) AS over_refund,\n sum(CASE WHEN r.qty_ret > quantity THEN 1 ELSE 0 END) AS over_qty, sum(CASE WHEN r.nret>1 THEN 1 ELSE 0 END) AS multi_ret,\n sum(CASE WHEN net_amount<=0 THEN 1 ELSE 0 END) AS nonpos\nFROM sold LEFT JOIN r USING (sales_line_id) GROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | lines | l999 | lzz | sold | ref | over_refund | over_qty | multi_ret | nonpos\nLarge | 16624 | 0 | 0 | 400763.11 | 17707.57 | 0 | 0 | 0 | 0\nMedium | 22644 | 0 | 0 | 552936.25 | 25030.11 | 0 | 0 | 0 | 0\nSmall | 7349 | 0 | 0 | 147668.20 | 6319.09 | 0 | 0 | 0 | 0\nTraining | 126 | 126 | 20 | 2222.21 | NULL | 0 | 0 | 0 | 0\nWeb | 6351 | 0 | 1 | 183102.31 | 22388.29 | 0 | 0 | 0 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:54:18",
+   "statement": "SELECT w.status, count(*) AS lines, sum(f.net_amount) AS sold, count(DISTINCT f.receipt_id) AS orders,\n  sum(r.refund_net) AS refunds, count(r.sales_line_id) AS lines_with_refund\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key AND s.store_id=900\nJOIN dim_product p ON p.product_key=f.product_key AND p.category<>'ZZ Test'\nJOIN dim_date d ON d.calendar_date=f.sale_date AND d.fiscal_year='FY2025/26' AND d.fiscal_period=2\nLEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id\nLEFT JOIN (SELECT sales_line_id, sum(refund_net) refund_net FROM fact_return_line GROUP BY 1) r ON r.sales_line_id=f.sales_line_id\nGROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "status | lines | sold | orders | refunds | lines_with_refund\ncollected | 1669 | 49083.36 | 852 | 5113.83 | 117\ndelivered | 4681 | 134015.13 | 2317 | 17274.46 | 361\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:54:20",
+   "statement": "SELECT max(return_date) AS last_return, count(*) AS n,\n sum(CASE WHEN f.sales_line_id IS NULL THEN 1 ELSE 0 END) AS orphan_returns,\n sum(CASE WHEN r.return_date < f.sale_date THEN 1 ELSE 0 END) AS before_sale,\n max(r.return_date - f.sale_date) AS max_lag\nFROM fact_return_line r LEFT JOIN fact_sales_line f USING (sales_line_id)\nWHERE f.sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "last_return | n | orphan_returns | before_sale | max_lag\n2025-07-23 | 1992 | 0 | 0 | 33\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:54:25",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain fiscal_year,fiscal_period,format --period FY2025/26 P02",
+   "n": 7,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 4 rows, 4 columns: fiscal_year, fiscal_period, format, return_rate_pct\n\n== Duplicate keys ==\n  [PASS] Unique at grain (fiscal_year, fiscal_period, format): 4 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-05-26 to 2025-06-22 (28 days; fiscal: FY2025/26 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 7 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 13 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 4 rows) ==\n  fiscal_year | fiscal_period | format | return_rate_pct\n  FY2025/26 | 2 | Large | 4.42\n  FY2025/26 | 2 | Medium | 4.53\n  FY2025/26 | 2 | Small | 4.28\n  FY2025/26 | 2 | Web | 12.23\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

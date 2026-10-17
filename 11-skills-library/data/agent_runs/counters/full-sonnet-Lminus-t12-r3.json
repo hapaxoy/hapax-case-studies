@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t12-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T12",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "a5f1598e944d2656efa070b152eabdcb4193cb4ff32e606d6c1d92d2c1c6b921",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:23",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded\nFROM ref_fiscal_calendar WHERE fiscal_period = 11 ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2024/25 | 11 | FY2024/25 P11 | 2025-02-24 | 2025-03-23 | 4 | 44 | 47 | true\nFY2025/26 | 11 | FY2025/26 P11 | 2026-02-23 | 2026-03-22 | 4 | 44 | 47 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:26",
+   "statement": "SELECT week_ending_date, COUNT(*) AS n_rows, COUNT(DISTINCT (store_key, product_key)) AS n_distinct, COUNT(DISTINCT etl_loaded_at) AS loads, MIN(etl_loaded_at) AS min_load, MAX(etl_loaded_at) AS max_load, SUM(closing_value) AS total_value\nFROM fact_stock_week\nWHERE week_ending_date BETWEEN DATE '2026-02-23' AND DATE '2026-03-22'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "week_ending_date | n_rows | n_distinct | loads | min_load | max_load | total_value\n2026-03-01 | 27263 | 27263 | 1 | 2026-03-02T01:00:00 | 2026-03-02T01:00:00 | 2886467.17\n2026-03-08 | 34600 | 27161 | 2 | 2026-03-09T01:00:00 | 2026-03-10T02:45:00 | 3690640.42\n2026-03-15 | 27161 | 27161 | 1 | 2026-03-16T01:00:00 | 2026-03-16T01:00:00 | 2873439.95\n2026-03-22 | 27161 | 27161 | 1 | 2026-03-23T01:00:00 | 2026-03-23T01:00:00 | 2866942.16\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:32",
+   "statement": "WITH d AS (\n  SELECT store_key, product_key, COUNT(*) n, COUNT(DISTINCT etl_loaded_at) loads,\n         COUNT(DISTINCT (closing_units, closing_value, receipts_units, adjustment_units)) distinct_vals,\n         MIN(closing_units) mn_u, MAX(closing_units) mx_u\n  FROM fact_stock_week WHERE week_ending_date = DATE '2026-03-08'\n  GROUP BY 1,2 HAVING COUNT(*) > 1)\nSELECT COUNT(*) dup_keys, SUM(n) rows_in_dups, SUM(CASE WHEN distinct_vals=1 THEN 1 ELSE 0 END) identical_dups, SUM(CASE WHEN loads=2 THEN 1 ELSE 0 END) two_loads, MAX(n) max_n, SUM(CASE WHEN mn_u<>mx_u THEN 1 ELSE 0 END) unit_diff\nFROM d\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_keys | rows_in_dups | identical_dups | two_loads | max_n | unit_diff\n7439 | 14878 | 7439 | 7439 | 2 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:36",
+   "statement": "SELECT store_id, store_key, store_name, region, valid_from, valid_to, is_current, close_date\nFROM dim_store\nWHERE store_id IN (SELECT store_id FROM dim_store WHERE region = 'West')\nORDER BY store_id, valid_from\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | store_key | store_name | region | valid_from | valid_to | is_current | close_date\n115 | 21 | Tampere Hervanta | West | 2000-01-01 | 9999-12-31 | true | NULL\n116 | 22 | Tampere Lielahti | West | 2000-01-01 | 9999-12-31 | true | NULL\n117 | 23 | Tampere Kaleva | West | 2000-01-01 | 9999-12-31 | true | NULL\n118 | 24 | Nokia | West | 2000-01-01 | 9999-12-31 | true | NULL\n119 | 25 | Pori | West | 2000-01-01 | 9999-12-31 | true | NULL\n120 | 26 | Rauma | West | 2000-01-01 | 9999-12-31 | true | NULL\n121 | 27 | Vaasa | West | 2000-01-01 | 9999-12-31 | true | NULL\n122 | 28 | Seinäjoki | West | 2000-01-01 | 9999-12-31 | true | NULL\n123 | 29 | Kokkola | West | 2000-01-01 | 9999-12-31 | true | NULL\n136 | 42 | Tampere Lamminpää | West | 2024-09-02 | 9999-12-31 | true | NULL\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:45",
+   "statement": "WITH params AS (\n    SELECT DATE '2026-02-23' AS start_date, DATE '2026-03-22' AS end_date\n),\nstock_dedup AS (\n    SELECT DISTINCT store_key, product_key, week_ending_date, closing_units, closing_value, receipts_units, adjustment_units\n    FROM fact_stock_week\n),\nweekly AS (\n    SELECT fs.week_ending_date, cp.category, SUM(fs.closing_value) AS closing_value, COUNT(*) AS n_rows\n    FROM stock_dedup fs\n    JOIN dim_store s ON s.store_key = fs.store_key\n    JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date BETWEEN params.start_date AND params.end_date\n      AND cs.region = 'West' AND s.store_id < 900 AND cp.category <> 'ZZ Test'\n    GROUP BY 1, 2\n)\nSELECT category, COUNT(*) AS weeks, MIN(n_rows) AS min_rows, MAX(n_rows) AS max_rows, ROUND(AVG(closing_value), 2) AS avg_weekly_closing_value\nFROM weekly GROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | weeks | min_rows | max_rows | avg_weekly_closing_value\nBathroom & Plumbing | 4 | 454 | 457 | 75701.53\nCleaning & Household | 4 | 655 | 657 | 24179.52\nElectrical | 4 | 951 | 951 | 68684.23\nFurniture | 4 | 256 | 257 | 139710.73\nGarden | 4 | 1650 | 1659 | 157755.23\nHome Textiles & Decor | 4 | 712 | 718 | 43663.29\nKitchen & Dining | 4 | 580 | 580 | 56414.75\nPaint & Decorating | 4 | 711 | 717 | 80430.48\nSeasonal | 4 | 493 | 493 | 64998.54\nTools & Hardware | 4 | 977 | 988 | 101986.72\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:53",
+   "statement": "WITH x AS (\n  SELECT DISTINCT fs.*\n  FROM fact_stock_week fs\n  WHERE fs.week_ending_date BETWEEN DATE '2026-02-23' AND DATE '2026-03-22'\n)\nSELECT x.week_ending_date,\n  COUNT(*) AS n,\n  SUM(CASE WHEN s.store_key IS NULL THEN 1 ELSE 0 END) AS orphan_store,\n  SUM(CASE WHEN p.product_key IS NULL THEN 1 ELSE 0 END) AS orphan_product,\n  SUM(CASE WHEN s.region='West' THEN 1 ELSE 0 END) AS west_rows,\n  SUM(CASE WHEN s.store_id>=900 THEN 1 ELSE 0 END) AS pseudo_rows,\n  SUM(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS test_rows,\n  SUM(CASE WHEN x.closing_units<0 THEN 1 ELSE 0 END) AS neg_units,\n  SUM(CASE WHEN x.closing_value IS NULL OR x.closing_units IS NULL THEN 1 ELSE 0 END) AS nulls,\n  SUM(CASE WHEN s.region='West' AND ABS(x.closing_value - x.closing_units*p.standard_unit_cost) > 0.05 THEN 1 ELSE 0 END) AS west_value_mismatch,\n  SUM(CASE WHEN s.region='West' AND x.closing_units=0 THEN 1 ELSE 0 END) AS west_zero_units\nFROM x LEFT JOIN dim_store s ON s.store_key=x.store_key LEFT JOIN dim_product p ON p.product_key=x.product_key\nGROUP BY 1 ORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "week_ending_date | n | orphan_store | orphan_product | west_rows | pseudo_rows | test_rows | neg_units | nulls | west_value_mismatch | west_zero_units\n2026-03-01 | 27263 | 0 | 0 | 7477 | 0 | 0 | 0 | 0 | 0 | 38\n2026-03-08 | 34600 | 0 | 0 | 14878 | 0 | 0 | 0 | 0 | 0 | 0\n2026-03-15 | 27161 | 0 | 0 | 7439 | 0 | 0 | 0 | 0 | 0 | 0\n2026-03-22 | 27161 | 0 | 0 | 7439 | 0 | 0 | 0 | 0 | 0 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:05",
+   "statement": "WITH stock_dedup AS (\n    SELECT DISTINCT store_key, product_key, week_ending_date, closing_units, closing_value, receipts_units, adjustment_units\n    FROM fact_stock_week\n    WHERE week_ending_date BETWEEN DATE '2026-02-23' AND DATE '2026-03-22'\n),\nweekly AS (\n    SELECT fs.week_ending_date, cp.category, SUM(fs.closing_value) AS closing_value\n    FROM stock_dedup fs\n    JOIN dim_store s ON s.store_key = fs.store_key\n    JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    WHERE cs.region = 'West' AND s.store_id < 900 AND cp.category <> 'ZZ Test'\n    GROUP BY 1, 2\n)\nSELECT category, ROUND(AVG(closing_value), 2) AS avg_weekly_closing_stock_value_eur\nFROM weekly GROUP BY 1 ORDER BY 1\n",
+   "n": 7,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | avg_weekly_closing_stock_value_eur\nBathroom & Plumbing | 75701.53\nCleaning & Household | 24179.52\nElectrical | 68684.23\nFurniture | 139710.73\nGarden | 157755.23\nHome Textiles & Decor | 43663.29\nKitchen & Dining | 56414.75\nPaint & Decorating | 80430.48\nSeasonal | 64998.54\nTools & Hardware | 101986.72\n(10 rows)"
+  }
+ ]
+}

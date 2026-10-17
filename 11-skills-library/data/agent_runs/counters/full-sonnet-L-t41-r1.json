@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t41-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T41",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "41a7ddf90e8131a798ddb1767886efab5bc1defbf86b6324b02764b4aaba2d22",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:13:34",
+   "statement": "SELECT member_id, member_key, join_date, tier, home_store_id, valid_from, valid_to, is_current\nFROM dim_member\nWHERE join_date BETWEEN DATE '2026-10-01' AND DATE '2026-10-06'\nORDER BY join_date, member_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 145,
+   "output_preview": "member_id | member_key | join_date | tier | home_store_id | valid_from | valid_to | is_current\n70004746 | 7085 | 2026-10-01 | Basic | 132 | 2026-10-01 | 9999-12-31 | true\n70006586 | 9839 | 2026-10-01 | Basic | 900 | 2026-10-01 | 9999-12-31 | true\n70007951 | 11874 | 2026-10-01 | Basic | 900 | 2026-10-01 | 9999-12-31 | true\n70010568 | 15802 | 2026-10-01 | Basic | 132 | 2026-10-01 | 9999-12-31 | true\n70016138 | 24076 | 2026-10-01 | Basic | 127 | 2026-10-01 | 9999-12-31 | true\n70016202 | 24162 | 2026-10-01 | Basic | 115 | 2026-10-01 | 9999-12-31 | true\n70017802 | 26532 | 2026-10-01 | Basic | 128 | 2026-10-01 | 9999-12-31 | true\n70017995 | 26816 | 2026-10-01 | Silver | 900 | 2026-10-01 | 9999-12-31 | true\n70019221 | 28676 | 2026-10-01 | Basic | 900 | 2026-10-01 | 9999-12-31 | true\n70024436 | 36466 | 2026-10-01 | Gold | 128 | 2026-10-01 | 9999-12-31 | true\n70024522 | 36602 | 2026-10-01 | Basic | 126 | 2026-10-01 | 9999-12-31 | true\n70026927 | 40207 | 2026-10-01 | Gold | 102 | 2026-10-01 | 9999-12-31 | true\n70027851 | 41555 | 2026-10-01 | Silver | 900 | 2026-10-01 | 9999-12-31 | true\n70030498 | 45491 | 2026-10-01 | Silver | 124 | 2026-10-01 | 9999-12-31 | true\n70031287 | 46649 | 2026-10-01 | Basic | 109 | 2026-10-01 | 9999-12-31 | true\n70032941 | 49115 | 2026-10-01 | Basic | 110 | 2026-10-01 | 9999-12-31 | true\n70038071 | 56774 | 2026-10-01 | Basic | 104 | 2026-10-01 | 9999-12-31 | true\n70039259 | 58567 | 2026-10-01 | Basic | 130 | 2026-10-01 | 9999-12-31 | true\n70040900 | 60986 | 2"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:13:41",
+   "statement": "WITH v AS (\n  SELECT member_id, join_date, home_store_id, valid_from,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from) AS vn\n  FROM dim_member\n)\nSELECT\n  (SELECT COUNT(*) FROM dim_member WHERE join_date = DATE '2026-10-03') AS rows_on_date,\n  (SELECT COUNT(DISTINCT member_id) FROM dim_member WHERE join_date = DATE '2026-10-03') AS distinct_ids,\n  (SELECT COUNT(*) FROM v WHERE vn = 1 AND join_date = DATE '2026-10-03') AS first_version_count,\n  (SELECT COUNT(DISTINCT member_id) FROM (SELECT member_id FROM dim_member GROUP BY member_id HAVING COUNT(DISTINCT join_date) > 1)) AS ids_with_multi_join_dates,\n  (SELECT COUNT(*) FROM v WHERE vn = 1 AND valid_from <> join_date) AS first_version_validfrom_ne_join,\n  (SELECT MAX(join_date) FROM dim_member) AS max_join,\n  (SELECT MAX(sale_date) FROM fact_sales_line) AS max_sale,\n  (SELECT MAX(join_date) FROM stg_member_updates) AS stg_max_join\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_on_date | distinct_ids | first_version_count | ids_with_multi_join_dates | first_version_validfrom_ne_join | max_join | max_sale | stg_max_join\n29 | 29 | 29 | 0 | 0 | 2026-10-04 | 2026-10-04 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:13:49",
+   "statement": "SELECT \n  (SELECT COUNT(*) FROM stg_member_updates WHERE join_date = DATE '2026-10-03') AS stg_rows,\n  (SELECT COUNT(*) FROM stg_member_updates s WHERE s.join_date = DATE '2026-10-03' AND s.member_id NOT IN (SELECT member_id FROM dim_member)) AS stg_not_in_dim,\n  (SELECT COUNT(*) FROM dim_member WHERE join_date = DATE '2026-10-03' AND member_id NOT IN (SELECT member_id FROM stg_member_updates)) AS dim_not_in_stg,\n  (SELECT CAST(AVG(c) AS DECIMAL(6,1)) FROM (SELECT join_date, COUNT(DISTINCT member_id) c FROM dim_member WHERE join_date BETWEEN DATE '2026-09-01' AND DATE '2026-10-02' GROUP BY 1)) AS avg_daily_sep,\n  (SELECT COUNT(*) FROM dim_member WHERE join_date = DATE '2026-10-03' AND member_id IN (SELECT member_id FROM dim_member GROUP BY 1 HAVING COUNT(*) > 1)) AS multiversion_members,\n  (SELECT string_agg(fiscal_period_label || ' ' || CAST(fully_loaded AS VARCHAR), '; ') FROM ref_fiscal_calendar WHERE period_start_date <= DATE '2026-10-03' AND period_end_date >= DATE '2026-10-03') AS period_loaded\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "stg_rows | stg_not_in_dim | dim_not_in_stg | avg_daily_sep | multiversion_members | period_loaded\n29 | 0 | 0 | 36.3 | 0 | FY2026/27 P06 false\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:13:53",
+   "statement": "SELECT m.join_date, dayname(m.join_date) AS dow, COUNT(DISTINCT m.member_id) AS members,\n       (SELECT COUNT(DISTINCT receipt_id) FROM fact_sales_line f WHERE f.sale_date = m.join_date) AS receipts\nFROM dim_member m\nWHERE m.join_date BETWEEN DATE '2026-09-12' AND DATE '2026-10-04'\nGROUP BY 1, 2 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 23,
+   "output_preview": "join_date | dow | members | receipts\n2026-09-12 | Saturday | 25 | 988\n2026-09-13 | Sunday | 37 | 601\n2026-09-14 | Monday | 30 | 661\n2026-09-15 | Tuesday | 35 | 640\n2026-09-16 | Wednesday | 26 | 690\n2026-09-17 | Thursday | 40 | 735\n2026-09-18 | Friday | 44 | 806\n2026-09-19 | Saturday | 27 | 1058\n2026-09-20 | Sunday | 37 | 579\n2026-09-21 | Monday | 35 | 623\n2026-09-22 | Tuesday | 30 | 676\n2026-09-23 | Wednesday | 39 | 700\n2026-09-24 | Thursday | 41 | 764\n2026-09-25 | Friday | 39 | 846\n2026-09-26 | Saturday | 44 | 1037\n2026-09-27 | Sunday | 41 | 603\n2026-09-28 | Monday | 33 | 636\n2026-09-29 | Tuesday | 33 | 633\n2026-09-30 | Wednesday | 31 | 658\n2026-10-01 | Thursday | 36 | 734\n2026-10-02 | Friday | 40 | 804\n2026-10-03 | Saturday | 29 | 880\n2026-10-04 | Sunday | 40 | 449\n(23 rows)"
+  }
+ ]
+}

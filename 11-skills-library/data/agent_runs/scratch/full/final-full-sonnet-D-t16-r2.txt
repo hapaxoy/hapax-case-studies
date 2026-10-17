@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH wo AS (SELECT web_order_id, fulfilment_type, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), web_net AS (SELECT wo.dispatch_date AS business_date, wo.fulfilment_type, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN wo ON wo.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, wo.fulfilment_type, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN wo ON wo.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, ROUND(100.0 * SUM(CASE WHEN w.fulfilment_type = 'click_and_collect' THEN w.net_sales ELSE 0 END) / SUM(w.net_sales), 2) AS click_collect_share_pct FROM web_net w JOIN dim_date d ON d.calendar_date = w.business_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (9, 10) GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 9, 29.24],
+      ["FY2025/26", 10, 30.75]
+    ]
+  },
+  "definitions_applied": [
+    "Click-and-collect share = click-and-collect net sales divided by all web net sales (click-and-collect counts as web)",
+    "Net sales excluding VAT, after returns; returns reduce net sales on their own return date",
+    "Web sales recognised on the Helsinki dispatch date (click-and-collect: the ready-for-collection date), not on the order date",
+    "Web identified by store_id 900, not by channel_code or channel_id",
+    "Click-and-collect identified by fact_web_order.fulfilment_type",
+    "Cancelled and processing orders excluded (no dispatch, no sales lines)",
+    "Store 999 and category ZZ Test excluded",
+    "Fiscal periods from dim_date (fiscal_year and fiscal_period columns)",
+    "Control total check against rpt_daily_store_sales for store 900"
+  ],
+  "assumptions": [
+    "'Last year' read as FY2025/26, the fiscal year that just ended on 3 May 2026. The request was made on 6 October 2026, in FY2026/27, and the history shows 'last year' taken as the previous fiscal year, FY2025/26 in the May 2026 requests REQ-D04, D08, D28 and D35. Periods 9 and 10 of FY2025/26 run 22 Dec 2025 to 25 Jan 2026 (5 weeks) and 26 Jan to 22 Feb 2026 (4 weeks).",
+    "One share per period, since the request names two periods and gives no sign that a single combined figure was wanted. The share is not combined across the two periods.",
+    "'Web sales' read as net sales on the company definition, meaning after returns. The before-returns shares are 28.95% for P9 and 30.62% for P10.",
+    "Refunds are counted as web sales only when booked to the web shop (store 900), as the company definition and rpt_daily_store_sales do. Each refund is assigned to click-and-collect or home delivery by the type of the original order, found through sales_line_id."
+  ],
+  "caveats": [
+    "Correction: the channel_id on the sales lines is wrong for part of the period. Click-and-collect lines with sale dates from 12 Jan to 8 Feb 2026 (1,473 lines in my check) carry channel_id 2 (web home delivery) instead of 3. channel_code is empty after the 3 Nov 2025 migration. I did not use either column. I took click-and-collect from fact_web_order.fulfilment_type, so the shares are unaffected. A channel_id-based query would understate click-and-collect for those weeks.",
+    "Correction: web sales are dated on the Helsinki dispatch date from fact_web_order, not on sale_date, which is the order date on web lines. Cancelled orders (99 click-and-collect and 261 home-delivery orders in the nearby window) have no lines and are not counted.",
+    "Excluded: web orders returned in a physical store are booked to that store and are not in the web figures. For P9 this is 1,100.14 EUR of click-and-collect and 4,657.68 EUR of home-delivery refunds. For P10 it is 1,655.62 EUR and 3,356.20 EUR. If refunds followed the original order, the shares would be about 28.9% for P9 and 30.2% for P10, as I estimated from the refund amounts and did not run as a query.",
+    "Control total: my web net sales agree exactly with rpt_daily_store_sales for store 900. P9 is 200,208.58 net, from 219,929.50 before returns less 19,720.92 returns. P10 is 123,131.15 net, from 137,569.07 before returns less 14,437.92 returns.",
+    "Dates: P9 and P10 are fully loaded in the warehouse, and the window does not run past 4 Oct 2026.",
+    "Web returns can arrive up to 30 days after a sale, so later returns on orders from the end of P10 may still be booked in P11 and move that period's figures. The P9 and P10 figures here count only returns booked on dates within the two periods."
+  ]
+}
+```

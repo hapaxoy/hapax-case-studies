@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key LEFT JOIN web_dispatch w ON w.web_order_id=f.receipt_id WHERE s.store_id&lt;&gt;999 AND p.category&lt;&gt;'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key WHERE s.store_id&lt;&gt;999 AND p.category&lt;&gt;'ZZ Test'), store_weeks AS (SELECT st.store_id, d.fiscal_year, d.fiscal_week, (st.open_date IS NULL OR st.open_date &lt;= d.fiscal_week_start_date) AND (st.close_date IS NULL OR st.close_date &gt;= d.fiscal_week_end_date) AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id=st.store_id AND c.closure_start_date &lt;= d.fiscal_week_end_date AND c.closure_end_date &gt;= d.fiscal_week_start_date) AS trading FROM dim_store st CROSS JOIN (SELECT DISTINCT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date FROM dim_date WHERE fiscal_year IN ('FY2025/26','FY2026/27') AND fiscal_week BETWEEN 14 AND 17) d WHERE st.is_current AND st.store_id&lt;900), lfl_store_weeks AS (SELECT ty.store_id, ty.fiscal_week FROM store_weeks ty JOIN store_weeks ly ON ly.store_id=ty.store_id AND ly.fiscal_week=ty.fiscal_week AND ly.fiscal_year='FY2025/26' JOIN dim_store st ON st.store_id=ty.store_id AND st.is_current WHERE ty.fiscal_year='FY2026/27' AND ty.trading AND ly.trading AND (st.open_date IS NULL OR st.open_date &lt;= DATE '2026-08-03' - 364)), lfl_sales AS (SELECT d.fiscal_year, SUM(n.net_sales) AS net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date=n.business_date JOIN lfl_store_weeks l ON l.store_id=n.store_id AND l.fiscal_week=d.fiscal_week WHERE d.fiscal_year IN ('FY2026/27','FY2025/26') AND d.fiscal_week BETWEEN 14 AND 17 GROUP BY 1) SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, ty.net_sales AS this_year, ly.net_sales AS last_year, ROUND(100.0*(ty.net_sales/ly.net_sales-1),2) AS lfl_growth_pct FROM lfl_sales ty, lfl_sales ly WHERE ty.fiscal_year='FY2026/27' AND ly.fiscal_year='FY2025/26'",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "this_year", "last_year", "lfl_growth_pct"],
+    "rows": [["FY2026/27", 4, 1010478.52, 1010743.32, -0.03]]
+  },
+  "definitions_applied": [
+    "LFL: physical stores only, store-weeks trading in both years, week by week, one total",
+    "LFL base rule: store open at least 364 days before the first day of the period (3 Aug 2026)",
+    "Net sales: excluding VAT, after returns, returns on their return date",
+    "Web on Helsinki dispatch date (web shop, store 900, excluded from LFL)",
+    "Store 999 and category ZZ Test excluded",
+    "Refit closures taken from ref_store_closure; closed store taken from dim_store close_date",
+    "Fiscal calendar: FY2026/27 P4 = weeks 14 to 17 (3 to 30 Aug 2026) against FY2025/26 weeks 14 to 17 (28 Jul to 24 Aug 2025), same fiscal weeks rather than same calendar dates",
+    "Control total checked against rpt_daily_store_sales"
+  ],
+  "assumptions": [
+    "\"Period 4 this year\" is read as FY2026/27 P4, the fiscal year current on 7 Oct 2026. P4 is fully loaded and complete (ended 30 Aug 2026).",
+    "The comparator is the same fiscal weeks (14 to 17) of FY2025/26, the prior fiscal year.",
+    "The request gave no breakdown, so the answer is one company total, with this year, last year and growth.",
+    "Open and close dates come from the current dim_store version."
+  ],
+  "caveats": [
+    "Savonlinna (129) closed on 25 January 2026. It sold 9,549.14 in FY2025/26 P4 and nothing this year, so it is out of LFL for all four weeks. The LFL base is therefore 38 stores, and last year's figure (1,010,743.32) is lower than last year's all-store total (1,020,292.46).",
+    "No other store was dropped. Both new stores (Tampere Lamminpää 136, Lohja 137) were open more than 364 days before 3 Aug 2026. The refits at Pori (Sep to Oct 2025) and Kuopio (Jun to Jul 2026) fall outside weeks 14 to 17 of both years. Week 53 is not in the range.",
+    "Control total: net sales per store per business day for P4 matched rpt_daily_store_sales exactly (no store differed by more than 0.50) in both years. No duplicate sales lines were found in the range.",
+    "LFL growth is essentially flat at -0.03% (about -265 EUR on roughly 1.01 million). Individual store-weeks vary widely, by up to about 40% either way.",
+    "The deprecated views (rpt.v_daily_sales, rpt.v_weekly_store_sales), the channel_code column and the stg_, bak_ and tmp_ tables were not used."
+  ]
+}
+```

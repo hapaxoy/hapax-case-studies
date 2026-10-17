@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2026-06-29' AS start_date, DATE '2026-08-02' AS end_date), weekly AS (SELECT fs.week_ending_date, SUM(fs.closing_value) AS closing_value FROM fact_stock_week fs JOIN dim_store s ON s.store_key = fs.store_key JOIN dim_product p ON p.product_key = fs.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current CROSS JOIN params WHERE fs.week_ending_date BETWEEN params.start_date AND params.end_date AND s.store_id &lt; 900 AND cp.category = 'Paint &amp; Decorating' GROUP BY 1) SELECT 'FY2026/27' AS fiscal_year, 3 AS fiscal_period, 'Paint &amp; Decorating' AS category, ROUND(AVG(closing_value), 2) AS avg_weekly_closing_stock_value_at_cost FROM weekly",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "avg_weekly_closing_stock_value_at_cost"],
+    "rows": [["FY2026/27", 3, "Paint &amp; Decorating", 344466.83]]
+  },
+  "definitions_applied": [
+    "Closing stock is a weekly snapshot: summed across stores and products within each week, then averaged across weeks, never summed across weeks",
+    "Stock value is closing_value, at standard cost in EUR",
+    "Fiscal period 3 of FY2026/27 is 29 June to 2 August 2026, fiscal weeks 9 to 13, with weeks ending Sunday 5, 12, 19 and 26 July and 2 August",
+    "Physical stores only (store_id below 900): the web shop holds no stock in this table, and store 999 is excluded",
+    "Category ZZ Test is excluded from reporting (no Paint &amp; Decorating test rows were present)",
+    "Product category as-is: each article's current dim_product version, per the management reporting default",
+    "Versioned dimensions joined on sku with is_current, so no rows multiply"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year, FY2026/27, and 'period 3' means fiscal period P3 of that year (29 June to 2 August 2026). The request was received on 8 October 2026.",
+    "'Average stock' means the average of the five weekly closing stock values in the period, each summed over the whole chain. It is not the last week's closing and not the average of the opening and closing figures.",
+    "'Whole chain' means all physical stores (38 stores with Paint &amp; Decorating stock in the period). The web shop is not included because it holds no store stock.",
+    "'Value at cost' is the standard cost value (closing_value) held in the warehouse, not the latest purchase price."
+  ],
+  "caveats": [
+    "No correction was needed. fact_stock_week had no duplicate rows at the store, product and week grain for these five weeks, and no negative units were present.",
+    "P3 is fully loaded in the warehouse (fully_loaded = true).",
+    "The weekly chain totals were 341138.89, 341742.53, 344245.91, 349160.39 and 346046.42 EUR. The average of the five is 344466.83 EUR.",
+    "Paint &amp; Decorating is the same category under the current and the historical product version for every row in the period, so as-is and as-was give the same figure.",
+    "The first week of the period had 2,699 store-article rows and the four later weeks had 2,674. This is a change in what stores range, not a data fault.",
+    "Kuopio (store 125) was closed for a refit from 15 June to 26 July 2026. Its stock stays in the weekly snapshot and is included in the figure.",
+    "The figure is at standard cost, which is revalued each April. It will not match a valuation at actual purchase cost.",
+    "The control-total check against rpt_daily_store_sales does not apply, because it covers net sales and not stock."
+  ]
+}
+```

@@ -1,0 +1,103 @@
+{
+ "run_id": "full-sonnet-D-t21-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T21",
+ "budget": 12,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "f976897096bf647fb1e7caefdb88f7615905aece0765a0285fd7d426cd3af994",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:40",
+   "statement": "SELECT fiscal_period, MIN(period_start_date), MAX(period_end_date), SUM(weeks_in_period) w, bool_and(fully_loaded) FROM ref_fiscal_calendar WHERE fiscal_year='FY2024/25' AND fiscal_quarter=2 GROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | min(period_start_date) | max(period_end_date) | w | bool_and(fully_loaded)\n4 | 2024-07-29 | 2024-08-25 | 4 | true\n5 | 2024-08-26 | 2024-09-22 | 4 | true\n6 | 2024-09-23 | 2024-10-27 | 5 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:42",
+   "statement": "WITH w AS (\n SELECT f.sales_line_id, f.receipt_id, f.line_no, f.etl_loaded_at, f.gross_amount, f.net_amount, f.sale_date\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\n WHERE s.store_id=900 AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2025-02-28')\nSELECT COUNT(*) n, COUNT(DISTINCT sales_line_id) ids, COUNT(DISTINCT (receipt_id, line_no)) rl, COUNT(DISTINCT etl_loaded_at) loads, MIN(etl_loaded_at), MAX(etl_loaded_at) FROM w\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | ids | rl | loads | min(etl_loaded_at) | max(etl_loaded_at)\n35461 | 35461 | 35461 | 212 | 2024-08-02T01:00:00 | 2025-03-01T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:48",
+   "statement": "WITH wd AS (\n SELECT web_order_id, status, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dd FROM fact_web_order WHERE status IN ('delivered','collected')),\nl AS (\n SELECT wd.dd, f.gross_amount, f.net_amount, p.category, s.store_id, f.channel_code, f.vat_rate, f.sales_line_id\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n JOIN wd ON wd.web_order_id=f.receipt_id\n WHERE s.store_id=900)\nSELECT d.fiscal_year, d.fiscal_period, COUNT(*) n, COUNT(DISTINCT sales_line_id) ids,\n SUM(gross_amount) gross_all, SUM(CASE WHEN category<>'ZZ Test' THEN gross_amount END) gross_ex_test,\n SUM(CASE WHEN category='ZZ Test' THEN gross_amount ELSE 0 END) test_gross, SUM(net_amount) net_all,\n SUM(CASE WHEN category<>'ZZ Test' THEN net_amount END) net_ex_test\nFROM l JOIN dim_date d ON d.calendar_date=l.dd\nWHERE d.fiscal_year='FY2024/25' AND d.fiscal_period IN (4,5,6)\nGROUP BY 1,2 ORDER BY 2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | n | ids | gross_all | gross_ex_test | test_gross | net_all | net_ex_test\nFY2024/25 | 4 | 3958 | 3958 | 156435.28 | 156427.22 | 8.06 | 126249.15 | 126242.65\nFY2024/25 | 5 | 4054 | 4054 | 153250.01 | 153246.24 | 3.77 | 122663.57 | 122660.57\nFY2024/25 | 6 | 5301 | 5301 | 192906.29 | 192906.29 | 0.00 | 153786.32 | 153786.32\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:51",
+   "statement": "SELECT 'lines_check' k, COUNT(*) n, SUM(CASE WHEN abs(f.gross_amount - f.net_amount*(1+f.vat_rate))>0.02 THEN 1 ELSE 0 END) bad_gross,\n SUM(CASE WHEN f.net_amount<0 THEN 1 ELSE 0 END) neg, SUM(CASE WHEN f.gross_amount IS NULL THEN 1 ELSE 0 END) nullg,\n COUNT(DISTINCT f.vat_rate) rates, MIN(f.vat_rate), MAX(f.vat_rate)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE s.store_id=900 AND f.sale_date BETWEEN DATE '2024-07-20' AND DATE '2024-11-10'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "k | n | bad_gross | neg | nullg | rates | min(f.vat_rate) | max(f.vat_rate)\nlines_check | 16928 | 0 | 0 | 0 | 4 | 0.1000 | 0.2550\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:56",
+   "statement": "SELECT f.sale_date >= DATE '2024-09-01' AS after_change, p.vat_class, f.vat_rate, COUNT(*) n, SUM(f.gross_amount) g\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE s.store_id=900 AND f.sale_date BETWEEN DATE '2024-07-20' AND DATE '2024-11-10'\nGROUP BY 1,2,3 ORDER BY 1,2,3\n",
+   "n": 5,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "after_change | vat_class | vat_rate | n | g\nfalse | reduced10 | 0.1000 | 12 | 353.20\nfalse | reduced14 | 0.1400 | 307 | 1823.67\nfalse | standard | 0.2400 | 5910 | 247511.68\ntrue | reduced10 | 0.1000 | 18 | 528.35\ntrue | reduced14 | 0.1400 | 225 | 1255.67\ntrue | standard | 0.2550 | 10456 | 388155.35\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:59",
+   "statement": "WITH o AS (SELECT o.*, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) dd FROM fact_web_order o),\nln AS (SELECT receipt_id, SUM(gross_amount) g, COUNT(*) c FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=900 GROUP BY 1)\nSELECT o.status, COUNT(*) orders, SUM(CASE WHEN ln.receipt_id IS NULL THEN 1 ELSE 0 END) no_lines,\n SUM(CASE WHEN ln.receipt_id IS NOT NULL AND abs(ln.g-o.order_total_gross)>0.05 THEN 1 ELSE 0 END) total_mismatch,\n SUM(CASE WHEN ln.receipt_id IS NOT NULL AND ln.c<>o.line_count THEN 1 ELSE 0 END) count_mismatch,\n SUM(CASE WHEN o.dispatch_ts_utc IS NULL THEN 1 ELSE 0 END) no_dispatch\nFROM o LEFT JOIN ln ON ln.receipt_id=o.web_order_id\nWHERE o.order_ts_utc BETWEEN TIMESTAMP '2024-07-01' AND TIMESTAMP '2024-12-01'\nGROUP BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | orders | no_lines | total_mismatch | count_mismatch | no_dispatch\ncancelled | 504 | 504 | 0 | 0 | 504\ncollected | 2743 | 0 | 0 | 0 | 0\ndelivered | 9102 | 0 | 0 | 0 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:05",
+   "statement": "SELECT d.fiscal_period, SUM(r.net_sales_before_returns) nsbr, SUM(r.returns_net) ret, SUM(r.net_sales) ns, COUNT(*) days\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\nWHERE r.store_id=900 AND d.fiscal_year='FY2024/25' AND d.fiscal_period IN (4,5,6) GROUP BY 1 ORDER BY 1\n",
+   "n": 7,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"days\"\n\nLINE 1: ...) nsbr, SUM(r.returns_net) ret, SUM(r.net_sales) ns, COUNT(*) days\n                                                                         ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:07",
+   "statement": "SELECT s.store_id, s.store_name, f.channel_code, COUNT(*) n, SUM(f.gross_amount) g\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE f.sale_date BETWEEN DATE '2024-07-29' AND DATE '2024-10-27' AND (f.channel_code='WB' OR s.store_id=900 OR f.receipt_id IN (SELECT web_order_id FROM fact_web_order))\nGROUP BY 1,2,3 ORDER BY 1\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | channel_code | n | g\n900 | Tuomimetsä web shop | WB | 13286 | 499578.73\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:10",
+   "statement": "SELECT d.fiscal_period, SUM(r.net_sales_before_returns) nsbr, SUM(r.returns_net) ret, SUM(r.net_sales) ns, COUNT(*) n_days\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\nWHERE r.store_id=900 AND d.fiscal_year='FY2024/25' AND d.fiscal_period IN (4,5,6) GROUP BY 1 ORDER BY 1\n",
+   "n": 9,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | nsbr | ret | ns | n_days\n4 | 126242.65 | 11049.62 | 115193.03 | 28\n5 | 122660.57 | 10780.91 | 111879.66 | 28\n6 | 153786.32 | 14167.68 | 139618.64 | 35\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:15",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n)\nSELECT d.fiscal_year, d.fiscal_period, ROUND(SUM(f.gross_amount), 2) AS web_sales_incl_vat\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN web_dispatch w ON w.web_order_id = f.receipt_id\nJOIN dim_date d    ON d.calendar_date = w.dispatch_date\nWHERE s.store_id = 900\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period IN (4, 5, 6)\nGROUP BY 1, 2\nORDER BY 2\n",
+   "n": 10,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | web_sales_incl_vat\nFY2024/25 | 4 | 156427.22\nFY2024/25 | 5 | 153246.24\nFY2024/25 | 6 | 192906.29\n(3 rows)"
+  }
+ ]
+}

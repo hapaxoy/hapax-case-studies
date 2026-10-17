@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-L-t45-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T45",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "c109989ffb2210551b046eb89e08226698a3435f8a824f6994dc397b9c815140",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:25:51",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE '%Tampere%' OR store_name ILIKE '%Tampere%' ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n21 | 115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n23 | 117 | Tampere Kaleva | Tampere | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n42 | 136 | Tampere Lamminpää | Tampere | West | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n46 | 900 | Tuomimetsä web shop | Tampere | Online | Web | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n47 | 999 | Training store | Tampere | Head office | Training | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(6 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:25:54",
+   "statement": "fiscal-calendar/scripts/fiscal.py today",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'today'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:25:57",
+   "statement": "fiscal-calendar/scripts/fiscal.py YTD",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: YTD    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P01, FY2026/27 P02, FY2026/27 P03, FY2026/27 P04, FY2026/27 P05, FY2026/27 P06\n  fiscal_weeks                       1-22\n  start_date                         2026-05-04\n  end_date                           2026-10-04\n  weeks                              22\n  days                               154\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-10-04\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 22)\n  note: YTD = fiscal year to date through the last completed fiscal week (CAL-RELATIVE).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:03",
+   "statement": "WITH cur AS (\n  SELECT m.member_id, m.home_store_id, m.join_date FROM dim_member m WHERE m.valid_to = DATE '9999-12-31' AND m.is_current\n),\nactive AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n)\nSELECT s.store_id, s.store_name,\n       COUNT(*) AS members_current_home, COUNT(a.member_id) AS active_52w,\n       COUNT(DISTINCT c.member_id) AS dist_members, MAX(c.join_date) AS max_join\nFROM cur c JOIN dim_store s ON s.store_id = c.home_store_id AND s.is_current\nLEFT JOIN active a ON a.member_id = c.member_id\nWHERE s.city = 'Tampere'\nGROUP BY ALL ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "store_id | store_name | members_current_home | active_52w | dist_members | max_join\n115 | Tampere Hervanta | 2788 | 1708 | 2788 | 2026-10-02\n116 | Tampere Lielahti | 1721 | 1052 | 1721 | 2026-10-02\n117 | Tampere Kaleva | 1692 | 1034 | 1692 | 2026-10-04\n136 | Tampere Lamminpää | 974 | 647 | 974 | 2026-10-04\n900 | Tuomimetsä web shop | 12028 | 4698 | 12028 | 2026-10-04\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:26:10",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on category 'ZZ Test' (REG-TEST-SKU, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 1 rows, 2 columns: city, active_members\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  city | active_members\n  Tampere | 4441\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:15",
+   "statement": "WITH active AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_store fs ON fs.store_key = f.store_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n    AND p.category <> 'ZZ Test' AND fs.store_id <> 999\n)\nSELECT 'Tampere' AS city, COUNT(*) AS active_members\nFROM active a\nJOIN dim_member cur ON cur.member_id = a.member_id AND DATE '2026-10-04' BETWEEN cur.valid_from AND cur.valid_to\nJOIN dim_store s ON s.store_id = cur.home_store_id AND s.is_current\nWHERE s.city = 'Tampere' AND s.store_id < 900\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "city | active_members\nTampere | 4441\n(1 row)"
+  }
+ ]
+}

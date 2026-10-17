@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-L-t04-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T04",
+ "budget": 30,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "567769cb30afe0b58c4e05442d5bdc80a36593885060294eafeed479538c1846",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:11:12",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) >= DATE '2024-08-01'\n      AND COALESCE(w.dispatch_date, f.sale_date) <= DATE '2024-09-30'\n)\nSELECT EXTRACT(MONTH FROM l.business_date) AS month,\n       EXTRACT(YEAR FROM l.business_date) AS year,\n       SUM(l.gross_amount) AS sales_incl_vat\nFROM lines l\nGROUP BY EXTRACT(MONTH FROM l.business_date), EXTRACT(YEAR FROM l.business_date)\nORDER BY month;\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "month | year | sales_incl_vat\n8 | 2024 | 1538645.88\n9 | 2024 | 1369219.80\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:11:18",
+   "statement": "SELECT EXTRACT(MONTH FROM business_date) AS month,\n       EXTRACT(YEAR FROM business_date) AS year,\n       SUM(net_sales_before_returns) AS net_sales_before_returns,\n       SUM(net_sales) AS net_sales_after_returns\nFROM rpt_daily_store_sales\nWHERE EXTRACT(MONTH FROM business_date) IN (8, 9)\n  AND EXTRACT(YEAR FROM business_date) = 2024\n  AND store_id <> 999\nGROUP BY EXTRACT(MONTH FROM business_date), EXTRACT(YEAR FROM business_date)\nORDER BY month;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "month | year | net_sales_before_returns | net_sales_after_returns\n8 | 2024 | 1241886.32 | 1178795.13\n9 | 2024 | 1091919.49 | 1034064.37\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:11:27",
+   "statement": "-- Check the VAT breakdown for August and September 2024\nWITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n)\nSELECT EXTRACT(MONTH FROM COALESCE(w.dispatch_date, f.sale_date)) AS month,\n       EXTRACT(YEAR FROM COALESCE(w.dispatch_date, f.sale_date)) AS year,\n       f.vat_rate,\n       COUNT(*) AS line_count,\n       SUM(f.net_amount) AS total_net,\n       SUM(f.gross_amount) AS total_gross\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nLEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\nWHERE s.store_id <> 999 \n  AND p.category <> 'ZZ Test'\n  AND COALESCE(w.dispatch_date, f.sale_date) >= DATE '2024-08-01'\n  AND COALESCE(w.dispatch_date, f.sale_date) <= DATE '2024-09-30'\nGROUP BY EXTRACT(MONTH FROM COALESCE(w.dispatch_date, f.sale_date)), \n         EXTRACT(YEAR FROM COALESCE(w.dispatch_date, f.sale_date)),\n         f.vat_rate\nORDER BY month, vat_rate DESC;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "month | year | vat_rate | line_count | total_net | total_gross\n8 | 2024 | 0.2400 | 44989 | 1229679.29 | 1524798.81\n8 | 2024 | 0.1400 | 2088 | 10458.31 | 11923.44\n8 | 2024 | 0.1000 | 62 | 1748.72 | 1923.63\n9 | 2024 | 0.2550 | 42001 | 1076243.86 | 1350688.10\n9 | 2024 | 0.2400 | 206 | 7433.02 | 9216.91\n9 | 2024 | 0.1400 | 1259 | 6186.22 | 7052.68\n9 | 2024 | 0.1000 | 65 | 2056.39 | 2262.11\n(7 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:11:47",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 2 rows, 4 columns: month, year, sales_incl_vat, sales_excl_vat\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 2 rows) ==\n  month | year | sales_incl_vat | sales_excl_vat\n  8 | 2024 | 1538645.88 | 1241886.32\n  9 | 2024 | 1369219.80 | 1091919.49\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:11:55",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) >= DATE '2024-08-01'\n      AND COALESCE(w.dispatch_date, f.sale_date) <= DATE '2024-09-30'\n)\nSELECT 'August 2024' AS month_label,\n       8 AS month,\n       2024 AS year,\n       SUM(CASE WHEN EXTRACT(MONTH FROM l.business_date) = 8 THEN l.gross_amount ELSE 0 END) AS sales_incl_vat\nFROM lines l\nUNION ALL\nSELECT 'September 2024' AS month_label,\n       9 AS month,\n       2024 AS year,\n       SUM(CASE WHEN EXTRACT(MONTH FROM l.business_date) = 9 THEN l.gross_amount ELSE 0 END) AS sales_incl_vat\nFROM lines l\nORDER BY month;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "month_label | month | year | sales_incl_vat\nAugust 2024 | 8 | 2024 | 1538645.88\nSeptember 2024 | 9 | 2024 | 1369219.80\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:12:01",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) >= DATE '2024-08-01'\n      AND COALESCE(w.dispatch_date, f.sale_date) <= DATE '2024-09-30'\n)\nSELECT CASE EXTRACT(MONTH FROM l.business_date)\n         WHEN 8 THEN 'August 2024'\n         WHEN 9 THEN 'September 2024'\n       END AS month,\n       SUM(l.gross_amount) AS sales_incl_vat\nFROM lines l\nGROUP BY EXTRACT(MONTH FROM l.business_date)\nORDER BY EXTRACT(MONTH FROM l.business_date);\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "month | sales_incl_vat\nAugust 2024 | 1538645.88\nSeptember 2024 | 1369219.80\n(2 rows)"
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "SELECT cp.subcategory, cp.category, SUM(f.quantity) AS units_sold FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id = 118 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 5 GROUP BY 1, 2 ORDER BY units_sold DESC LIMIT 3",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_id", "store_name", "subcategory", "category", "units_sold"],
+    "rows": [
+      ["FY2026/27", 5, 118, "Nokia", "Fixings &amp; Fasteners", "Tools &amp; Hardware", 570],
+      ["FY2026/27", 5, 118, "Nokia", "Indoor Lighting", "Electrical", 152],
+      ["FY2026/27", 5, 118, "Nokia", "Storage Boxes", "Cleaning &amp; Household", 139]
+    ]
+  },
+  "definitions_applied": [
+    "Units sold = quantity on fact_sales_line, dated by sale_date (store sales, so the Helsinki sale date)",
+    "Store 999 and category ZZ Test excluded from sales work (neither changes the Nokia total)",
+    "As-is hierarchy: subcategory and category taken from the current product version (dim_product is_current)",
+    "Store identified by stable store_id 118, not by store_key version",
+    "Fiscal calendar from dim_date: FY2026/27 period 5 = 31 Aug to 27 Sep 2026 (28 days, 4 weeks)",
+    "Control total check against rpt_daily_store_sales for the same store and days",
+    "Did not use channel_code, rpt.v_daily_sales, or any stg_/bak_/tmp_/old tables"
+  ],
+  "assumptions": [
+    "'Nokia' is store 118, the store named Nokia in the city of Nokia (West region, Medium format). It is the only store matching the name.",
+    "'Period 5 this year' is read as FY2026/27 P05, which is also the last completed period (the warehouse is loaded through 4 October 2026).",
+    "'Units sold' is the gross quantity on sales lines, before returns. The company has no units-net-of-returns definition, and the control table's units_sold is also before returns.",
+    "Subcategories are on the as-is (current) hierarchy, the company default. The as-was and as-is rankings are identical here.",
+    "Only the physical store is counted, because Nokia has no web component (web is the separate store 900)."
+  ],
+  "caveats": [
+    "Control total: Nokia units sold for P5 from fact_sales_line (2,245 units, 564 receipts, EUR 29,540.71 net before returns) match rpt_daily_store_sales exactly over the same 28 days.",
+    "No grain problems found: 1,250 lines for Nokia in P5, all with unique sales_line_id and unique receipt_id + line_no. No test-article or non-positive-quantity lines.",
+    "Fixings &amp; Fasteners is far ahead (570 units against 152 for second place). Its sales run at a similar level in every period of FY2026/27 (about 550 to 790 units per period), so this is genuine volume and not a data error.",
+    "No tie affects the top 3. Fourth place is a tie between Cleaning Products and Plants &amp; Flowers at 136 units each, but both are below third place (139).",
+    "No corrections to the data were needed."
+  ]
+}
+```

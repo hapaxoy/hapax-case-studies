@@ -1,0 +1,45 @@
+```json
+{
+  "sql": "WITH net_lines AS (SELECT f.sale_date AS business_date, s.store_id, p.sku, f.net_amount AS net_sales, f.standard_cost AS cost FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id < 900 AND s.store_id <> 999 AND p.category <> 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id < 900 AND s.store_id <> 999 AND p.category <> 'ZZ Test') SELECT cp.sku, cp.product_name, ROUND(SUM(n.net_sales - n.cost),2) AS gross_margin FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current WHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4 AND cs.region = 'South' GROUP BY 1,2 ORDER BY gross_margin DESC LIMIT 10",
+  "result": {
+    "columns": ["rank", "sku", "product_name", "gross_margin"],
+    "rows": [
+      [1, 103075, "Cushions & Throws Tuulikki 338", 2927.42],
+      [2, 100955, "Interior Paint Norvik 298", 2138.48],
+      [3, 101763, "Fixings & Fasteners Nordhem 594", 2074.88],
+      [4, 103390, "Bedroom Peltola 793", 1859.55],
+      [5, 100953, "Interior Paint Tuulikki 224", 1383.86],
+      [6, 103062, "Cushions & Throws Kuusela 657", 1346.56],
+      [7, 102468, "Plumbing Parts Ahvenisto 279", 1342.48],
+      [8, 102538, "Cookware Nordhem 469", 1177.39],
+      [9, 101398, "Power Tools Havu Pro 689", 1095.66],
+      [10, 101888, "Indoor Lighting Havu 419", 978.84]
+    ]
+  },
+  "definitions_applied": [
+    "Gross margin = net sales (excl. VAT) minus standard cost, both after returns; returns credited on their return date at standard_cost_returned",
+    "Fiscal calendar: Q4 = P10 to P12 of the fiscal year (27 Jan 2025 to 27 Apr 2025 for FY2024/25), filtered via dim_date",
+    "Regions as-is: current store version, so South includes Kouvola (114) and excludes the Capital Region stores (101 to 105) for all history",
+    "Products grouped by SKU on the current product version (as-is), per the margin-by-product pattern used in past requests",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included in net sales and margin",
+    "Physical stores only (store_id below 900); the web shop is its own region (Online) and is not part of South",
+    "Control total checked against rpt_daily_store_sales for the same days"
+  ],
+  "assumptions": [
+    "Q4 of FY24/25 is read as FY2024/25 P10 to P12 (weeks 40 to 52, 27 Jan to 27 Apr 2025). The request names the year explicitly, so no relative reading was needed.",
+    "FY24/25 is the fiscal year FY2024/25, which has 52 weeks, so there is no week 53 to consider.",
+    "South is read as-is (current regional hierarchy), the company default, because the request did not ask for as-was. As-was, Kouvola would be in East and the six stores now in the Capital Region would be in South, which would change the ranking.",
+    "Top 10 ranks by gross margin in EUR (not margin %), and products are articles (SKU), not subcategories or brands.",
+    "Net sales and cost are after returns booked in the quarter, matching the company definition. Returns of goods sold before the quarter reduce the quarter, and returns after 27 April 2025 on goods sold in the quarter are not netted."
+  ],
+  "caveats": [
+    "Store-level control total: net sales for the ten South stores (106 to 114 and 137) agree with rpt_daily_store_sales to the cent for the quarter. The check was done at store level, not by product, because the report table has no product dimension.",
+    "No data problems found in this range: no duplicate sales or return lines, no orphan dimension keys, no null or non-positive quantities or costs, one current version per SKU and store.",
+    "Store 999 and ZZ Test filters were applied. They did not change the South totals, since those items sit in store 999 and web test orders.",
+    "Kouvola (114) is in South as-is but was in East until 28 April 2025, and Lohja (137) opened on 4 November 2024, so it was trading for the whole quarter. A Capital Region reading of the old South would give a different list.",
+    "The ranking is by gross margin in EUR. The product at rank 2 (Interior Paint Norvik 298) has a much lower margin rate (about 31%) than the leader (about 55%).",
+    "Product names and subcategories come from the current product version. SKUs 101888 (Indoor Lighting) and similar articles show their current classification."
+  ]
+}
+```

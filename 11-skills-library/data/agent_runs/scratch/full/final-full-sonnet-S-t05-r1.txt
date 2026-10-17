@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH wk AS (SELECT d.calendar_date, d.fiscal_year, d.fiscal_period, d.fiscal_week FROM dim_date d WHERE d.fiscal_period = 2 AND d.fiscal_year IN ('FY2025/26', 'FY2026/27')), sales AS (SELECT w.fiscal_year, w.fiscal_week, sum(f.net_amount) AS sales_net FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN wk w ON w.calendar_date = f.sale_date WHERE s.store_id &lt;&gt; 999 GROUP BY 1, 2), returns AS (SELECT w.fiscal_year, w.fiscal_week, sum(r.refund_net) AS returns_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN wk w ON w.calendar_date = r.return_date WHERE s.store_id &lt;&gt; 999 GROUP BY 1, 2), net AS (SELECT s.fiscal_year, s.fiscal_week, s.sales_net - coalesce(r.returns_net, 0) AS net_sales FROM sales s LEFT JOIN returns r USING (fiscal_year, fiscal_week)) SELECT 'FY2026/27' AS fiscal_year, 2 AS fiscal_period, ty.fiscal_week, round(ty.net_sales, 2) AS net_sales_this_year, round(ly.net_sales, 2) AS net_sales_last_year, round((ty.net_sales / ly.net_sales - 1) * 100, 1) AS growth_pct FROM net ty JOIN net ly ON ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = 'FY2025/26' WHERE ty.fiscal_year = 'FY2026/27' ORDER BY ty.fiscal_week",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "fiscal_week", "net_sales_this_year", "net_sales_last_year", "growth_pct"],
+    "rows": [
+      ["FY2026/27", 2, 5, 346150.56, 328453.20, 5.4],
+      ["FY2026/27", 2, 6, 362929.37, 331315.01, 9.5],
+      ["FY2026/27", 2, 7, 240007.07, 326473.60, -26.5],
+      ["FY2026/27", 2, 8, 346861.28, 224694.01, 54.4]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar from dim_date and ref_fiscal_calendar: period 2 is 4 weeks, fiscal weeks 5 to 8. FY2026/27 P02 runs 2026-06-01 to 2026-06-28. FY2025/26 P02 runs 2025-05-26 to 2025-06-22.",
+    "Net sales = line net_amount (EUR excluding VAT, after line discounts) minus refund_net on return lines, as in the company's rpt_daily_store_sales net_sales column.",
+    "Returns are counted in the week they were booked (return_date), not the week of the original sale. This matches the 'refunds booked on the day' wording in rpt_daily_store_sales.",
+    "Total company = all physical stores plus the web shop (store_id 900). The training store (store_id 999) is excluded.",
+    "Stores and web are identified through store_key joined to dim_store (store_id), not through channel_code. channel_code is blank from the web-platform migration onward, so it cannot be used for this year.",
+    "Growth % = this year / last year - 1, comparing the same fiscal week number and period."
+  ],
+  "assumptions": [
+    "'This year' is FY2026/27 and 'last year' is FY2025/26, given the request date of 2026-10-05. Both P02s are marked fully_loaded.",
+    "'Sales' means net sales after returns, excluding VAT, because that is the company's net sales measure. Before returns, the four weeks would be higher by roughly 17,000 to 25,000 EUR each. Gross sales including VAT were not used.",
+    "Total company sales includes the web shop, as 'total company' implies. Web is a large part of the total (about 55,000 to 71,000 EUR a week this year, against 42,000 to 49,000 last year).",
+    "Staff purchases are kept in. The company's own daily store report includes them (its store figures match the fact table exactly with staff purchases included) and no rule excludes them. They are about 1% of sales and do not change the picture. Excluding them would lower both years slightly.",
+    "Weeks are compared by fiscal week number (5 to 8 against 5 to 8). This is not the same calendar dates a year earlier. Fiscal weeks start 6 days later this year because FY2025/26 was a 53-week year.",
+    "The request asks for total sales, so I did not adjust for stores that opened, closed or were refitted. The effect of those is given in caveats instead."
+  ],
+  "caveats": [
+    "Midsummer shifts between weeks and drives the two outlying growth figures. Midsummer Eve and Day (stores shut by law) fell in fiscal week 8 last year (20 and 21 June 2025). This year they fell in fiscal week 7 (19 and 20 June 2026). So week 7 shows -26.5% and week 8 shows +54.4%. Neither is a real trend. Weeks 7 and 8 combined are 586,868 against 551,168, or +6.5%. The whole period is 1,295,948 against 1,210,936, or +7.0%. Weeks 5 and 6 (+5.4%, +9.5%) are the cleaner comparisons.",
+    "Two stores sell less this year than last, for reasons other than demand. Savonlinna (store 129) closed permanently on 2026-01-25. It had about 10,240 EUR of sales across these four weeks last year and none this year. Kuopio (store 125) is closed for a refit from 2026-06-15 to 2026-07-26, which covers weeks 7 and 8. It sold about 19,350 EUR in those two weeks last year and nothing this year. Growth is therefore understated against a like-for-like set of stores.",
+    "Correction made: the training store (store 999) is excluded. It records small sales of a few hundred EUR a week, and returns none. It is not a trading store, and the company's daily report leaves it out.",
+    "Correction made: the view rpt.v_daily_sales and the views built on it filter web sales on channel_code = 'WB'. That code is blank from the web-platform migration onward, so those views would drop all web sales for this year and understate the growth. I did not use them.",
+    "The web figures in rpt_daily_store_sales do not agree with the fact table. For example, web sales are 79,207 in week 8 this year in the report against 55,348 in the fact table, and the daily web figures are shifted. I used the fact tables for web. The store-level figures in that report agree exactly with the fact tables.",
+    "Cancelled web orders (about 25 to 50 a week) have no sales lines, so they do not enter the sales figures. No duplicate sales lines or load problems were found in either period, and VAT and net amounts are consistent."
+  ]
+}
+```

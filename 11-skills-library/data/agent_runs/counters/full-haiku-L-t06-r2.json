@@ -1,0 +1,49 @@
+{
+ "run_id": "full-haiku-L-t06-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T06",
+ "budget": 30,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "62d8ac7f421f790ca55e0b3ae811cb6dbcdab9ec699fae1119a181551b613a64",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:40:00",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P02\n  fiscal_weeks                       5-8\n  start_date                         2025-05-26\n  end_date                           2025-06-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-06-22\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:16",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.format,\n       SUM(l.net_amount) AS sold_net,\n       COALESCE(SUM(r.refund_net), 0) AS returned_net,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct,\n       MAX(l.sale_date) + 30 <= (SELECT MAX(calendar_date) FROM dim_date) AS cohort_complete\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY return_rate_pct DESC;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | sold_net | returned_net | return_rate_pct | cohort_complete\nMedium | 552936.25 | 25030.11 | 4.53 | true\nLarge | 400763.11 | 17707.57 | 4.42 | true\nSmall | 147668.20 | 6319.09 | 4.28 | true\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:40:22",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 5 columns: format, sold_net, returned_net, return_rate_pct, cohort_complete\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  format | sold_net | returned_net | return_rate_pct | cohort_complete\n  Medium | 552936.25 | 25030.11 | 4.53 | True\n  Large | 400763.11 | 17707.57 | 4.42 | True\n  Small | 147668.20 | 6319.09 | 4.28 | True\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:51",
+   "statement": "-- Verify the fiscal period and date range\nSELECT DISTINCT \n    d.fiscal_year, \n    d.fiscal_period, \n    MIN(d.calendar_date) as period_start,\n    MAX(d.calendar_date) as period_end,\n    COUNT(*) as day_count\nFROM dim_date d\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\nGROUP BY d.fiscal_year, d.fiscal_period;\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | period_start | period_end | day_count\nFY2025/26 | 2 | 2025-05-26 | 2025-06-22 | 28\n(1 row)"
+  }
+ ]
+}

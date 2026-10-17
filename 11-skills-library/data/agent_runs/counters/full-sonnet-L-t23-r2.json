@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t23-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T23",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "718ee356ec3451c5e6bbef8b29385b66bcaf8d1c37565e9780d45d66c465b51f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:36:47",
+   "statement": "SELECT 'period' k, fiscal_period_label a, CAST(period_start_date AS VARCHAR) b, CAST(period_end_date AS VARCHAR) c, CAST(weeks_in_period AS VARCHAR) d FROM ref_fiscal_calendar WHERE fiscal_year='FY2025/26' AND fiscal_period=2\nUNION ALL\nSELECT 'format', format, CAST(count(DISTINCT store_id) AS VARCHAR), CAST(count(*) AS VARCHAR), string_agg(DISTINCT CAST(store_id AS VARCHAR), ',') FROM dim_store GROUP BY format\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "k | a | b | c | d\nperiod | FY2025/26 P02 | 2025-05-26 | 2025-06-22 | 4\nformat | Medium | 18 | 21 | 117,118,128,134,136,111,114,107,132,101,109,126,119,121,124,103,122,127\nformat | Large | 8 | 10 | 108,131,116,115,102,125,110,104\nformat | Web | 1 | 1 | 900\nformat | Training | 1 | 1 | 999\nformat | Small | 13 | 14 | 105,120,130,113,123,138,139,112,133,137,106,129,135\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:36:52",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.net_amount, f.quantity, cs.format\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\n)\nSELECT format, count(*) n_lines, count(DISTINCT sales_line_id) d_ids, count(DISTINCT (receipt_id, line_no)) d_rl,\n       sum(net_amount) sold_net, sum(quantity) qty, min(net_amount) minnet, count(*) FILTER (WHERE net_amount<=0) nonpos\nFROM sold GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "format | n_lines | d_ids | d_rl | sold_net | qty | minnet | nonpos\nLarge | 16624 | 16624 | 16624 | 400763.11 | 27468 | 0.77 | 0\nMedium | 22644 | 22644 | 22644 | 552936.25 | 36996 | 1.01 | 0\nSmall | 7349 | 7349 | 7349 | 147668.20 | 12232 | 1.02 | 0\nWeb | 6350 | 6350 | 6350 | 183098.49 | 9967 | 1.01 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:36:58",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.net_amount, f.quantity, f.sale_date\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\n),\nr AS (\n  SELECT r.* FROM fact_return_line r JOIN sold USING (sales_line_id)\n)\nSELECT count(*) n_ret, count(DISTINCT return_line_id) d_ret, count(DISTINCT sales_line_id) d_sold_lines,\n  sum(refund_net) refund_net, min(return_date) mind, max(return_date) maxd,\n  (SELECT count(*) FROM r JOIN sold s2 USING (sales_line_id) WHERE r.quantity_returned > s2.quantity) qty_over,\n  (SELECT count(*) FROM (SELECT sales_line_id FROM r GROUP BY 1 HAVING count(*)>1)) multi_ret_lines,\n  (SELECT count(*) FROM (SELECT r.sales_line_id FROM r JOIN sold s3 USING (sales_line_id) GROUP BY r.sales_line_id, s3.quantity, s3.net_amount HAVING sum(quantity_returned) > s3.quantity OR sum(refund_net) > s3.net_amount + 0.01)) over_refund,\n  (SELECT count(*) FROM r WHERE refund_net<=0) nonpos,\n  (SELECT count(*) FROM r WHERE return_date < (SELECT sale_date FROM sold WHERE sold.sales_line_id=r.sales_line_id)) before_sale,\n  (SELECT count(*) FROM fact_return_line WHERE sales_line_id NOT IN (SELECT sales_line_id FROM fact_sales_line)) orphans_all\nFROM r\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n_ret | d_ret | d_sold_lines | refund_net | mind | maxd | qty_over | multi_ret_lines | over_refund | nonpos | before_sale | orphans_all\n1992 | 1992 | 1992 | 71445.06 | 2025-05-27 | 2025-07-23 | 0 | 0 | 0 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:04",
+   "statement": "SELECT s.store_id = 900 AS is_web_store, f.channel_code, o.status, count(*) n, sum(f.net_amount) net, count(r.return_line_id) n_ret, sum(r.refund_net) refund\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d ON d.calendar_date = f.sale_date\nLEFT JOIN fact_web_order o ON o.web_order_id = f.receipt_id\nLEFT JOIN fact_return_line r ON r.sales_line_id = f.sales_line_id\nWHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND d.fiscal_year='FY2025/26' AND d.fiscal_period=2\nGROUP BY 1,2,3 ORDER BY 1,2,3\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "is_web_store | channel_code | status | n | net | n_ret | refund\nfalse | ST | NULL | 46617 | 1101367.56 | 1514 | 49056.77\ntrue | WB | collected | 1669 | 49083.36 | 117 | 5113.83\ntrue | WB | delivered | 4681 | 134015.13 | 361 | 17274.46\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:10",
+   "statement": "WITH sold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, cs.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_store cs    ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT 'FY2025/26' AS fiscal_year, 2 AS fiscal_period, l.format AS store_format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct,\n       SUM(l.net_amount) sold_net, COALESCE(SUM(r.refund_net),0) returned_net,\n       MAX(l.sale_date) + 30 <= (SELECT MAX(calendar_date) FROM dim_date) AS cohort_complete,\n       (SELECT count(*) FROM (SELECT store_id FROM dim_store GROUP BY 1 HAVING count(DISTINCT format)>1)) AS stores_with_format_change\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY l.format\nORDER BY l.format\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | store_format | return_rate_pct | sold_net | returned_net | cohort_complete | stores_with_format_change\nFY2025/26 | 2 | Large | 4.42 | 400763.11 | 17707.57 | true | 0\nFY2025/26 | 2 | Medium | 4.53 | 552936.25 | 25030.11 | true | 0\nFY2025/26 | 2 | Small | 4.28 | 147668.20 | 6319.09 | true | 0\nFY2025/26 | 2 | Web | 12.23 | 183098.49 | 22388.29 | true | 0\n(4 rows)"
+  }
+ ]
+}

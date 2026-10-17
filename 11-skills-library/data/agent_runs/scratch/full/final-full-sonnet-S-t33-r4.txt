@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH sales AS (SELECT d.fiscal_year, d.fiscal_week, sum(f.net_amount) AS sales_net FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE d.fiscal_period = 2 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND s.store_id &lt;&gt; 999 GROUP BY 1, 2), returns AS (SELECT d.fiscal_year, d.fiscal_week, sum(r.refund_net) AS returns_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_date d ON d.calendar_date = r.return_date WHERE d.fiscal_period = 2 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND s.store_id &lt;&gt; 999 GROUP BY 1, 2), weekly AS (SELECT s.fiscal_year, s.fiscal_week, s.sales_net - coalesce(r.returns_net, 0) AS net_sales FROM sales s LEFT JOIN returns r USING (fiscal_year, fiscal_week)) SELECT t.fiscal_year, 2 AS fiscal_period, t.fiscal_week, t.net_sales AS net_sales, l.net_sales AS net_sales_last_year, round(100.0 * (t.net_sales / l.net_sales - 1), 1) AS growth_pct FROM weekly t JOIN weekly l ON l.fiscal_year = 'FY2025/26' AND l.fiscal_week = t.fiscal_week WHERE t.fiscal_year = 'FY2026/27' ORDER BY t.fiscal_week",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "fiscal_week", "net_sales", "net_sales_last_year", "growth_pct"],
+    "rows": [
+      ["FY2026/27", 2, 5, 346150.56, 328453.20, 5.4],
+      ["FY2026/27", 2, 6, 362929.37, 331315.01, 9.5],
+      ["FY2026/27", 2, 7, 240007.07, 326473.60, -26.5],
+      ["FY2026/27", 2, 8, 346861.28, 224694.01, 54.4]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = sales lines net_amount (EUR excluding VAT, after line discounts) minus refund_net on returns",
+    "Returns are deducted in the week of the return date, not the week of the original sale, matching rpt_daily_store_sales",
+    "Total company = all physical stores plus the web shop (store_id 900)",
+    "Training store (store_id 999) excluded as a non-trading pseudo-location",
+    "Fiscal calendar: period 2 = fiscal weeks 5 to 8 (FY2026/27: 1 to 28 June 2026; FY2025/26: 26 May to 22 June 2025), Monday to Sunday weeks from dim_date",
+    "Prior-year comparison by same fiscal year, period and week number (FY2025/26 weeks 5 to 8)",
+    "growth_pct = (this year / last year - 1) x 100, rounded to 1 decimal"
+  ],
+  "assumptions": [
+    "'This year' is read as the current fiscal year FY2026/27 (request dated 7 Oct 2026). P02 of FY2026/27 is fully loaded in the warehouse.",
+    "'Same weeks last year' is read as the same fiscal week numbers in FY2025/26, not the same calendar dates.",
+    "'Net sales' is read as after returns, ex VAT, following the warehouse's own net sales definition in rpt_daily_store_sales.",
+    "Staff purchases are kept in net sales (no rule excludes them, and the existing daily report includes them). They are about 1% of store sales.",
+    "Web click-and-collect and home-delivery orders are both counted, dated by order date (sale_date). Cancelled orders have no sales lines, so they do not count."
+  ],
+  "caveats": [
+    "Correction 1: web sales are identified by store_id 900, not by channel_code. After the web-platform migration (November 2025) channel_code is NULL on all lines and channel_id is used instead, with both coding styles in November 2025. The view rpt.v_daily_sales filters web on channel_code = 'WB', so it would miss all web sales from November 2025 on, including all of this year's P02. I did not use it.",
+    "Correction 2: the web row in rpt_daily_store_sales (store 900) is dated by dispatch date rather than sale date. Its daily and weekly figures differ from the sales facts: web sales before returns for the four weeks of FY2026/27 P02 are about 231k in the report against 254k in the fact table. I took web sales from fact_sales_line by sale date. The store rows in the report do reconcile to the fact table.",
+    "Correction 3: the training store (store_id 999) has small sales (about 0.2 to 0.9k a week) that do not belong in company net sales, so I excluded them.",
+    "Weeks 7 and 8 are distorted by Midsummer. Midsummer Eve and Day (stores shut by law) fall on 19 to 20 June 2026 in FY2026/27 week 7, but on 20 to 21 June 2025 in FY2025/26 week 8. Week 7 is therefore -26.5% and week 8 +54.4% on a fiscal-week basis. Neither is a real trend. Over all of P02 net sales are 1,296k against 1,211k last year, +7.0%.",
+    "Store 125 is closed for a refit from 15 June to 26 July 2026 (weeks 7 and 8 of this year), which lowers this year's figures slightly in those weeks. Total company net sales are as requested and not adjusted for it.",
+    "Net sales here include web returns, which are booked against the web shop. The store-only figures in rpt_daily_store_sales do not tie to the totals above, because that report's web figures use the dispatch-date basis.",
+    "Checks that came out clean: no duplicate sales or return lines, no orphan store keys or return links, VAT arithmetic consistent, no zero or negative sales lines, no refund above the original line value."
+  ]
+}
+```

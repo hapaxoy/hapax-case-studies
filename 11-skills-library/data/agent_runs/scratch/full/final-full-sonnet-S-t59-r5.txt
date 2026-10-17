@@ -1,0 +1,25 @@
+```json
+{
+  "sql": "SELECT COUNT(DISTINCT web_order_id) AS web_orders_placed FROM fact_web_order WHERE CAST(order_ts_utc AS DATE) = DATE '2025-11-28'",
+  "result": {
+    "columns": ["web_orders_placed"],
+    "rows": [[377]]
+  },
+  "definitions_applied": [
+    "Web order = one row in fact_web_order, counted by distinct web_order_id",
+    "Day of placement = UTC calendar date of order_ts_utc, as requested",
+    "Placed orders include cancelled and click-and-collect orders (all statuses)"
+  ],
+  "assumptions": [
+    "Black Friday 2025 is 28 November 2025, as the request states, and the UTC day runs 00:00:00 to 23:59:59 UTC on that date.",
+    "'Placed' counts every order that was placed, so the 20 orders later cancelled are included. Both home delivery and click-and-collect count as web orders.",
+    "I used fact_web_order as the source because it holds one row per order with its placement timestamp. Its 377 distinct orders contain no duplicate order IDs, and none of them also sit in the staging table stg_web_order_load."
+  ],
+  "caveats": [
+    "Of the 377 orders, 20 were cancelled (11 home delivery, 4 click-and-collect with logged-in members, 7 guest... see breakdown: cancelled orders have no sales lines). Excluding cancelled orders the figure is 357. Use 357 if the carrier's report only covers orders that were actually shipped or collected.",
+    "Counting by the warehouse's sale_date on the sales lines gives a different number. In the sales line table, receipts with sale_date = 2025-11-28 total 402 for the web channels, and 350 non-cancelled orders fall on that date, because sale_date is not the UTC date. I did not use it, since you asked for UTC days.",
+    "The sales line table has no channel_code values from 3 November 2025 onwards. Web lines carry channel_id 2 (home delivery) or 3 (click and collect) instead. Anything that filters on channel_code = 'WB' misses all web sales for Black Friday 2025 and returns zero. I avoided this by counting from fact_web_order, which has no channel column.",
+    "No correction to the 377 figure was needed."
+  ]
+}
+```

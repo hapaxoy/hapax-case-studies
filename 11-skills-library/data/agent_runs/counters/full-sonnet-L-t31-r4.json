@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t31-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "dd0771dc0d3dc1365b33eef760a573f38e1e3a5ba2dddef86723282b6b365a70",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:26:40",
+   "statement": "fiscal-calendar/scripts/fiscal.py P8 FY2025/26 --as-of 2026-10-07",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P8 FY2025/26    as of: 2026-10-07    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P08\n  fiscal_weeks                       31-34\n  start_date                         2025-11-24\n  end_date                           2025-12-21\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 31 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:26:52",
+   "statement": "WITH lines AS (\n  SELECT f.member_key, f.sale_date, f.receipt_id, f.channel_code, s.store_id, p.category, w.status\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  LEFT JOIN fact_web_order w ON w.web_order_id = f.receipt_id AND s.store_id = 900\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21' AND f.member_key IS NOT NULL\n),\nbase AS (SELECT DISTINCT m.member_id FROM lines l JOIN dim_member m ON m.member_key = l.member_key),\nclean AS (SELECT DISTINCT m.member_id FROM lines l JOIN dim_member m ON m.member_key = l.member_key\n          WHERE l.store_id <> 999 AND l.category <> 'ZZ Test'),\nclean2 AS (SELECT DISTINCT m.member_id FROM lines l JOIN dim_member m ON m.member_key = l.member_key\n          WHERE l.store_id <> 999 AND l.category <> 'ZZ Test' AND COALESCE(l.status,'x') <> 'cancelled')\nSELECT cur.tier,\n  (SELECT count(*) FROM base b JOIN dim_member c ON c.member_id=b.member_id AND DATE '2025-12-21' BETWEEN c.valid_from AND c.valid_to WHERE c.tier=cur.tier) AS base_n,\n  (SELECT count(*) FROM clean b JOIN dim_member c ON c.member_id=b.member_id AND DATE '2025-12-21' BETWEEN c.valid_from AND c.valid_to WHERE c.tier=cur.tier) AS clean_n,\n  (SELECT count(*) FROM clean2 b JOIN dim_member c ON c.member_id=b.member_id AND DATE '2025-12-21' BETWEEN c.valid_from AND c.valid_to WHERE c.tier=cur.tier) AS clean2_n\nFROM (SELECT DISTINCT tier FROM dim_member) cur ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | base_n | clean_n | clean2_n\nBasic | 14654 | 14654 | 14654\nGold | 3901 | 3901 | 3901\nSilver | 10971 | 10971 | 10971\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:27:20",
+   "statement": "WITH act AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n),\nv AS (\n  SELECT a.member_id, count(c.member_key) AS versions_on_date, min(c.tier) AS t1, max(c.tier) AS t2, min(c.join_date) AS jd\n  FROM act a LEFT JOIN dim_member c ON c.member_id=a.member_id AND DATE '2025-12-21' BETWEEN c.valid_from AND c.valid_to\n  GROUP BY 1\n)\nSELECT versions_on_date, count(*) AS members, sum(CASE WHEN t1<>t2 THEN 1 ELSE 0 END) AS conflicting_tier, sum(CASE WHEN jd > DATE '2025-12-21' THEN 1 ELSE 0 END) AS joined_after\nFROM v GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "versions_on_date | members | conflicting_tier | joined_after\n1 | 29526 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:27:26",
+   "statement": "SELECT min(sale_date) AS mn, max(sale_date) AS mx, count(DISTINCT sale_date) AS days,\n  (SELECT count(*) FROM dim_date WHERE calendar_date > DATE '2025-12-21'-364 AND calendar_date <= DATE '2025-12-21' AND is_trading_day) AS trading_days,\n  count(*) AS lines, count(DISTINCT member_key) AS keys,\n  (SELECT string_agg(DISTINCT coalesce(tier,'NULL'), ',') FROM dim_member) AS tiers\nFROM fact_sales_line WHERE sale_date > DATE '2025-12-21'-364 AND sale_date <= DATE '2025-12-21'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mn | mx | days | trading_days | lines | keys | tiers\n2024-12-23 | 2025-12-21 | 364 | 353 | 617345 | 32210 | Gold,Basic,Silver\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:27:30",
+   "statement": "WITH active AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    WHERE f.sale_date > DATE '2025-12-21' - 364\n      AND f.sale_date <= DATE '2025-12-21'\n)\nSELECT cur.tier, COUNT(*) AS active_members\nFROM active a\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND DATE '2025-12-21' BETWEEN cur.valid_from AND cur.valid_to\nGROUP BY cur.tier\nORDER BY CASE cur.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 ELSE 3 END\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members\nBasic | 14654\nSilver | 10971\nGold | 3901\n(3 rows)"
+  }
+ ]
+}

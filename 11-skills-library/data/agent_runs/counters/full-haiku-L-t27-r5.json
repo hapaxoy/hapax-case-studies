@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-L-t27-r5",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T27",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "13e562cc21672b9705ba05c022150e8e7516c6108ef7c39387a3e4c096843dff",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:59:22",
+   "statement": "fiscal-calendar/scripts/fiscal.py 2024-08-01 to 2024-09-30",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read '2024-08-01 to 2024-09-30'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:59:30",
+   "statement": "SELECT DISTINCT fiscal_period, fiscal_period_label, fiscal_week\nFROM dim_date\nWHERE calendar_date >= '2024-08-01' AND calendar_date <= '2024-09-30'\nORDER BY fiscal_week\n",
+   "n": 2,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "fiscal_period | fiscal_period_label | fiscal_week\n4 | FY2024/25 P04 | 14\n4 | FY2024/25 P04 | 15\n4 | FY2024/25 P04 | 16\n4 | FY2024/25 P04 | 17\n5 | FY2024/25 P05 | 18\n5 | FY2024/25 P05 | 19\n5 | FY2024/25 P05 | 20\n5 | FY2024/25 P05 | 21\n6 | FY2024/25 P06 | 22\n6 | FY2024/25 P06 | 23\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:59:46",
+   "statement": "WITH params AS (\n    SELECT DATE '2024-08-01' AS start_date, DATE '2024-09-30' AS end_date\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, \n           s.region,\n           f.gross_amount AS gross_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT l.region,\n       SUM(l.gross_sales)  AS gross_sales_incl_vat\nFROM lines l\nCROSS JOIN params\nWHERE l.business_date BETWEEN params.start_date AND params.end_date\nGROUP BY 1\nORDER BY l.region\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | gross_sales_incl_vat\nEast | 546513.95\nNorth | 325586.12\nOnline | 333871.63\nSouth | 935614.34\nWest | 766279.64\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:59:54",
+   "statement": "SELECT DISTINCT s.region, s.store_id, s.store_name\nFROM dim_store s\nWHERE s.valid_from <= '2024-09-30' AND s.valid_to >= '2024-08-01'\nORDER BY s.region, s.store_id\n",
+   "n": 4,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "region | store_id | store_name\nEast | 114 | Kouvola\nEast | 124 | Jyväskylä Palokka\nEast | 125 | Kuopio\nEast | 126 | Joensuu\nEast | 127 | Mikkeli\nEast | 128 | Lappeenranta\nEast | 129 | Savonlinna\nEast | 130 | Kotka\nEast | 138 | Iisalmi\nHead office | 999 | Training store\nNorth | 131 | Oulu Kaakkuri\nNorth | 132 | Oulu Linnanmaa\nNorth | 133 | Kemi\nNorth | 134 | Rovaniemi\nNorth | 135 | Kajaani\nNorth | 139 | Raahe\nOnline | 900 | Tuomimetsä web shop\nSouth | 101 | Helsinki Vuosaari\nSouth | 102 | Helsinki Pitäjänmäki\nSouth | 103 | Espoo Lommila\nSouth | 104 | Vantaa Tammisto\nSouth | 105 | Kerava\nSouth | 106 | Porvoo\nSouth | 107 | Hyvinkää\nSouth | 108 | Lahti\nSouth | 109 | Hämeenlinna\nSouth | 110 | Turku Kupittaa\nSouth | 111 | Turku Härmälä\nSouth | 112 | Raisio\nSouth | 113 | Salo\nWest | 115 | Tampere Hervanta\nWest | 116 | Tampere Lielahti\nWest | 117 | Tampere Kaleva\nWest | 118 | Nokia\nWest | 119 | Pori\nWest | 120 | Rauma\nWest | 121 | Vaasa\nWest | 122 | Seinäjoki\nWest | 123 | Kokkola\nWest | 136 | Tampere Lamminpää\n(40 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:02",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, \n           s.region,\n           f.gross_amount AS gross_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND business_date >= '2024-08-01' AND business_date <= '2024-09-30'\n)\nSELECT l.region,\n       SUM(CASE WHEN MONTH(l.business_date) = 8 THEN l.gross_sales ELSE 0 END) AS august_2024,\n       SUM(CASE WHEN MONTH(l.business_date) = 9 THEN l.gross_sales ELSE 0 END) AS september_2024\nFROM lines l\nGROUP BY 1\nORDER BY l.region\n",
+   "n": 5,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | august_2024 | september_2024\nEast | 296762.31 | 249751.64\nNorth | 175960.85 | 149625.27\nOnline | 173563.99 | 160307.64\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:00:20",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 5 rows, 3 columns: region, august_2024, september_2024\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 5 rows) ==\n  region | august_2024 | september_2024\n  East | 296762.31 | 249751.64\n  North | 175960.85 | 149625.27\n  Online | 173563.99 | 160307.64\n  South | 489776.38 | 445837.96\n  West | 402582.35 | 363697.29\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:31",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           s.region,\n           f.gross_amount AS gross_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) >= DATE '2024-08-01' \n      AND COALESCE(w.dispatch_date, f.sale_date) <= DATE '2024-09-30'\n)\nSELECT l.region,\n       SUM(CASE WHEN MONTH(l.business_date) = 8 THEN l.gross_sales ELSE 0 END) AS august_2024,\n       SUM(CASE WHEN MONTH(l.business_date) = 9 THEN l.gross_sales ELSE 0 END) AS september_2024\nFROM lines l\nGROUP BY 1\nORDER BY l.region\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | august_2024 | september_2024\nEast | 296762.31 | 249751.64\nNorth | 175960.85 | 149625.27\nOnline | 173563.99 | 160307.64\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(5 rows)"
+  }
+ ]
+}

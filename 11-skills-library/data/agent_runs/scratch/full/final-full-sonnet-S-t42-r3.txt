@@ -1,0 +1,71 @@
+```json
+{
+  "sql": "WITH per AS (SELECT period_start_date AS d0, period_end_date AS d1 FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 5), sales AS (SELECT s.store_id, sum(f.net_amount) AS gross_net FROM (SELECT *, row_number() OVER (PARTITION BY receipt_id, line_no ORDER BY sales_line_id) AS rn FROM fact_sales_line) f JOIN dim_store s ON s.store_key = f.store_key, per WHERE f.rn = 1 AND f.sale_date BETWEEN per.d0 AND per.d1 AND s.store_id < 900 GROUP BY s.store_id), rets AS (SELECT s.store_id, sum(r.refund_net) AS refunds FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key, per WHERE r.return_date BETWEEN per.d0 AND per.d1 AND s.store_id < 900 GROUP BY s.store_id) SELECT rank() OVER (ORDER BY sales.gross_net - coalesce(rets.refunds, 0) DESC) AS rank, cur.store_id, cur.store_name, round(sales.gross_net - coalesce(rets.refunds, 0), 2) AS net_sales FROM sales LEFT JOIN rets USING (store_id) JOIN dim_store cur ON cur.store_id = sales.store_id AND cur.is_current ORDER BY rank, cur.store_id",
+  "result": {
+    "columns": ["rank", "store_id", "store_name", "net_sales"],
+    "rows": [
+      [1, 115, "Tampere Hervanta", 59872.99],
+      [2, 102, "Helsinki Pitäjänmäki", 49645.27],
+      [3, 131, "Oulu Kaakkuri", 44663.61],
+      [4, 108, "Lahti", 43038.90],
+      [5, 104, "Vantaa Tammisto", 41889.35],
+      [6, 110, "Turku Kupittaa", 37964.64],
+      [7, 116, "Tampere Lielahti", 37288.62],
+      [8, 125, "Kuopio", 37218.51],
+      [9, 117, "Tampere Kaleva", 36465.55],
+      [10, 101, "Helsinki Vuosaari", 29974.57],
+      [11, 126, "Joensuu", 29900.29],
+      [12, 128, "Lappeenranta", 29821.68],
+      [13, 118, "Nokia", 29618.45],
+      [14, 121, "Vaasa", 27847.90],
+      [15, 124, "Jyväskylä Palokka", 26786.57],
+      [16, 122, "Seinäjoki", 25881.11],
+      [17, 103, "Espoo Lommila", 25774.70],
+      [18, 132, "Oulu Linnanmaa", 25688.73],
+      [19, 136, "Tampere Lamminpää", 24457.30],
+      [20, 107, "Hyvinkää", 24062.70],
+      [21, 109, "Hämeenlinna", 22384.54],
+      [22, 127, "Mikkeli", 21734.54],
+      [23, 114, "Kouvola", 21384.96],
+      [24, 111, "Turku Härmälä", 19339.69],
+      [25, 134, "Rovaniemi", 16704.95],
+      [26, 119, "Pori", 16057.86],
+      [27, 139, "Raahe", 14028.34],
+      [28, 137, "Lohja", 12084.90],
+      [29, 130, "Kotka", 10855.23],
+      [30, 105, "Kerava", 10757.43],
+      [31, 133, "Kemi", 10748.91],
+      [32, 112, "Raisio", 10742.69],
+      [33, 106, "Porvoo", 10245.03],
+      [34, 138, "Iisalmi", 10197.63],
+      [35, 113, "Salo", 9648.93],
+      [36, 129, "Savonlinna", 9247.82],
+      [37, 123, "Kokkola", 9066.66],
+      [38, 120, "Rauma", 8765.73],
+      [39, 135, "Kajaani", 8539.34]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal period from ref_fiscal_calendar: FY2025/26 period 5 runs 2025-08-25 to 2025-09-21 (4 weeks, Monday to Sunday)",
+    "Net sales = line net_amount (EUR excluding VAT, after line discounts) minus refund_net on returns booked in the period (same definition as rpt_daily_store_sales.net_sales: refunds are deducted on the day they are booked, not on the day of the original sale)",
+    "Store league table = physical stores only (store_id below 900); web shop (900) and training store (999) excluded",
+    "Store identity by store_id; sales and returns attached to the store version valid at the transaction date via store_key",
+    "Staff purchases kept in (the warehouse's own daily store report includes them)",
+    "Ranking by net sales, highest first"
+  ],
+  "assumptions": [
+    "'Last year' was read as the same fiscal period one fiscal year back. The request is dated 2026-10-08, in FY2026/27, so last year is FY2025/26 and period 5 is 2025-08-25 to 2025-09-21. FY2026/27 P05 (2026-08-31 to 2026-09-27) is not what was asked for.",
+    "'League table' was read as stores ranked by net sales (EUR excluding VAT) for the period, with no per-sqm, format or like-for-like adjustment.",
+    "Store names are the current ones. Regions are left out, as the request did not ask for them.",
+    "Staff purchases were not stripped out, as no rule in the warehouse says to exclude them. About EUR 16.2k of net sales in the period is flagged staff purchases across all channels."
+  ],
+  "caveats": [
+    "Correction: duplicate sales lines. A reload on 2025-09-23 03:12 re-inserted 418 sales lines for Tampere Lielahti (store 116) for 2025-09-15 to 2025-09-21 under new sales_line_ids, with the same receipt_id and line_no as the originals. Left in, they would add EUR 10,390.53 and push the store from rank 7 (37,288.62) to rank 4 (about 47.7k). I kept one line per receipt_id and line_no. This agrees exactly with the Data & Analytics report table rpt_daily_store_sales for all 39 stores, so the problem is in the fact table and the report is clean. No duplicates were found in the return lines.",
+    "Pori (store 119) was closed for a refit from 2025-09-08 to 2025-10-12, so it traded only 14 of the 28 days (first two weeks of the period). Its EUR 16,057.86 and rank 26 are not comparable with the full-period stores. It would have ranked higher over a full period.",
+    "Savonlinna (store 129) has a close_date of 2026-01-25. It was open and trading for the whole of the period, so it is included.",
+    "Kerava, Helsinki, Espoo and Vantaa stores moved to a new 'Capital Region' region and Kouvola moved from East to South on 2025-04-28. The regional split in the store dimension therefore differs from the North/South/East/West list in its column comment. This does not affect the store-level ranking.",
+    "Tampere Lamminpää (136) opened in September 2024 and Lohja (137) in November 2024, so both are open for the whole of the period, but they are not like-for-like stores against a 2024 comparison.",
+    "The period is fully loaded according to ref_fiscal_calendar. The warehouse also holds backup, staging and temporary tables (bak_*, stg_*, tmp_*) that were not used."
+  ]
+}
+```

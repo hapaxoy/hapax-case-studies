@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-D-t54-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T54",
+ "budget": 30,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "c0f038ff937a1f6c95c03bb1e173cb93170a4658e8c99b5ce572da51d347b6c3",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:09",
+   "statement": "SELECT fiscal_period_label, period_start_date, period_end_date, fully_loaded FROM ref_fiscal_calendar WHERE period_end_date >= DATE '2026-08-01' ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_period_label | period_start_date | period_end_date | fully_loaded\nFY2026/27 P03 | 2026-06-29 | 2026-08-02 | true\nFY2026/27 P04 | 2026-08-03 | 2026-08-30 | true\nFY2026/27 P05 | 2026-08-31 | 2026-09-27 | true\nFY2026/27 P06 | 2026-09-28 | 2026-11-01 | false\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:10",
+   "statement": "SELECT sale_date, count(*) n, count(DISTINCT sales_line_id) ids, count(DISTINCT (receipt_id, line_no)) keys, sum(net_amount) net, max(etl_loaded_at) FROM fact_sales_line WHERE sale_date >= DATE '2026-08-25' GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 41,
+   "output_preview": "sale_date | n | ids | keys | net | max(etl_loaded_at)\n2026-08-25 | 1510 | 1510 | 1510 | 41382.69 | 2026-08-26T01:00:00\n2026-08-26 | 1593 | 1593 | 1593 | 41999.53 | 2026-08-27T01:00:00\n2026-08-27 | 1682 | 1682 | 1682 | 44032.97 | 2026-08-28T01:00:00\n2026-08-28 | 1952 | 1952 | 1952 | 52569.70 | 2026-08-29T01:00:00\n2026-08-29 | 2329 | 2329 | 2329 | 60882.30 | 2026-08-30T01:00:00\n2026-08-30 | 1349 | 1349 | 1349 | 38111.05 | 2026-08-31T01:00:00\n2026-08-31 | 1508 | 1508 | 1508 | 37064.51 | 2026-09-01T01:00:00\n2026-09-01 | 1470 | 1470 | 1470 | 34995.65 | 2026-09-02T01:00:00\n2026-09-02 | 1554 | 1554 | 1554 | 40130.30 | 2026-09-03T01:00:00\n2026-09-03 | 1797 | 1797 | 1797 | 48319.01 | 2026-09-04T01:00:00\n2026-09-04 | 1938 | 1938 | 1938 | 50598.90 | 2026-09-05T01:00:00\n2026-09-05 | 2327 | 2327 | 2327 | 58340.63 | 2026-09-06T01:00:00\n2026-09-06 | 1347 | 1347 | 1347 | 34243.90 | 2026-09-07T01:00:00\n2026-09-07 | 1339 | 1339 | 1339 | 33890.78 | 2026-09-08T01:00:00\n2026-09-08 | 1400 | 1400 | 1400 | 35547.80 | 2026-09-09T01:00:00\n2026-09-09 | 1586 | 1586 | 1586 | 40997.04 | 2026-09-10T01:00:00\n2026-09-10 | 1694 | 1694 | 1694 | 40811.22 | 2026-09-11T01:00:00\n2026-09-11 | 1887 | 1887 | 1887 | 46380.40 | 2026-09-12T01:00:00\n2026-09-12 | 2181 | 2181 | 2181 | 55832.17 | 2026-09-13T01:00:00\n2026-09-13 | 1349 | 1349 | 1349 | 33736.36 | 2026-09-14T01:00:00\n2026-09-14 | 1454 | 1454 | 1454 | 37498.42 | 2026-09-15T01:00:00\n2026-09-15 | 1460 | 1460 | 1460 | 35317.01 | 2026-09-16T01:00:00\n2026-09-16 | 152"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:18",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered','collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key=f.store_key\n    JOIN dim_product p ON p.product_key=f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id=f.receipt_id\n    WHERE s.store_id<>999 AND p.category<>'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key=r.store_key\n    JOIN dim_product p ON p.product_key=r.product_key\n    WHERE s.store_id<>999 AND p.category<>'ZZ Test'\n),\ndaily AS (SELECT business_date, store_id, SUM(net_sales) ns FROM net_lines GROUP BY 1,2),\nctrl AS (SELECT business_date, store_id, SUM(net_sales) cs FROM rpt_daily_store_sales GROUP BY 1,2)\nSELECT 'calendar Sep' w, SUM(d.ns) mine, SUM(c.cs) ctrl_all, SUM(CASE WHEN d.store_id=900 THEN d.ns END) web_mine, SUM(CASE WHEN c.store_id=900 THEN c.cs END) web_ctrl\nFROM daily d FULL JOIN ctrl c USING (business_date, store_id) WHERE business_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-30'\nUNION ALL\nSELECT 'P05', SUM(d.ns), SUM(c.cs), SUM(CASE WHEN d.store_id=900 THEN d.ns END), SUM(CASE WHEN c.store_id=900 THEN c.cs END)\nFROM daily d FULL JOIN ctrl c USING (business_date, store_id) WHERE business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "w | mine | ctrl_all | web_mine | web_ctrl\ncalendar Sep | 1179035.98 | 1179035.98 | 190443.82 | 190443.82\nP05 | 1109546.52 | 1109546.52 | 177237.33 | 177237.33\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:25",
+   "statement": "SELECT 'web lines w/o dispatched order' k, count(*) n, sum(f.net_amount) v FROM fact_sales_line f JOIN dim_store s USING(store_key) LEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id AND o.status IN ('delivered','collected') WHERE s.store_id=900 AND o.web_order_id IS NULL\nUNION ALL\nSELECT 'non-web lines matching web order', count(*), sum(f.net_amount) FROM fact_sales_line f JOIN dim_store s USING(store_key) JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id<>900\nUNION ALL\nSELECT 'dup return lines', count(*)-count(DISTINCT return_line_id), 0 FROM fact_return_line\nUNION ALL\nSELECT 'test/999 in Sep', count(*), sum(f.net_amount) FROM fact_sales_line f JOIN dim_store s USING(store_key) JOIN dim_product p USING(product_key) WHERE f.sale_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-30' AND (s.store_id=999 OR p.category='ZZ Test')\nUNION ALL\nSELECT 'web order dispatch Sep by status', count(*), 0 FROM fact_web_order WHERE status='processing'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "k | n | v\nweb lines w/o dispatched order | 0 | NULL\nnon-web lines matching web order | 0 | NULL\ndup return lines | 0 | 0.00\ntest/999 in Sep | 162 | 3092.16\nweb order dispatch Sep by status | 296 | 0.00\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:26",
+   "statement": "SELECT d.calendar_year, d.calendar_month, count(*) n_days, sum(is_trading_day::int) trading FROM dim_date d WHERE calendar_date BETWEEN DATE '2026-08-25' AND DATE '2026-10-04' GROUP BY 1,2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "calendar_year | calendar_month | n_days | trading\n2026 | 8 | 7 | 7\n2026 | 9 | 30 | 30\n2026 | 10 | 4 | 4\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:35",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period, ROUND(SUM(n.net_sales), 2) AS net_sales\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 5\nGROUP BY 1, 2\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | net_sales\nFY2026/27 | 5 | 1109546.52\n(1 row)"
+  }
+ ]
+}

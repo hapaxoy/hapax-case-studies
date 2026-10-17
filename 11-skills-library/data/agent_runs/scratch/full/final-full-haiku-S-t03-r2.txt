@@ -1,0 +1,40 @@
+Based on my analysis, here is the final answer:
+
+```json
+{
+  "sql": "WITH period_dates AS (\n  SELECT fiscal_year, fiscal_period, period_start_date, period_end_date\n  FROM ref_fiscal_calendar\n  WHERE fiscal_year = 'FY2025/26' AND fiscal_period IN (1, 2, 3)\n),\nstore_sales AS (\n  SELECT \n    pd.fiscal_year,\n    pd.fiscal_period,\n    COUNT(DISTINCT fsl.receipt_id) AS num_receipts,\n    SUM(fsl.gross_amount) AS total_gross\n  FROM period_dates pd\n  JOIN fact_sales_line fsl ON fsl.sale_date BETWEEN pd.period_start_date AND pd.period_end_date\n    AND fsl.channel_code = 'ST'\n  GROUP BY pd.fiscal_year, pd.fiscal_period\n),\nweb_orders AS (\n  SELECT \n    pd.fiscal_year,\n    pd.fiscal_period,\n    COUNT(DISTINCT fwo.web_order_id) AS num_orders,\n    SUM(fwo.order_total_gross) AS total_gross\n  FROM period_dates pd\n  JOIN fact_web_order fwo ON fwo.order_ts_utc::date BETWEEN pd.period_start_date AND pd.period_end_date\n  GROUP BY pd.fiscal_year, pd.fiscal_period\n)\nSELECT \n  ss.fiscal_year,\n  ss.fiscal_period,\n  ss.num_receipts AS store_receipts,\n  wo.num_orders AS web_orders,\n  ss.num_receipts + wo.num_orders AS total_transactions,\n  ROUND(ss.total_gross + wo.total_gross, 2) AS transaction_value_eur,\n  ROUND((ss.total_gross + wo.total_gross) / (ss.num_receipts + wo.num_orders), 2) AS atv_eur\nFROM store_sales ss\nINNER JOIN web_orders wo ON ss.fiscal_period = wo.fiscal_period\nORDER BY ss.fiscal_period",
+  "result": {
+    "columns": [
+      "fiscal_year",
+      "fiscal_period",
+      "store_receipts",
+      "web_orders",
+      "total_transactions",
+      "transaction_value_eur",
+      "atv_eur"
+    ],
+    "rows": [
+      ["FY2025/26", 1, 22053, 3414, 25467, 1699623.72, 66.74],
+      ["FY2025/26", 2, 20442, 3278, 23720, 1620496.13, 68.32],
+      ["FY2025/26", 3, 25587, 3838, 29425, 2183054.89, 74.19]
+    ]
+  },
+  "definitions_applied": [
+    "Average Transaction Value: total gross sales divided by transaction count",
+    "Transaction: distinct receipt (store) or distinct order (web)",
+    "Gross amount: including VAT",
+    "Fiscal period: four-week calendar period per ref_fiscal_calendar"
+  ],
+  "assumptions": [
+    "Interpreted 'this year' as FY2025/26 (the most recent complete fiscal year), not the current FY2026/27",
+    "Store transaction values are net of returns (gross_amount in fact_sales_line)",
+    "Web transaction values use order_total_gross from fact_web_order",
+    "Transactions counted at their logical grain: receipts for store, orders for web"
+  ],
+  "caveats": [
+    "FY2026/27 periods 1–3 cannot be reliably reported: from 2025-11-03 onwards, all fact_sales_line records have NULL channel_code, preventing reliable channel attribution",
+    "Web order linkage: 10,530 orders exist in fact_web_order for this period, but only 10,099 match receipt IDs in fact_sales_line WB channel, indicating incomplete cross-table consistency",
+    "Store receipt count is lower than shown in rpt_daily_store_sales for the same period (22,053 vs. estimated ~25,000), indicating potential data completeness issue in fact_sales_line"
+  ]
+}
+```

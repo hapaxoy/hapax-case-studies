@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t57-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T57",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "02892d2a627bfe63a079649fa0a2b8d7e2c00a9d8090674f545165feb6cd235a",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:28:43",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE store_name ILIKE '%nokia%' OR city ILIKE '%nokia%' ORDER BY store_key\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n24 | 118 | Nokia | Nokia | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:28:46",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 --as-of 2026-10-09",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5    as of: 2026-10-09    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:28:52",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.quantity, f.staff_purchase_flag, p.subcategory AS subcat_was, cp.subcategory AS subcat_asis, p.category\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE s.store_id = 118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND p.category <> 'ZZ Test'\n)\nSELECT subcat_asis, SUM(quantity) AS units, COUNT(*) AS n_lines, COUNT(DISTINCT sales_line_id) AS dist_lines, COUNT(DISTINCT (receipt_id, line_no)) AS dist_rl,\n  SUM(CASE WHEN subcat_was<>subcat_asis THEN quantity ELSE 0 END) AS units_diff_was, SUM(CASE WHEN staff_purchase_flag THEN quantity ELSE 0 END) AS staff_units\nFROM sold GROUP BY 1 ORDER BY units DESC LIMIT 8\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "subcat_asis | units | n_lines | dist_lines | dist_rl | units_diff_was | staff_units\nFixings & Fasteners | 570 | 189 | 189 | 189 | 0 | 10\nIndoor Lighting | 152 | 99 | 99 | 99 | 0 | 2\nStorage Boxes | 139 | 82 | 82 | 82 | 0 | 3\nCleaning Products | 136 | 63 | 63 | 63 | 0 | 0\nPlants & Flowers | 136 | 82 | 82 | 82 | 0 | 2\nBatteries & Bulbs | 125 | 56 | 56 | 56 | 0 | 0\nPlumbing Parts | 106 | 48 | 48 | 48 | 0 | 0\nInterior Paint | 76 | 56 | 56 | 56 | 0 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:29:00",
+   "statement": "WITH sold AS (\n  SELECT f.*, p.category, p.subcategory\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT 'all_incl_test' AS k, SUM(quantity) AS units, COUNT(*) AS n, MIN(quantity) AS minq, MAX(quantity) AS maxq, COUNT(DISTINCT receipt_id) AS receipts, MIN(sale_date) AS d0, MAX(sale_date) AS d1, COUNT(DISTINCT sale_date) AS days FROM sold\nUNION ALL SELECT 'excl_test', SUM(quantity), COUNT(*), MIN(quantity), MAX(quantity), COUNT(DISTINCT receipt_id), MIN(sale_date), MAX(sale_date), COUNT(DISTINCT sale_date) FROM sold WHERE category <> 'ZZ Test'\nUNION ALL SELECT 'control', SUM(units_sold), NULL, NULL, NULL, SUM(receipts), MIN(business_date), MAX(business_date), COUNT(*) FROM rpt_daily_store_sales WHERE store_id=118 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "k | units | n | minq | maxq | receipts | d0 | d1 | days\nall_incl_test | 2245 | 1250 | 1 | 8 | 564 | 2026-08-31 | 2026-09-27 | 28\nexcl_test | 2245 | 1250 | 1 | 8 | 564 | 2026-08-31 | 2026-09-27 | 28\ncontrol | 2245 | NULL | NULL | NULL | 564 | 2026-08-31 | 2026-09-27 | 28\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:29:05",
+   "statement": "SELECT cp.subcategory, SUM(r.quantity_returned) AS returned_units\nFROM fact_return_line r\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 118 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND p.category <> 'ZZ Test'\n  AND cp.subcategory IN ('Fixings & Fasteners','Indoor Lighting','Storage Boxes','Cleaning Products','Plants & Flowers')\nGROUP BY 1 ORDER BY 2 DESC\n",
+   "n": 5,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "subcategory | returned_units\nStorage Boxes | 9\nFixings & Fasteners | 7\nPlants & Flowers | 7\nIndoor Lighting | 5\nCleaning Products | 2\n(5 rows)"
+  }
+ ]
+}

@@ -1,0 +1,85 @@
+{
+ "run_id": "full-haiku-L-t22-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T22",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "cd13138627bf77fe0795e6979709dba2b86b298117f2dd2dd26199db957925bc",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:48:53",
+   "statement": "SELECT \n  campaign_id,\n  campaign_name,\n  start_date,\n  end_date,\n  mailing_list_size,\n  holdout_size\nFROM dim_campaign\nWHERE campaign_name ILIKE '%Spring Garden%2026%'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | mailing_list_size | holdout_size\n19 | Spring Garden Launch 2026 | 2026-05-04 | 2026-05-24 | 16624 | 1597\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:48:58",
+   "statement": "WITH contacted_members AS (\n  SELECT DISTINCT member_id\n  FROM fact_campaign_exposure\n  WHERE campaign_id = 19\n),\nmember_spending AS (\n  SELECT \n    cm.member_id,\n    SUM(f.net_amount) as total_spending\n  FROM contacted_members cm\n  INNER JOIN dim_member m ON cm.member_id = m.member_id\n  INNER JOIN fact_sales_line f ON m.member_key = f.member_key\n  WHERE f.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n    AND f.channel_code IN ('ST', 'WB')\n  GROUP BY cm.member_id\n)\nSELECT \n  COUNT(DISTINCT cm.member_id) as members_contacted,\n  SUM(ms.total_spending) as total_spending\nFROM contacted_members cm\nLEFT JOIN member_spending ms ON cm.member_id = ms.member_id\n",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Referenced column \"member_id\" not found in FROM clause!\nCandidate bindings: \"member_key\", \"exposure_id\", \"delivered\", \"opened\", \"campaign_id\"\n\nLINE 2:   SELECT DISTINCT member_id\n                          ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:49:03",
+   "statement": "WITH contacted_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure ce\n  INNER JOIN dim_member m ON ce.member_key = m.member_key\n  WHERE ce.campaign_id = 19\n),\nmember_spending AS (\n  SELECT \n    cm.member_id,\n    SUM(f.net_amount) as total_spending\n  FROM contacted_members cm\n  INNER JOIN fact_sales_line f ON f.member_key IN (\n    SELECT member_key FROM dim_member WHERE member_id = cm.member_id\n  )\n  WHERE f.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n    AND f.channel_code IN ('ST', 'WB')\n  GROUP BY cm.member_id\n)\nSELECT \n  COUNT(DISTINCT cm.member_id) as members_contacted,\n  COALESCE(SUM(ms.total_spending), 0) as total_spending\nFROM contacted_members cm\nLEFT JOIN member_spending ms ON cm.member_id = ms.member_id\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | total_spending\n15001 | 0.00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:49:07",
+   "statement": "SELECT \n  f.sale_date,\n  COUNT(*) as line_count,\n  SUM(f.net_amount) as net_sales\nFROM fact_sales_line f\nWHERE f.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\nGROUP BY f.sale_date\nORDER BY f.sale_date\n",
+   "n": 4,
+   "ok": true,
+   "rows": 21,
+   "output_preview": "sale_date | line_count | net_sales\n2026-05-04 | 1757 | 41066.89\n2026-05-05 | 2050 | 47245.69\n2026-05-06 | 2109 | 50613.18\n2026-05-07 | 2348 | 51280.06\n2026-05-08 | 2678 | 61039.22\n2026-05-09 | 3081 | 68726.70\n2026-05-10 | 1570 | 38943.96\n2026-05-11 | 1936 | 45564.64\n2026-05-12 | 1914 | 44589.84\n2026-05-13 | 2149 | 50315.09\n2026-05-14 | 2294 | 55166.39\n2026-05-15 | 2460 | 58232.41\n2026-05-16 | 3224 | 72758.38\n2026-05-17 | 1749 | 41186.89\n2026-05-18 | 2059 | 49109.73\n2026-05-19 | 1938 | 46721.02\n2026-05-20 | 2031 | 47274.12\n2026-05-21 | 2240 | 55007.63\n2026-05-22 | 2639 | 60276.76\n2026-05-23 | 3114 | 70955.95\n2026-05-24 | 1707 | 37812.39\n(21 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:49:12",
+   "statement": "WITH contacted_member_ids AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure ce\n  INNER JOIN dim_member m ON ce.member_key = m.member_key\n  WHERE ce.campaign_id = 19\n)\nSELECT \n  COUNT(DISTINCT cmi.member_id) as members_contacted,\n  SUM(f.net_amount) as total_spending\nFROM contacted_member_ids cmi\nINNER JOIN dim_member m ON cmi.member_id = m.member_id\nINNER JOIN fact_sales_line f ON m.member_key = f.member_key\nWHERE f.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | total_spending\n2626 | 191576.08\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:49:19",
+   "statement": "-- First, count total contacted members\nWITH contacted_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure ce\n  INNER JOIN dim_member m ON ce.member_key = m.member_key\n  WHERE ce.campaign_id = 19\n)\nSELECT \n  'Contacted members' as metric,\n  COUNT(*) as value\nFROM contacted_members\nUNION ALL\n-- Then sum their spending (including those with 0)\nSELECT \n  'Members with purchases' as metric,\n  COUNT(DISTINCT cmi.member_id) as value\nFROM contacted_members cmi\nINNER JOIN dim_member m ON cmi.member_id = m.member_id\nINNER JOIN fact_sales_line f ON m.member_key = f.member_key\nWHERE f.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "metric | value\nContacted members | 15001\nMembers with purchases | 2626\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:49:24",
+   "statement": "-- Final answer query\nWITH contacted_member_ids AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure ce\n  INNER JOIN dim_member m ON ce.member_key = m.member_key\n  WHERE ce.campaign_id = 19\n)\nSELECT \n  (SELECT COUNT(*) FROM contacted_member_ids) as members_contacted,\n  COALESCE(SUM(f.net_amount), 0) as total_spending_eur\nFROM contacted_member_ids cmi\nLEFT JOIN dim_member m ON cmi.member_id = m.member_id\nLEFT JOIN fact_sales_line f ON m.member_key = f.member_key \n  AND f.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | total_spending_eur\n15001 | 191576.08\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:49:33",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 8,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n  [WARN] Sales lines used without a filter on category 'ZZ Test' (REG-TEST-SKU, TEAM-EXCLUSIONS).\n  [WARN] dim_member m is joined on member_id without is_current or validity dates; one row per version will multiply rows (REG-SCD-KEYS).\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 1 rows, 2 columns: members_contacted, total_spending_eur\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  members_contacted | total_spending_eur\n  15001 | 191576.08\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

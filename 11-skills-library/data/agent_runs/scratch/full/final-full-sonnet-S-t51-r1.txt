@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH grp AS (SELECT member_id, 'holdout' AS grp FROM campaign_holdout WHERE campaign_id = 15 UNION SELECT DISTINCT m.member_id, 'targeted' FROM fact_campaign_exposure x JOIN dim_member m USING (member_key) WHERE x.campaign_id = 15), sales AS (SELECT m.member_id, sum(f.net_amount) AS sales_net FROM fact_sales_line f JOIN dim_member m USING (member_key) WHERE f.sale_date BETWEEN '2025-11-24' AND '2025-11-30' AND NOT f.staff_purchase_flag GROUP BY 1), refunds AS (SELECT m.member_id, sum(r.refund_net) AS refund_net FROM fact_return_line r JOIN dim_member m USING (member_key) WHERE r.return_date BETWEEN '2025-11-24' AND '2025-11-30' GROUP BY 1), per_group AS (SELECT g.grp, count(*) AS members, sum(coalesce(s.sales_net,0) - coalesce(r.refund_net,0)) / count(*) AS avg_spend FROM grp g LEFT JOIN sales s USING (member_id) LEFT JOIN refunds r USING (member_id) GROUP BY g.grp) SELECT 15 AS campaign_id, 'Black Week 2025' AS campaign_name, round(max(CASE WHEN grp='targeted' THEN avg_spend END),2) AS avg_spend_targeted_eur, round(max(CASE WHEN grp='holdout' THEN avg_spend END),2) AS avg_spend_holdout_eur, round(max(CASE WHEN grp='targeted' THEN avg_spend END) - max(CASE WHEN grp='holdout' THEN avg_spend END),2) AS uplift_eur FROM per_group",
+  "result": {
+    "columns": ["campaign_id", "campaign_name", "avg_spend_targeted_eur", "avg_spend_holdout_eur", "uplift_eur"],
+    "rows": [[15, "Black Week 2025", 4.56, 3.88, 0.68]]
+  },
+  "definitions_applied": [
+    "Campaign window: dim_campaign start_date to end_date for Black Week 2025 (campaign_id 15), 2025-11-24 to 2025-11-30 inclusive",
+    "Holdout group: campaign_holdout rows for campaign 15, which are keyed on member_id",
+    "Members matched across all dim_member versions by member_id, not by a single member_key",
+    "Spend: net_amount (EUR excluding VAT, after line discounts) on sales lines dated in the window, across all channels (store, web home delivery, click and collect)",
+    "Staff purchases (staff_purchase_flag) excluded",
+    "Refunds (refund_net) booked in the window subtracted, matching the company net sales definition of net of returns",
+    "Averages over every member in the group, including members who bought nothing",
+    "Uplift in euros: average spend per targeted member minus average spend per held-out member"
+  ],
+  "assumptions": [
+    "Targeted members are those with at least one contact for campaign 15 in fact_campaign_exposure: 23,818 distinct members. Held-out members: 2,747.",
+    "Each group is measured on everyone in it regardless of whether the contact was delivered or opened, so zero-spend members count and the figure is the effect of the campaign as sent.",
+    "Spend means money kept: sales net of refunds booked in the same window. Refunds are attributed to the member who received them, even if the original purchase was before the window.",
+    "Staff purchases are excluded because they are not driven by the campaign.",
+    "Non-member sales and guest web orders cannot be attributed to a group and are left out.",
+    "VAT excluded throughout (net_amount basis), so the figures are comparable with the company's net sales.",
+    "Before refunds, with staff purchases excluded, the averages are 4.70 (targeted) and 4.04 (held out), an uplift of about 0.66. Including staff purchases and ignoring refunds gives 4.74 and 4.06."
+  ],
+  "caveats": [
+    "Channel codes: channel_code is NULL on sales lines in the campaign week, so the existing rpt.v_daily_sales view (which finds web lines with channel_code = 'WB') would miss all web sales. I did not filter on channel_code and kept all channels via the member link; web sales are 2,297 lines in the window.",
+    "Member matching: campaign_holdout holds member_id while the fact tables hold member_key, and members have several versions. I mapped everything through member_id. Joining the holdout to member_key directly would have dropped some members.",
+    "Group size check: the campaign record says 26,573 on the mailing list and 2,747 held out, which implies 23,826 targeted. The exposure table identifies 23,818 members, so 8 members on the list have no contact rows and cannot be identified. The effect on the averages is negligible.",
+    "No member appears in both the holdout and the exposure table. The two groups look comparable at campaign start: all have marketing consent, with similar loyalty tier mix, online sign-up share and join dates.",
+    "The uplift is small in absolute terms. Only about 8% of members in either group bought anything in the week (1,899 of 23,818 targeted and 181 of 2,747 held out). The holdout has only 181 buyers, so the 0.68 uplift is a point estimate with wide uncertainty and no significance test was run.",
+    "The result covers spend only in the seven-day campaign window. Any pull-forward or later effect is not included.",
+    "I did not use the backup, staging, tmp or old tables, which are not documented as sources of record."
+  ]
+}
+```

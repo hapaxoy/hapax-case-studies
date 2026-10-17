@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-Lminus-t04-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T04",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "29ca6ecad3b3b72a5fbb6bd988e717578f5f407b7a8694cd521cad72e89834eb",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:28",
+   "statement": "SELECT date_trunc('month', f.sale_date) AS m, s.store_id = 999 AS is999, s.store_id >= 900 AS is_web_or_test, p.category = 'ZZ Test' AS is_test,\n count(*) AS n, count(DISTINCT f.sales_line_id) AS dist_ids, count(DISTINCT (f.receipt_id, f.line_no)) AS dist_rl,\n sum(f.gross_amount) AS gross, sum(f.net_amount) AS net, min(f.sale_date), max(f.sale_date)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY ALL ORDER BY 1,2,3,4\n",
+   "n": 1,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "m | is999 | is_web_or_test | is_test | n | dist_ids | dist_rl | gross | net | min(f.sale_date) | max(f.sale_date)\n2024-08-01T00:00:00 | false | false | false | 42757 | 42757 | 42757 | 1365081.89 | 1101807.91 | 2024-08-01 | 2024-08-31\n2024-08-01T00:00:00 | false | true | false | 4353 | 4353 | 4353 | 174402.41 | 140749.93 | 2024-08-01 | 2024-08-31\n2024-08-01T00:00:00 | false | true | true | 1 | 1 | 1 | 8.06 | 6.50 | 2024-08-13 | 2024-08-13\n2024-08-01T00:00:00 | true | true | false | 117 | 117 | 117 | 4095.30 | 3304.59 | 2024-08-01 | 2024-08-30\n2024-08-01T00:00:00 | true | true | true | 41 | 41 | 41 | 186.93 | 150.75 | 2024-08-01 | 2024-08-29\n2024-09-01T00:00:00 | false | false | false | 39234 | 39234 | 39234 | 1208912.16 | 964016.09 | 2024-09-01 | 2024-09-30\n2024-09-01T00:00:00 | false | true | false | 4324 | 4324 | 4324 | 160391.86 | 127881.25 | 2024-09-01 | 2024-09-30\n2024-09-01T00:00:00 | false | true | true | 1 | 1 | 1 | 3.77 | 3.00 | 2024-09-11 | 2024-09-11\n2024-09-01T00:00:00 | true | true | false | 100 | 100 | 100 | 3253.67 | 2592.82 | 2024-09-02 | 2024-09-30\n2024-09-01T00:00:00 | true | true | true | 25 | 25 | 25 | 98.04 | 78.10 | 2024-09-05 | 2024-09-30\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:36",
+   "statement": "WITH l AS (\n SELECT f.*, s.store_id, p.category FROM fact_sales_line f\n LEFT JOIN dim_store s ON s.store_key=f.store_key LEFT JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30')\nSELECT date_trunc('month', sale_date) m,\n count(*) n_all, sum((store_id IS NULL)::INT) no_store, sum((category IS NULL)::INT) no_prod,\n sum((gross_amount IS NULL OR net_amount IS NULL)::INT) null_amt,\n sum((abs(gross_amount - round(net_amount*(1+vat_rate),2))>0.02)::INT) vat_mismatch,\n sum((quantity<=0)::INT) nonpos_qty, sum((net_amount<0)::INT) neg_net,\n count(DISTINCT vat_rate) n_rates, string_agg(DISTINCT CAST(vat_rate AS VARCHAR), ',') rates,\n sum(CASE WHEN store_id<900 AND category<>'ZZ Test' THEN gross_amount END) store_gross,\n sum(CASE WHEN store_id<900 AND category<>'ZZ Test' AND staff_purchase_flag THEN gross_amount END) staff_gross,\n sum(CASE WHEN channel_code='WB' AND store_id<900 THEN 1 ELSE 0 END) wb_in_store\nFROM l GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "m | n_all | no_store | no_prod | null_amt | vat_mismatch | nonpos_qty | neg_net | n_rates | rates | store_gross | staff_gross | wb_in_store\n2024-08-01T00:00:00 | 47269 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0.1000,0.2400,0.1400 | 1365081.89 | 16949.92 | 0\n2024-09-01T00:00:00 | 43684 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0.2550,0.1000,0.1400 | 1208912.16 | 16438.40 | 0\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:39",
+   "statement": "WITH f AS (\n SELECT f.sale_date d, s.store_id, sum(f.net_amount) net FROM fact_sales_line f\n JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE s.store_id<900 AND p.category<>'ZZ Test' AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\n GROUP BY 1,2),\nr AS (SELECT business_date d, store_id, net_sales_before_returns rn FROM rpt_daily_store_sales\n WHERE store_id<900 AND business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30')\nSELECT date_trunc('month', COALESCE(f.d, r.d)) m, sum(f.net) fact_net, sum(r.rn) rpt_net, count(*) n_storedays,\n sum((f.net IS NULL)::INT) missing_in_fact, sum((r.rn IS NULL)::INT) missing_in_rpt, sum((abs(f.net-r.rn)>0.01)::INT) mismatched\nFROM f FULL JOIN r ON f.d=r.d AND f.store_id=r.store_id GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "m | fact_net | rpt_net | n_storedays | missing_in_fact | missing_in_rpt | mismatched\n2024-08-01T00:00:00 | 1101807.91 | 1101807.91 | 1136 | 0 | 0 | 0\n2024-09-01T00:00:00 | 964016.09 | 964016.09 | 1138 | 0 | 0 | 0\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:46",
+   "statement": "SELECT date_trunc('month', f.sale_date) m, count(*) n_store_lines_matching_web_orders, sum(f.gross_amount) g\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN fact_web_order w ON w.web_order_id=f.receipt_id\nWHERE s.store_id<900 AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' GROUP BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "m | n_store_lines_matching_web_orders | g\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:48",
+   "statement": "SELECT date_trunc('month', f.sale_date) m, count(DISTINCT s.store_id) stores, count(*) lines,\n sum(CASE WHEN f.vat_rate=0.24 THEN f.gross_amount END) g24, sum(CASE WHEN f.vat_rate=0.255 THEN f.gross_amount END) g255\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE s.store_id<900 AND p.category<>'ZZ Test' AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' GROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "m | stores | lines | g24 | g255\n2024-08-01T00:00:00 | 37 | 42757 | 1352655.70 | NULL\n2024-09-01T00:00:00 | 38 | 39234 | NULL | 1200505.80\n(2 rows)"
+  }
+ ]
+}

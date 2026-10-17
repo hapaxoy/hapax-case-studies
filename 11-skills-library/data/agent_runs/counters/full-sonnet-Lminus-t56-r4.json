@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-Lminus-t56-r4",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T56",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "4bed1e964432c984dafa998d13839c03682c01fe27a7310f8f6073f641bbbdaa",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:39",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nmine AS (\n  SELECT business_date, SUM(net_sales) AS web_net_sales FROM net_lines\n  WHERE store_id = 900 AND business_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23' GROUP BY 1\n)\nSELECT d.calendar_date, d.is_trading_day, m.web_net_sales, c.net_sales AS control, c.net_sales_before_returns, c.returns_net\nFROM dim_date d\nLEFT JOIN mine m ON m.business_date = d.calendar_date\nLEFT JOIN rpt_daily_store_sales c ON c.business_date = d.calendar_date AND c.store_id = 900\nWHERE d.calendar_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\nORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "calendar_date | is_trading_day | web_net_sales | control | net_sales_before_returns | returns_net\n2025-12-15 | true | 11375.48 | 11375.48 | 11714.52 | 339.04\n2025-12-16 | true | 10604.74 | 10604.74 | 10967.03 | 362.29\n2025-12-17 | true | 14227.56 | 14227.56 | 15214.54 | 986.98\n2025-12-18 | true | 11359.73 | 11359.73 | 12189.13 | 829.40\n2025-12-19 | true | 9197.31 | 9197.31 | 10258.50 | 1061.19\n2025-12-20 | true | 10274.69 | 10274.69 | 11379.59 | 1104.90\n2025-12-21 | true | 611.75 | 611.75 | 1445.65 | 833.90\n2025-12-22 | true | 14820.19 | 14820.19 | 15720.91 | 900.72\n2025-12-23 | true | 11248.95 | 11248.95 | 11674.00 | 425.05\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:47",
+   "statement": "SELECT 'dup_sales_key' AS chk, COUNT(*) AS n, SUM(c-1) AS extra FROM (SELECT receipt_id, line_no, COUNT(*) c FROM fact_sales_line f JOIN dim_store s USING(store_key) WHERE s.store_id=900 GROUP BY 1,2 HAVING COUNT(*)>1)\nUNION ALL\nSELECT 'dup_sales_line_id', COUNT(*), SUM(c-1) FROM (SELECT sales_line_id, COUNT(*) c FROM fact_sales_line GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL\nSELECT 'dup_return_id', COUNT(*), SUM(c-1) FROM (SELECT return_line_id, COUNT(*) c FROM fact_return_line GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL\nSELECT 'dup_web_order', COUNT(*), SUM(c-1) FROM (SELECT web_order_id, COUNT(*) c FROM fact_web_order GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL\nSELECT 'delivered_null_dispatch', COUNT(*), 0 FROM fact_web_order WHERE status IN ('delivered','collected') AND dispatch_ts_utc IS NULL\nUNION ALL\nSELECT 'web_lines_no_order', COUNT(*), 0 FROM fact_sales_line f JOIN dim_store s USING(store_key) LEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id=900 AND o.web_order_id IS NULL\nUNION ALL\nSELECT 'web_lines_nondispatched_status', COUNT(*), 0 FROM fact_sales_line f JOIN dim_store s USING(store_key) JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id=900 AND o.status NOT IN ('delivered','collected')\nUNION ALL\nSELECT 'returns_to_web_with_orig_nonweb', COUNT(*), 0 FROM fact_return_line r JOIN dim_store s USING(store_key) WHERE s.store_id=900 AND r.return_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "chk | n | extra\ndup_sales_key | 0 | NULL\ndup_sales_line_id | 0 | NULL\ndup_return_id | 0 | NULL\ndup_web_order | 0 | NULL\ndelivered_null_dispatch | 0 | 0\nweb_lines_no_order | 0 | 0\nweb_lines_nondispatched_status | 0 | 0\nreturns_to_web_with_orig_nonweb | 168 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:56",
+   "statement": "WITH o AS (\n  SELECT CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) AS order_date,\n         CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date,\n         CAST(dispatch_ts_utc AS DATE) AS dispatch_utc_date, status, fulfilment_type\n  FROM fact_web_order)\nSELECT d AS day,\n (SELECT COUNT(*) FROM o WHERE order_date=d AND status<>'cancelled') AS orders_placed,\n (SELECT COUNT(*) FROM o WHERE order_date=d AND status='cancelled') AS cancelled,\n (SELECT COUNT(*) FROM o WHERE order_date=d AND status='processing') AS processing,\n (SELECT COUNT(*) FROM o WHERE dispatch_date=d) AS dispatched_helsinki,\n (SELECT COUNT(*) FROM o WHERE dispatch_utc_date=d) AS dispatched_utc,\n (SELECT COUNT(*) FROM o WHERE dispatch_date=d AND fulfilment_type='click_and_collect') AS cc_dispatched,\n (SELECT COUNT(*) FROM fact_return_line r JOIN fact_sales_line f USING(sales_line_id) JOIN dim_store sr ON sr.store_key=r.store_key JOIN dim_store sf ON sf.store_key=f.store_key WHERE r.return_date=d AND sf.store_id=900 AND sr.store_id<>900) AS web_returns_booked_elsewhere,\n (SELECT COUNT(*) FROM fact_return_line r JOIN fact_sales_line f USING(sales_line_id) JOIN dim_store sr ON sr.store_key=r.store_key JOIN dim_store sf ON sf.store_key=f.store_key WHERE r.return_date=d AND sf.store_id<>900 AND sr.store_id=900) AS store_returns_booked_web\nFROM (SELECT CAST(x AS DATE) AS d FROM generate_series(DATE '2025-12-13', DATE '2025-12-25', INTERVAL 1 DAY) t(x))\nORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 13,
+   "output_preview": "day | orders_placed | cancelled | processing | dispatched_helsinki | dispatched_utc | cc_dispatched | web_returns_booked_elsewhere | store_returns_booked_web\n2025-12-13 | 121 | 2 | 0 | 148 | 149 | 56 | 8 | 0\n2025-12-14 | 161 | 9 | 0 | 9 | 0 | 1 | 6 | 0\n2025-12-15 | 233 | 11 | 0 | 248 | 269 | 61 | 8 | 0\n2025-12-16 | 306 | 9 | 0 | 211 | 204 | 67 | 9 | 0\n2025-12-17 | 224 | 10 | 0 | 271 | 279 | 76 | 6 | 0\n2025-12-18 | 215 | 9 | 0 | 246 | 240 | 67 | 5 | 0\n2025-12-19 | 196 | 10 | 0 | 215 | 222 | 62 | 3 | 0\n2025-12-20 | 132 | 3 | 0 | 203 | 198 | 46 | 11 | 0\n2025-12-21 | 142 | 7 | 0 | 18 | 0 | 3 | 7 | 0\n2025-12-22 | 228 | 6 | 0 | 283 | 304 | 76 | 5 | 0\n2025-12-23 | 252 | 9 | 0 | 214 | 212 | 67 | 10 | 0\n2025-12-24 | 133 | 3 | 0 | 19 | 0 | 5 | 0 | 0\n2025-12-25 | 142 | 8 | 0 | 0 | 0 | 0 | 0 | 0\n(13 rows)"
+  }
+ ]
+}

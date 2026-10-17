@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH web_sales AS (SELECT d.fiscal_year, d.fiscal_period, sum(f.net_amount) AS sales_net FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id = 900 AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY 1, 2), web_returns AS (SELECT d.fiscal_year, d.fiscal_period, sum(r.refund_net) AS returns_net FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = r.return_date WHERE s.store_id = 900 AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY 1, 2) SELECT w.fiscal_year, w.fiscal_period, round(w.sales_net - coalesce(r.returns_net, 0), 2) AS net_sales FROM web_sales w LEFT JOIN web_returns r USING (fiscal_year, fiscal_period) ORDER BY w.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "net_sales"],
+    "rows": [
+      ["FY2025/26", 5, 139538.50],
+      ["FY2025/26", 6, 171790.72],
+      ["FY2025/26", 7, 149464.88],
+      ["FY2025/26", 8, 226718.44]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = line net_amount (EUR excluding VAT, after line discounts) minus refund_net, as in rpt_daily_store_sales",
+    "Fiscal calendar: dim_date / ref_fiscal_calendar, periods starting on Mondays (P05 = 25 Aug to 21 Sep 2025, P06 = 22 Sep to 26 Oct, P07 = 27 Oct to 23 Nov, P08 = 24 Nov to 21 Dec)",
+    "Web shop = pseudo-store 900 (Tuomimetsä web shop), covering home delivery and click and collect",
+    "Sales dated by sale_date (Helsinki local date), refunds dated by return_date (when booked)",
+    "Staff purchases: none on web lines in these periods, so nothing to exclude"
+  ],
+  "assumptions": [
+    "'Last year' read as the last completed fiscal year, FY2025/26 (request dated 6 Oct 2026, which falls in FY2026/27), not calendar 2025 or the current year",
+    "'Net' read as net sales per the company definition: excluding VAT and after returns",
+    "Returns are deducted in the period the refund was booked, even if the original sale fell in an earlier period",
+    "Both web fulfilment types (home delivery and click and collect) are included; cancelled orders have no sales lines so add nothing"
+  ],
+  "caveats": [
+    "Correction 1, channel migration: from 3 Nov 2025 the sales lines carry channel_id (2 = home delivery, 3 = click and collect) and a NULL channel_code. Filtering on channel_code = 'WB' (as rpt.v_daily_sales does) drops all web sales from 3 Nov, which would understate P07 and P08 and leave out the whole of P08 after that date. I identified web sales by store 900 instead, which works on both sides of the change.",
+    "Correction 2, returns booked at stores: 501 refunds on web sales lines in these periods were booked at physical stores (store_key of the store, not the web shop), about 17k EUR net. Store sales are always returned at their own store, so this looks like web orders handed back in stores. The company convention books a refund where it is made, which would leave these out of web net sales and charge them to the stores. I deducted them from the web shop because the sale was a web sale. Taking only refunds booked at the web shop would give 145,626.90 / 175,588.62 / 154,977.27 / 225,265.08 less nothing for stores' share, i.e. higher web net sales in every period.",
+    "rpt_daily_store_sales for store 900 does not match the fact table (for example P05 net sales before returns 158,717 against 158,124 in fact_sales_line; P08 243,086 against 249,085). The daily pattern also looks like a store's (near-zero Sundays, receipt counts well below the web order counts). I did not use it for the web shop.",
+    "Before returns, web sales were 158,124.35 / 194,176.17 / 166,510.02 / 249,084.84 EUR (P05 to P08); refunds deducted were 18,585.85 / 22,385.45 / 17,045.14 / 22,366.40 EUR.",
+    "Checks that came back clean: no duplicate sales lines or reloads, order and line totals reconcile to fact_web_order for all delivered and collected orders, gross matches net plus VAT on every line, sale dates match Helsinki local dates, and all four periods are flagged fully loaded.",
+    "P08 includes the Black Friday and Cyber Monday spikes (28 Nov, 1 Dec) and the pre-Christmas rise, so it is much higher than the other periods. Nothing in the data suggests these are errors."
+  ]
+}
+```

@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t50-r1",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T50",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "eddb864994aa210dcb66e044b17d19d2c7c2cecd364fddd569405128eb25ce2d",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:52:58",
+   "statement": "SELECT DISTINCT fiscal_year \nFROM ref_fiscal_calendar\nORDER BY fiscal_year DESC\nLIMIT 5\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:01",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2025/26' AND fiscal_period IN (6, 7, 8)\nORDER BY fiscal_period\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2025/26 | 6 | FY2025/26 P06 | 2025-09-22 | 2025-10-26\nFY2025/26 | 7 | FY2025/26 P07 | 2025-10-27 | 2025-11-23\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:07",
+   "statement": "SELECT \n  f.channel_code,\n  COUNT(DISTINCT f.receipt_id) as web_orders,\n  SUM(f.net_amount) as net_sales\nFROM fact_sales_line f\nWHERE f.channel_code = 'WB'\nLIMIT 5\n",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: column \"channel_code\" must appear in the GROUP BY clause or must be part of an aggregate function.\nEither add it to the GROUP BY list, or use \"ANY_VALUE(channel_code)\" if the exact value of \"channel_code\" is not important.\n\nLINE 2:   f.channel_code,\n          ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:10",
+   "statement": "SELECT \n  f.channel_code,\n  COUNT(DISTINCT f.receipt_id) as web_orders,\n  SUM(f.net_amount) as net_sales\nFROM fact_sales_line f\nWHERE f.channel_code = 'WB'\nGROUP BY f.channel_code\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "channel_code | web_orders | net_sales\nWB | 50039 | 2913100.01\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:13",
+   "statement": "SELECT \n  f.receipt_id,\n  f.sale_date,\n  w.fulfilment_type,\n  f.net_amount\nFROM fact_sales_line f\nLEFT JOIN fact_web_order w ON f.receipt_id = w.web_order_id\nWHERE f.channel_code = 'WB'\nLIMIT 10\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "receipt_id | sale_date | fulfilment_type | net_amount\n90026556 | 2025-02-25 | click_and_collect | 6.86\n90026556 | 2025-02-25 | click_and_collect | 42.01\n90026557 | 2025-02-25 | click_and_collect | 15.15\n90026557 | 2025-02-25 | click_and_collect | 6.80\n90026557 | 2025-02-25 | click_and_collect | 11.67\n90026558 | 2025-02-25 | home_delivery | 16.28\n90026558 | 2025-02-25 | home_delivery | 13.42\n90026558 | 2025-02-25 | home_delivery | 8.21\n90026559 | 2025-02-25 | click_and_collect | 37.06\n90026560 | 2025-02-25 | click_and_collect | 12.80\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:18",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  w.fulfilment_type,\n  SUM(f.net_amount) as net_sales,\n  COUNT(DISTINCT f.receipt_id) as orders\nFROM fact_sales_line f\nLEFT JOIN fact_web_order w ON f.receipt_id = w.web_order_id\nLEFT JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE f.channel_code = 'WB'\n  AND d.fiscal_year = 'FY2025/26'\n  AND d.fiscal_period IN (6, 7, 8)\nGROUP BY d.fiscal_year, d.fiscal_period, w.fulfilment_type\nORDER BY d.fiscal_period, w.fulfilment_type\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | fulfilment_type | net_sales | orders\nFY2025/26 | 6 | click_and_collect | 53697.28 | 935\nFY2025/26 | 6 | home_delivery | 140478.89 | 2420\nFY2025/26 | 7 | click_and_collect | 10931.58 | 168\nFY2025/26 | 7 | home_delivery | 27355.51 | 538\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:22",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  COUNT(*) as line_count\nFROM fact_sales_line f\nLEFT JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE f.channel_code = 'WB'\n  AND d.fiscal_year = 'FY2025/26'\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 7,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "fiscal_year | fiscal_period | line_count\nFY2025/26 | 1 | 6645\nFY2025/26 | 2 | 6351\nFY2025/26 | 3 | 7327\nFY2025/26 | 4 | 5249\nFY2025/26 | 5 | 5323\nFY2025/26 | 6 | 6750\nFY2025/26 | 7 | 1426\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:27",
+   "statement": "SELECT \n  d.fiscal_period,\n  w.fulfilment_type,\n  SUM(f.net_amount) as net_sales\nFROM fact_sales_line f\nLEFT JOIN fact_web_order w ON f.receipt_id = w.web_order_id\nLEFT JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE f.channel_code = 'WB'\n  AND d.fiscal_year = 'FY2025/26'\n  AND d.fiscal_period IN (6, 7, 8)\nGROUP BY d.fiscal_period, w.fulfilment_type\nORDER BY d.fiscal_period, w.fulfilment_type\n",
+   "n": 8,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_period | fulfilment_type | net_sales\n6 | click_and_collect | 53697.28\n6 | home_delivery | 140478.89\n7 | click_and_collect | 10931.58\n7 | home_delivery | 27355.51\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:33",
+   "statement": "WITH web_sales_by_fulfilment AS (\n  SELECT \n    d.fiscal_period,\n    w.fulfilment_type,\n    SUM(f.net_amount) as net_sales\n  FROM fact_sales_line f\n  LEFT JOIN fact_web_order w ON f.receipt_id = w.web_order_id\n  LEFT JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE f.channel_code = 'WB'\n    AND d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period IN (6, 7, 8)\n  GROUP BY d.fiscal_period, w.fulfilment_type\n)\nSELECT \n  fiscal_period as period,\n  ROUND(\n    SUM(CASE WHEN fulfilment_type = 'click_and_collect' THEN net_sales ELSE 0 END) * 100.0 / \n    SUM(net_sales),\n    2\n  ) as click_and_collect_share_pct\nFROM web_sales_by_fulfilment\nGROUP BY fiscal_period\nORDER BY fiscal_period\n",
+   "n": 9,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "period | click_and_collect_share_pct\n6 | 27.65\n7 | 28.55\n(2 rows)"
+  }
+ ]
+}

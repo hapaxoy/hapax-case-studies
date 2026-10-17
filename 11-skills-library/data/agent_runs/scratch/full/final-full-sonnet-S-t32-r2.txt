@@ -1,0 +1,31 @@
+```json
+{
+  "sql": "SELECT s.store_id, s.store_name, p.subcategory AS product_group, d.fiscal_year, d.fiscal_period, SUM(f.quantity) AS units_sold FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id = 108 AND p.subcategory = 'Interior Paint' AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3 GROUP BY s.store_id, s.store_name, p.subcategory, d.fiscal_year, d.fiscal_period",
+  "result": {
+    "columns": ["store_id", "store_name", "product_group", "fiscal_year", "fiscal_period", "units_sold"],
+    "rows": [[108, "Lahti", "Interior Paint", "FY2026/27", 3, 194]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2026/27 period 3 runs 2026-06-29 to 2026-08-02 (5 weeks, fiscal weeks 9 to 13), taken from ref_fiscal_calendar and dim_date",
+    "Interior Paint = dim_product.subcategory 'Interior Paint' (category Paint &amp; Decorating), matched through the product_key stored on each sales line (the product version at the sale date)",
+    "Lahti = store_id 108 (store_name 'Lahti'), matched through the store_key stored on each sales line",
+    "Units sold = sum of fact_sales_line.quantity by sale_date, before returns (the same basis as units_sold in rpt_daily_store_sales)"
+  ],
+  "assumptions": [
+    "'Period 3 of FY26/27' means fiscal year FY2026/27, fiscal period 3, not calendar month 3",
+    "'Lahti store' means the store named Lahti (store_id 108). I left out 'Tampere Lielahti' (store_id 116), which a text search on 'Lahti' also returns",
+    "'Units sold' is gross units sold. Returns are not deducted (see caveats for the net figure)",
+    "Staff purchases are included, because the request does not exclude them",
+    "Only Interior Paint is counted. Exterior Paint, Brushes &amp; Rollers and Wallpaper &amp; Decor Film are separate subcategories and are left out",
+    "No relative or ambiguous date term needed reading, because the request names the fiscal year and period explicitly"
+  ],
+  "caveats": [
+    "No correction to the data was needed. Checked and clean: FY2026/27 P03 is marked fully loaded; Lahti has a single store version; no refit closures recorded for Lahti; no duplicate receipt/line rows; no lines outside the period; sale_date agrees with the UTC timestamp, with sales between 06:00 and 17:59 UTC, so no time-zone shift across period boundaries; every Lahti line in the period is on the Store channel; the fact table's Lahti total for the period (3,927 units, all products) reconciles exactly to rpt_daily_store_sales",
+    "Lahti has 142 Interior Paint sales lines in the period, covering 33 SKUs",
+    "194 units is before returns. Lahti had 5 Interior Paint units returned in the period (5 return lines), so net of returns it would be 189 units",
+    "The 194 includes 4 units bought by staff on 2026-08-01. Excluding staff purchases it would be 190 units",
+    "Two Interior Paint SKUs (100963 and 101047) have two product versions in dim_product, both classed as Interior Paint, so the count is unaffected",
+    "Searching for 'Lahti' also matches 'Tampere Lielahti'. Filtering on store_id 108 avoids it"
+  ]
+}
+```

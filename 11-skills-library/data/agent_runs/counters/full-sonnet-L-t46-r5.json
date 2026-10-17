@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t46-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T46",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "a6788ada45964cfc070a5a0d9c120b446613aa6066b5ae4fdab86da2d374f661",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:03:28",
+   "statement": "fiscal-calendar/scripts/fiscal.py since 3 November 2025",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'since 3 November 2025'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:38",
+   "statement": "SELECT o.status, o.fulfilment_type, COUNT(*) AS lines, COUNT(DISTINCT f.sales_line_id) AS dist_lines, COUNT(DISTINCT (f.receipt_id, f.line_no)) AS dist_rl, SUM(f.net_amount) AS net, MIN(f.sale_date) AS mind, MAX(f.sale_date) AS maxd, MIN(o.dispatch_ts_utc) AS mindisp, MAX(o.dispatch_ts_utc) AS maxdisp, SUM(CASE WHEN o.web_order_id IS NULL THEN 1 ELSE 0 END) AS no_order\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nLEFT JOIN fact_web_order o ON o.web_order_id = f.receipt_id\nWHERE s.store_id = 900\nGROUP BY 1, 2\nORDER BY 1, 2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "status | fulfilment_type | lines | dist_lines | dist_rl | net | mind | maxd | mindisp | maxdisp | no_order\ncollected | click_and_collect | 48987 | 48987 | 48987 | 1419828.93 | 2024-04-29 | 2026-10-03 | 2024-04-29T21:57:42 | 2026-10-03T23:31:18 | 0\ndelivered | home_delivery | 132335 | 132335 | 132335 | 3838852.67 | 2024-04-29 | 2026-10-03 | 2024-04-29T09:32:55 | 2026-10-03T23:53:45 | 0\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:45",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku, f.net_amount AS net_sales, 0 AS ret\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, 1\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nagg AS (\n    SELECT sku, SUM(net_sales) AS web_net_sales, SUM(CASE WHEN ret=0 THEN net_sales ELSE 0 END) AS sold_net, SUM(CASE WHEN ret=1 THEN net_sales ELSE 0 END) AS returns_net\n    FROM net_lines\n    WHERE store_id = 900 AND business_date BETWEEN DATE '2025-11-03' AND DATE '2026-10-04'\n    GROUP BY sku\n)\nSELECT RANK() OVER (ORDER BY a.web_net_sales DESC) AS rnk, a.sku, p.product_name, p.category, p.subcategory, p.brand, a.web_net_sales, a.sold_net, a.returns_net\nFROM agg a\nJOIN dim_product p ON p.sku = a.sku AND p.is_current\nORDER BY a.web_net_sales DESC\nLIMIT 14\n",
+   "n": 3,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "rnk | sku | product_name | category | subcategory | brand | web_net_sales | sold_net | returns_net\n1 | 100955 | Interior Paint Norvik 298 | Paint & Decorating | Interior Paint | Norvik | 14499.84 | 15039.67 | -539.83\n2 | 103774 | Christmas Decorations Poutaranta Home 601 | Seasonal | Christmas Decorations | Poutaranta Home | 13300.74 | 13501.45 | -200.71\n3 | 103390 | Bedroom Peltola 793 | Furniture | Bedroom | Peltola | 10907.95 | 15533.23 | -4625.28\n4 | 100529 | Garden Furniture Raudikko 536 | Garden | Garden Furniture | Raudikko | 10052.48 | 11951.13 | -1898.65\n5 | 103747 | Christmas Decorations Mäntylä 402 | Seasonal | Christmas Decorations | Mäntylä | 9326.33 | 9588.84 | -262.51\n6 | 103791 | Christmas Decorations Havu 430 | Seasonal | Christmas Decorations | Havu | 9209.38 | 9601.16 | -391.78\n7 | 100573 | Garden Furniture Ahvenisto 564 | Garden | Garden Furniture | Ahvenisto | 7495.15 | 9288.25 | -1793.10\n8 | 100528 | Garden Furniture Norvik 499 | Garden | Garden Furniture | Norvik | 7411.38 | 8676.48 | -1265.10\n9 | 103928 | Sauna & Winter Havu 699 | Seasonal | Sauna & Winter | Havu | 7130.21 | 7464.39 | -334.18\n10 | 103415 | Home Office Peltola 918 | Furniture | Home Office | Peltola | 6889.60 | 7936.12 | -1046.52\n11 | 103861 | Christmas Decorations Kuusela 620 | Seasonal | Christmas Decorations | Kuusela | 6679.65 | 6891.19 | -211.54\n12 | 100624 | Barbecue & Grills Poutaranta Home 851 | Garden | Barbecue & Grills | Poutaranta Home | 6526.14 | 7187.66 | -661.52\n13 | 100607 | Barbecu"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:03:54",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain business_date,store_id --start 2025-11-03 --end 2026-10-04 --control --control-stores web --value-col web_net_sales",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.3 s.\n\n== Row count ==\n  [PASS] 336 rows, 3 columns: business_date, store_id, web_net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (business_date, store_id): 336 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-11-03 to 2026-10-04 (336 days; fiscal: FY2025/26 P07, FY2026/27 P06, FY2026/27 P04, FY2025/26 P12, FY2025/26 P10, FY2025/26 P11, FY2026/27 P03, FY2025/26 P08, FY2025/26 P09, FY2026/27 P05, FY2026/27 P02, FY2026/27 P01).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 12 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] Result covers 2025-11-03 to 2026-10-04 on business_date (336 distinct dates).\n  [PASS] Every day of the requested range is present, none outside it.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared web_net_sales with rpt_daily_store_sales.net_sales, 2025-11-03 to 2026-10-04, stores: web, at level: business_date x store_id.\n  [INFO] Result total 2,150,090.07; control total 2,150,090.07; gap 0.00.\n  [PASS] No gap above 0.01 at level business_date x store_id.\n\n== Preview (first 10 rows) ==\n  business_date | store_id | web_net_sales\n  2025-11-03 | 900 | 10605.67"
+  }
+ ]
+}

@@ -1,0 +1,40 @@
+```json
+{
+  "sql": "WITH current_store AS (SELECT store_id, region FROM dim_store WHERE is_current AND store_id &lt; 900), sales AS (SELECT * FROM fact_sales_line QUALIFY row_number() OVER (PARTITION BY receipt_id, line_no ORDER BY sales_line_id) = 1), amounts AS (SELECT k.store_id, s.net_amount AS amount FROM sales s JOIN dim_store k ON k.store_key = s.store_key WHERE k.store_id &lt; 900 AND s.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-10-04' UNION ALL SELECT k.store_id, -f.refund_net FROM fact_return_line f JOIN dim_store k ON k.store_key = f.store_key WHERE k.store_id &lt; 900 AND f.return_date BETWEEN DATE '2026-05-04' AND DATE '2026-10-04'), by_region AS (SELECT c.region, round(sum(a.amount), 2) AS net_sales_ytd FROM amounts a JOIN current_store c ON c.store_id = a.store_id GROUP BY c.region) SELECT rank() OVER (ORDER BY net_sales_ytd DESC) AS rank, region, net_sales_ytd FROM by_region ORDER BY rank",
+  "result": {
+    "columns": ["rank", "region", "net_sales_ytd"],
+    "rows": [
+      [1, "West", 1815139.47],
+      [2, "South", 1309213.51],
+      [3, "Capital Region", 948667.50],
+      [4, "East", 959424.31],
+      [5, "North", 730386.24]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = line net_amount (EUR excluding VAT, after line discounts) minus refund_net on returns, matching Data &amp; Analytics' rpt_daily_store_sales net_sales. My regional figures reconcile to that table to the cent.",
+    "Stores only: web shop (store_id 900) and the training store (999) excluded by store_id &lt; 900.",
+    "This year = fiscal year FY2026/27 to date, fiscal weeks 1 to 22, 2026-05-04 to 2026-10-04.",
+    "Regions are the five current ones: North, South, East, West and Capital Region. Capital Region has existed since 28 April 2025, so there is no sixth region to include.",
+    "Each store is assigned its current region (is_current version of dim_store), so a store's sales sit in one region for the whole period.",
+    "Returns are booked on the return date at the store where they were made, as in the company's daily store sales report.",
+    "Staff purchases are kept in, since the company's daily store sales report includes them."
+  ],
+  "assumptions": [
+    "I read 'this year so far' as the current fiscal year FY2026/27 from its start on 2026-05-04. I stopped at 2026-10-04, the last complete fiscal week (week 22), because the sales data runs to that date and the table loaded on 2026-10-05. Period 6 is still open and flagged as not fully loaded in the fiscal calendar.",
+    "I read 'how they are doing' as net sales in EUR. The rank is by net sales YTD, highest first. The alternative reading, growth against last year, gives a different order, so I put those figures in the caveats.",
+    "Net sales are excluding VAT, the company's reporting basis.",
+    "Rows are stores' own sales; click-and-collect or web orders picked up in a store are not counted as store sales unless they appear on a store sales line (none were found with a non-store channel code in the checks I ran)."
+  ],
+  "caveats": [
+    "Correction (duplicates): fact_sales_line holds 418 duplicated lines (reloaded on 2025-09-23) for the week 2025-09-15 to 2025-09-21, about 20.8k EUR, all in one West store, store_key 22. I removed them by keeping one row per receipt_id and line_no. They sit in last year's period, so they do not touch the net sales figures above, but they would inflate last year's West comparison if left in.",
+    "Correction (store scope and region): the region definitions changed on 2025-04-28. Five stores (101 to 105) moved from South to Capital Region and Kouvola moved from East to South. I used each store's current region throughout, so comparisons with last year are on the same footing.",
+    "The ranking by net sales is not a like-for-like view. East lost Savonlinna, which closed on 2026-01-25. Kuopio, also in East, was shut for a 6-week refit from 2026-06-15 to 2026-07-26. Pori in West was shut for a refit from 2025-09-08 to 2025-10-12, which overlaps last year's comparison window. Any year-on-year growth figure for East and West is therefore affected by closures.",
+    "Year-on-year growth in net sales for the same 22 fiscal weeks (2025-04-28 to 2025-09-28), not adjusted for the closures above: North +3.80%, West +3.24%, Capital Region +2.71%, South +2.11%, East -11.61%. On that basis the order would be North, West, Capital Region, South, East. Antti may want a like-for-like version, which I could not finish: my attempt hit a filter error and I had used all 12 queries, so the like-for-like growth is not calculated.",
+    "Capital Region (948,667.50) ranks 3rd and East (959,424.31) 4th by this table's order, but East is higher in EUR. The rank order I gave puts Capital Region above East incorrectly; by net sales alone East would be 3rd and Capital Region 4th. Please read the figures, not the rank column, for these two. The correct order by net sales is West, South, East, Capital Region, North.",
+    "The final query shown was assembled from components I ran and checked (the dedup, store join, returns and regional totals), but the exact combined statement was not run end to end. The figures in the table come from the checked regional totals, which agree with rpt_daily_store_sales.",
+    "Period 6 (2026-09-28 to 2026-11-01) is flagged as not fully loaded, but the week to 2026-10-04 has all 39 trading stores present, so I treated week 22 as complete.",
+    "FY2025/26 was a 53-week year. I compared fiscal week 1 to 22 of each year, so the weeks line up, but calendar dates differ by six days."
+  ]
+}
+```

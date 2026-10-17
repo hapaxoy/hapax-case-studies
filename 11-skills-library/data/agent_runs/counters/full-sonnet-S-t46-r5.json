@@ -1,0 +1,157 @@
+{
+ "run_id": "full-sonnet-S-t46-r5",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T46",
+ "budget": 30,
+ "used": 16,
+ "refused": 0,
+ "packet_sha256": "3d6055af5382059c4217d949a25f93f30ea96b817a75fd15d0944074681cdd3f",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:19",
+   "statement": "SELECT * FROM dim_channel\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_id | channel_name | channel_group | legacy_channel_code\n1 | Store | store | ST\n2 | Web home delivery | web | WB\n3 | Click and collect | web | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:20",
+   "statement": "SELECT channel_code, channel_id, min(sale_date), max(sale_date), count(*), count(DISTINCT sales_line_id), sum(net_amount), sum(CASE WHEN staff_purchase_flag THEN 1 ELSE 0 END) staff, min(etl_loaded_at), max(etl_loaded_at) FROM fact_sales_line GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "channel_code | channel_id | min(sale_date) | max(sale_date) | count_star() | count(DISTINCT sales_line_id) | sum(net_amount) | staff | min(etl_loaded_at) | max(etl_loaded_at)\nST | NULL | 2024-04-29 | 2025-11-02 | 820084 | 820084 | 19896089.36 | 14618 | 2024-04-30T01:00:00 | 2025-11-03T01:00:00\nWB | NULL | 2024-04-29 | 2025-11-02 | 100065 | 100065 | 2913100.01 | 0 | 2024-04-30T01:00:00 | 2025-11-03T01:00:00\nNULL | 1 | 2025-11-03 | 2026-10-04 | 509235 | 509235 | 12264987.66 | 8745 | 2025-11-04T01:00:00 | 2026-10-05T01:00:00\nNULL | 2 | 2025-11-03 | 2026-10-03 | 58848 | 58848 | 1698937.66 | 0 | 2025-11-04T01:00:00 | 2026-10-04T01:00:00\nNULL | 3 | 2025-11-03 | 2026-10-03 | 22409 | 22409 | 646643.93 | 0 | 2025-11-04T01:00:00 | 2026-10-04T01:00:00\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:25",
+   "statement": "SELECT o.status, o.fulfilment_type, f.channel_id, count(*) lines, count(DISTINCT f.receipt_id) orders, sum(f.net_amount) net, min(f.sale_date), max(f.sale_date), sum(CASE WHEN f.quantity<=0 THEN 1 ELSE 0 END) nonpos, sum(CASE WHEN f.net_amount<=0 THEN 1 ELSE 0 END) nonposnet\nFROM fact_sales_line f LEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id\nWHERE f.channel_id IN (2,3) GROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | fulfilment_type | channel_id | lines | orders | net | min(f.sale_date) | max(f.sale_date) | nonpos | nonposnet\ncollected | click_and_collect | 2 | 1473 | 758 | 43819.29 | 2026-01-12 | 2026-02-08 | 0 | 0\ncollected | click_and_collect | 3 | 22409 | 11225 | 646643.93 | 2025-11-03 | 2026-10-03 | 0 | 0\ndelivered | home_delivery | 2 | 57375 | 28730 | 1655118.37 | 2025-11-03 | 2026-10-03 | 0 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:26",
+   "statement": "SELECT 'web_orders' k, count(*), count(DISTINCT web_order_id), min(order_ts_utc), max(order_ts_utc) FROM fact_web_order\nUNION ALL SELECT 'web_lines_dup_key', count(*), count(DISTINCT (receipt_id, line_no)), NULL, NULL FROM fact_sales_line WHERE channel_id IN (2,3)\nUNION ALL SELECT 'orders_without_lines', count(*), 0, NULL, NULL FROM fact_web_order o WHERE NOT EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.receipt_id=o.web_order_id)\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "k | count_star() | count(DISTINCT web_order_id) | min(order_ts_utc) | max(order_ts_utc)\nweb_orders | 94876 | 94876 | 2024-04-28T21:24:15 | 2026-10-04T20:56:59\nweb_lines_dup_key | 81257 | 81257 | NULL | NULL\norders_without_lines | 4124 | 0 | NULL | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:31",
+   "statement": "SELECT o.status, o.fulfilment_type, o.order_ts_utc >= '2025-11-02 22:00' post, count(*) n, sum(CASE WHEN EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.receipt_id=o.web_order_id) THEN 1 ELSE 0 END) with_lines, sum(order_total_gross) \nFROM fact_web_order o GROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "status | fulfilment_type | post | n | with_lines | sum(order_total_gross)\ncancelled | click_and_collect | false | 558 | 0 | 40733.02\ncancelled | click_and_collect | true | 504 | 0 | 34016.20\ncancelled | home_delivery | false | 1569 | 0 | 110202.77\ncancelled | home_delivery | true | 1197 | 0 | 85649.69\ncollected | click_and_collect | false | 12531 | 12531 | 912431.67\ncollected | click_and_collect | true | 11983 | 11983 | 865758.79\ndelivered | home_delivery | false | 37508 | 37508 | 2730972.55\ndelivered | home_delivery | true | 28730 | 28730 | 2075279.79\nprocessing | click_and_collect | true | 78 | 0 | 5410.31\nprocessing | home_delivery | true | 218 | 0 | 15265.24\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:32",
+   "statement": "SELECT f.sale_date, f.channel_code, f.channel_id, count(*), min(f.sale_ts_utc), max(f.sale_ts_utc) FROM fact_sales_line f WHERE f.sale_date BETWEEN '2025-11-01' AND '2025-11-04' AND (f.channel_code='WB' OR f.channel_id IN (2,3)) GROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 6,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "sale_date | channel_code | channel_id | count_star() | min(f.sale_ts_utc) | max(f.sale_ts_utc)\n2025-11-01 | WB | NULL | 204 | 2025-10-31T22:10:08 | 2025-11-01T21:54:47\n2025-11-02 | WB | NULL | 246 | 2025-11-01T22:09:36 | 2025-11-02T21:51:31\n2025-11-03 | NULL | 2 | 210 | 2025-11-02T22:04:44 | 2025-11-03T21:39:44\n2025-11-03 | NULL | 3 | 60 | 2025-11-02T22:10:23 | 2025-11-03T20:45:11\n2025-11-04 | NULL | 2 | 184 | 2025-11-04T04:25:40 | 2025-11-04T21:43:15\n2025-11-04 | NULL | 3 | 57 | 2025-11-04T05:40:02 | 2025-11-04T21:29:43\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:38",
+   "statement": "SELECT f.channel_id, count(*) n, count(DISTINCT r.return_line_id) nr, sum(r.refund_net) refund_net, min(r.return_date), max(r.return_date), sum(CASE WHEN r.quantity_returned>f.quantity THEN 1 ELSE 0 END) overret, sum(CASE WHEN r.return_date<f.sale_date THEN 1 ELSE 0 END) before\nFROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id\nWHERE f.channel_id IN (2,3) AND f.sale_date>='2025-11-03' GROUP BY ALL\n",
+   "n": 7,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"before\"\n\nLINE 1: ..., sum(CASE WHEN r.return_date<f.sale_date THEN 1 ELSE 0 END) before\n                                                                        ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:40",
+   "statement": "SELECT count(*) n, count(DISTINCT return_line_id) d, count(DISTINCT sales_line_id) ds FROM fact_return_line\nUNION ALL SELECT count(*), count(DISTINCT return_line_id), count(DISTINCT sales_line_id) FROM stg_return_line_load\n",
+   "n": 8,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "n | d | ds\n57144 | 57144 | 57144\n141 | 141 | 141\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:43",
+   "statement": "SELECT f.channel_id, count(*) n, sum(r.refund_net) refund_net, min(r.return_date) mn, max(r.return_date) mx, sum(CASE WHEN r.quantity_returned>f.quantity THEN 1 ELSE 0 END) overret, sum(CASE WHEN r.return_date<f.sale_date THEN 1 ELSE 0 END) earlier, sum(CASE WHEN r.product_key<>f.product_key THEN 1 ELSE 0 END) prodchg\nFROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id\nWHERE f.channel_id IN (2,3) AND f.sale_date>='2025-11-03' GROUP BY ALL\n",
+   "n": 9,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "channel_id | n | refund_net | mn | mx | overret | earlier | prodchg\n2 | 4642 | 197286.02 | 2025-11-06 | 2026-10-04 | 0 | 0 | 0\n3 | 1809 | 72639.68 | 2025-11-06 | 2026-10-04 | 0 | 0 | 0\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:45",
+   "statement": "SELECT count(*) n, sum(CASE WHEN EXISTS (SELECT 1 FROM fact_return_line r WHERE r.return_line_id=s.return_line_id) THEN 1 ELSE 0 END) in_fact, sum(CASE WHEN EXISTS (SELECT 1 FROM fact_return_line r WHERE r.sales_line_id=s.sales_line_id) THEN 1 ELSE 0 END) sales_in_fact, min(return_date), max(return_date) FROM stg_return_line_load s\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | in_fact | sales_in_fact | min(return_date) | max(return_date)\n141 | 141 | 141 | 2026-10-03 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:51",
+   "statement": "WITH w AS (\n  SELECT f.sales_line_id, p.sku, f.net_amount, f.quantity, COALESCE(r.refund_net,0) refund, COALESCE(r.quantity_returned,0) rq\n  FROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key\n  LEFT JOIN fact_return_line r ON r.sales_line_id=f.sales_line_id\n  WHERE f.channel_id IN (2,3) AND f.sale_date>='2025-11-03'\n), a AS (\n  SELECT sku, sum(net_amount) gross_net, sum(refund) refunds, sum(net_amount-refund) net_after, sum(quantity) units, sum(quantity-rq) units_net, count(*) lines FROM w GROUP BY sku\n)\nSELECT a.*, rank() OVER (ORDER BY gross_net DESC) rk_before, rank() OVER (ORDER BY net_after DESC) rk_after,\n (SELECT string_agg(DISTINCT product_name, ' / ') FROM dim_product d WHERE d.sku=a.sku) nm\nFROM a ORDER BY net_after DESC LIMIT 15\n",
+   "n": 11,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sku | gross_net | refunds | net_after | units | units_net | lines | rk_before | rk_after | nm\n100955 | 14838.02 | 623.85 | 14214.17 | 364 | 349 | 271 | 2 | 1 | Interior Paint Norvik 298\n103774 | 13389.94 | 285.14 | 13104.80 | 868 | 849 | 451 | 3 | 2 | Christmas Decorations Poutaranta Home 601\n103390 | 15533.23 | 5396.16 | 10137.07 | 41 | 27 | 41 | 1 | 3 | Bedroom Peltola 793\n100529 | 11951.13 | 1846.63 | 10104.50 | 47 | 39 | 47 | 4 | 4 | Garden Furniture Raudikko 536\n103747 | 9484.44 | 381.83 | 9102.61 | 334 | 320 | 169 | 5 | 5 | Christmas Decorations Mäntylä 402\n103791 | 9363.69 | 552.10 | 8811.59 | 484 | 455 | 253 | 6 | 6 | Christmas Decorations Havu 430\n100573 | 9288.25 | 2331.03 | 6957.22 | 53 | 40 | 53 | 7 | 7 | Garden Furniture Ahvenisto 564\n103928 | 7464.39 | 507.35 | 6957.04 | 126 | 117 | 112 | 12 | 8 | Sauna & Winter Havu 699\n103861 | 6850.51 | 211.54 | 6638.97 | 348 | 337 | 175 | 16 | 9 | Christmas Decorations Kuusela 620\n100528 | 8676.48 | 2066.33 | 6610.15 | 42 | 32 | 42 | 8 | 10 | Garden Furniture Norvik 499\n101022 | 6821.25 | 376.65 | 6444.60 | 127 | 120 | 94 | 17 | 11 | Interior Paint Kultala 377\n100624 | 7187.66 | 915.95 | 6271.71 | 29 | 25 | 29 | 13 | 12 | Barbecue & Grills Poutaranta Home 851\n100607 | 6641.33 | 462.81 | 6178.52 | 44 | 41 | 44 | 18 | 13 | Barbecue & Grills Vesikko 222\n103075 | 6873.86 | 762.12 | 6111.74 | 646 | 575 | 444 | 15 | 14 | Cushions & Throws Tuulikki 338\n103313 | 7584.96 | 1580.20 | 6004.76 | 24 | 19 | 24 | 11 | 15 | Living Room Tuulikki 3"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:52",
+   "statement": "SELECT count(*) n, count(DISTINCT product_key) dk, count(DISTINCT sku) ds, sum(CASE WHEN is_current THEN 1 ELSE 0 END) cur, (SELECT count(*) FROM fact_sales_line f WHERE f.channel_id IN (2,3) AND NOT EXISTS (SELECT 1 FROM dim_product p WHERE p.product_key=f.product_key)) orphan_lines FROM dim_product\n",
+   "n": 12,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | dk | ds | cur | orphan_lines\n4105 | 4105 | 4000 | 4000 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:00",
+   "statement": "SELECT f.channel_id, count(*) n,\n sum(CASE WHEN abs(f.gross_amount - f.net_amount*(1+f.vat_rate))>0.02 THEN 1 ELSE 0 END) vat_mismatch,\n sum(CASE WHEN f.vat_rate<>CASE p.vat_class WHEN 'standard' THEN 0.255 WHEN 'reduced14' THEN 0.14 WHEN 'reduced10' THEN 0.10 END THEN 1 ELSE 0 END) vatclass_mismatch,\n sum(CASE WHEN abs(f.standard_cost - f.quantity*p.standard_unit_cost)>0.05 THEN 1 ELSE 0 END) cost_diff,\n sum(CASE WHEN f.sale_date NOT BETWEEN p.valid_from AND p.valid_to THEN 1 ELSE 0 END) prod_out_of_range,\n sum(CASE WHEN p.delisted_on IS NOT NULL AND f.sale_date>p.delisted_on THEN 1 ELSE 0 END) after_delist,\n min(f.net_amount/f.quantity) minunit, max(f.net_amount/f.quantity) maxunit, max(f.quantity) maxq\nFROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.channel_id IN (2,3) GROUP BY ALL\n",
+   "n": 13,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "channel_id | n | vat_mismatch | vatclass_mismatch | cost_diff | prod_out_of_range | after_delist | minunit | maxunit | maxq\n2 | 58848 | 0 | 0 | 0 | 0 | 0 | 0.8216666666666667 | 572.02 | 9\n3 | 22409 | 0 | 0 | 0 | 0 | 0 | 0.605 | 505.67 | 10\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:02",
+   "statement": "SELECT 'stg_sales_overlap' k, count(*) n, sum(CASE WHEN EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.sales_line_id=s.sales_line_id) THEN 1 ELSE 0 END) in_fact, min(sale_date) mn, max(sale_date) mx FROM stg_sales_line_load s\nUNION ALL SELECT 'stg_web_overlap', count(*), sum(CASE WHEN EXISTS (SELECT 1 FROM fact_web_order f WHERE f.web_order_id=s.web_order_id) THEN 1 ELSE 0 END), min(order_ts_utc)::DATE, max(order_ts_utc)::DATE FROM stg_web_order_load s\n",
+   "n": 14,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "k | n | in_fact | mn | mx\nstg_sales_overlap | 3118 | 3118 | 2026-10-03 | 2026-10-04\nstg_web_overlap | 255 | 255 | 2026-10-03 | 2026-10-04\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:10",
+   "statement": "SELECT p.sku, count(*) n, sum(r.refund_net) refund_net FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id JOIN dim_product p ON p.product_key=f.product_key\nWHERE (f.channel_code='WB') AND r.return_date>='2025-11-03' AND p.sku IN (100955,103774,103390,100529,103747,103791,100573,103928,103861,100528,101022) GROUP BY ALL ORDER BY 1\n",
+   "n": 15,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "sku | n | refund_net\n100529 | 1 | 260.09\n100955 | 2 | 126.03\n103390 | 1 | 385.44\n103774 | 3 | 84.42\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:15",
+   "statement": "WITH web_lines AS (\n  SELECT p.sku, f.net_amount - COALESCE(r.refund_net, 0) AS net_after_returns\n  FROM fact_sales_line f\n  JOIN dim_product p ON p.product_key = f.product_key\n  LEFT JOIN fact_return_line r ON r.sales_line_id = f.sales_line_id\n  WHERE f.channel_id IN (2, 3) AND f.sale_date >= DATE '2025-11-03'\n)\nSELECT rank() OVER (ORDER BY sum(w.net_after_returns) DESC) AS rank, w.sku, c.product_name, c.category, sum(w.net_after_returns) AS web_net_sales_eur\nFROM web_lines w\nJOIN dim_product c ON c.sku = w.sku AND c.is_current\nGROUP BY w.sku, c.product_name, c.category\nORDER BY web_net_sales_eur DESC LIMIT 10\n",
+   "n": 16,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "rank | sku | product_name | category | web_net_sales_eur\n1 | 100955 | Interior Paint Norvik 298 | Paint & Decorating | 14214.17\n2 | 103774 | Christmas Decorations Poutaranta Home 601 | Seasonal | 13104.80\n3 | 103390 | Bedroom Peltola 793 | Furniture | 10137.07\n4 | 100529 | Garden Furniture Raudikko 536 | Garden | 10104.50\n5 | 103747 | Christmas Decorations Mäntylä 402 | Seasonal | 9102.61\n6 | 103791 | Christmas Decorations Havu 430 | Seasonal | 8811.59\n7 | 100573 | Garden Furniture Ahvenisto 564 | Garden | 6957.22\n8 | 103928 | Sauna & Winter Havu 699 | Seasonal | 6957.04\n9 | 103861 | Christmas Decorations Kuusela 620 | Seasonal | 6638.97\n10 | 100528 | Garden Furniture Norvik 499 | Garden | 6610.15\n(10 rows)"
+  }
+ ]
+}

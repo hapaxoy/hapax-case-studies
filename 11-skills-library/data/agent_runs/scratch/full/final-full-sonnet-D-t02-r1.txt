@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, 'Garden Furniture' AS subcategory, SUM(r.quantity_returned) AS units_returned FROM fact_return_line r JOIN dim_date d ON d.calendar_date = r.return_date JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 AND cp.subcategory = 'Garden Furniture' AND cp.category &lt;&gt; 'ZZ Test' AND s.store_id &lt;&gt; 999",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "subcategory", "units_returned"],
+    "rows": [["FY2026/27", 4, "Garden Furniture", 92]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2026/27 P4 = weeks 14 to 17, 3 August to 30 August 2026, taken from dim_date",
+    "Returns counted on their return date (fact_return_line.return_date), not the original sale date",
+    "Units = quantity_returned from fact_return_line",
+    "As-is hierarchy: subcategory read from the current product version (dim_product.is_current)",
+    "Store 999 and category ZZ Test filtered out (neither changed the total)",
+    "No deprecated tables, views or channel_code used"
+  ],
+  "assumptions": [
+    "'Period 4 this year' read as FY2026/27 P4, since the request is dated 5 October 2026 and P4 is complete and fully loaded",
+    "'Garden Furniture' read as the subcategory Garden Furniture within category Garden (87 product versions, 85 SKUs). Furniture is a separate category and is not included",
+    "'Handed back and booked as returned' read as return lines in fact_return_line dated in P4 (units returned, not units sold or refund value)",
+    "Both store and web returns are included (58 units booked in physical stores, 34 booked to the web shop, store 900), because the request asks for the company total and gives no channel restriction",
+    "All reason codes included (changed_mind, damaged_in_transit, defective, not_as_described, wrong_size_or_fit)"
+  ],
+  "caveats": [
+    "No corrections were needed. In the P4 Garden Furniture return lines I checked for duplicate return lines, duplicate sales_line_id, returns without a matching sale, returns dated before the sale, returns above the quantity sold and zero or negative refunds. I found none.",
+    "One of the 92 returns came more than 30 days after its sale. It is counted because the request is by return date.",
+    "Every return line is for 1 unit, so 92 lines equals 92 units.",
+    "Subcategory is as-is (current product version). Garden Furniture was not reclassified in history, so as-was would give the same figure.",
+    "I did not run the rpt_daily_store_sales control total. It has no product dimension, so it cannot check a subcategory figure.",
+    "Returns are by return date. Some units returned in P4 were sold in earlier periods, and some units sold in P4 will be returned after it, so this is not a sale-cohort return rate."
+  ]
+}
+```

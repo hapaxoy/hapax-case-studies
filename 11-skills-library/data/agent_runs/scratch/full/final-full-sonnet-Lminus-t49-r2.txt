@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "SELECT cs.format AS store_format, ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id < 900 AND NOT f.staff_purchase_flag AND p.category <> 'ZZ Test' AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 GROUP BY 1 ORDER BY 1",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_format", "atv"],
+    "rows": [
+      ["FY2026/27", 4, "Large", 60.67],
+      ["FY2026/27", 4, "Medium", 60.27],
+      ["FY2026/27", 4, "Small", 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV (average transaction value) = net sales before returns, excluding VAT, divided by the number of distinct sales receipts",
+    "ATV is a store measure: web shop (store 900) left out, store 999 (training) left out",
+    "Staff purchases (staff_purchase_flag) excluded from ATV",
+    "Test articles (category ZZ Test) excluded",
+    "Fiscal period from dim_date (FY2026/27 P4 = Monday 3 Aug to Sunday 30 Aug 2026, four whole fiscal weeks)",
+    "Sales dated by sale_date (the Helsinki business date)",
+    "Store format taken from the current store version (format does not change between versions in this warehouse)",
+    "Checked against the rpt_daily_store_sales control total for the period (net sales before returns)"
+  ],
+  "assumptions": [
+    "'Period 4 of FY26/27' is read as fiscal year FY2026/27, fiscal period 4 (3 to 30 August 2026). It is fully loaded, and the warehouse is loaded through 4 October 2026.",
+    "'Store format' is the dim_store.format column. Its actual values are Large, Medium and Small (plus Web and Training, which are not stores in scope for ATV), not Hyper/Standard/Express as the schema comment says.",
+    "'Average basket value' is read as the company's ATV definition (net sales before returns excluding VAT, per receipt).",
+    "Returns do not reduce ATV, per the company definition."
+  ],
+  "caveats": [
+    "The dim_store.format column comment (Hyper, Standard or Express) is out of date. The real values are Large, Medium and Small, and I used those.",
+    "Staff purchases (666 lines, about 280 receipts in the period) are excluded from ATV per the company definition. Including them would change the figures slightly.",
+    "No store 999 or ZZ Test lines appeared in the period, so those filters did not change any figure.",
+    "Control check: net sales before returns and receipts for all physical stores in P4 match rpt_daily_store_sales exactly (1,062,266.72 EUR; 18,027 receipts) before the staff-purchase exclusion. The ATV query also drops staff purchases, so its totals are lower than that control by design.",
+    "Store counts in the period are Large 8, Medium 18 and Small 12. These are stores with sales in P4 and are not shown in the table.",
+    "No duplicate sales lines, no receipts spanning several stores or dates, and no non-positive line amounts were found in the period."
+  ]
+}
+```

@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-D-t06-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T06",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "17438b5aeb26f40fcc7cacf941069921dfd15eadcb6ca853470829784522c6f4",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:16:22",
+   "statement": "SELECT format, region, is_current, COUNT(*) versions, COUNT(DISTINCT store_id) stores, MIN(store_id) mn, MAX(store_id) mx, COUNT(DISTINCT format) OVER () nf\nFROM dim_store GROUP BY format, region, is_current ORDER BY 1,2,3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 21,
+   "output_preview": "format | region | is_current | versions | stores | mn | mx | nf\nLarge | Capital Region | true | 2 | 2 | 102 | 104 | 5\nLarge | East | true | 1 | 1 | 125 | 125 | 5\nLarge | North | true | 1 | 1 | 131 | 131 | 5\nLarge | South | false | 2 | 2 | 102 | 104 | 5\nLarge | South | true | 2 | 2 | 108 | 110 | 5\nLarge | West | true | 2 | 2 | 115 | 116 | 5\nMedium | Capital Region | true | 2 | 2 | 101 | 103 | 5\nMedium | East | false | 1 | 1 | 114 | 114 | 5\nMedium | East | true | 4 | 4 | 124 | 128 | 5\nMedium | North | true | 2 | 2 | 132 | 134 | 5\nMedium | South | false | 2 | 2 | 101 | 103 | 5\nMedium | South | true | 4 | 4 | 107 | 114 | 5\nMedium | West | true | 6 | 6 | 117 | 136 | 5\nSmall | Capital Region | true | 1 | 1 | 105 | 105 | 5\nSmall | East | true | 3 | 3 | 129 | 138 | 5\nSmall | North | true | 3 | 3 | 133 | 139 | 5\nSmall | South | false | 1 | 1 | 105 | 105 | 5\nSmall | South | true | 4 | 4 | 106 | 137 | 5\nSmall | West | true | 2 | 2 | 120 | 123 | 5\nTraining | Head office | true | 1 | 1 | 999 | 999 | 5\nWeb | Online | true | 1 | 1 | 900 | 900 | 5\n(21 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:16:23",
+   "statement": "SELECT * FROM ref_fiscal_calendar WHERE fiscal_year='FY2025/26' AND fiscal_period IN (1,2,3)\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_quarter | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2025/26 | 1 | 1 | FY2025/26 P01 | 2025-04-28 | 2025-05-25 | 4 | 1 | 4 | true\nFY2025/26 | 2 | 1 | FY2025/26 P02 | 2025-05-26 | 2025-06-22 | 4 | 5 | 8 | true\nFY2025/26 | 3 | 1 | FY2025/26 P03 | 2025-06-23 | 2025-07-27 | 5 | 9 | 13 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:16:28",
+   "statement": "SELECT 'sales' t, COUNT(*) n, COUNT(DISTINCT sales_line_id) d_id, COUNT(DISTINCT (receipt_id, line_no)) d_rl, COUNT(DISTINCT etl_loaded_at) loads\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\nUNION ALL\nSELECT 'returns of those', COUNT(*), COUNT(DISTINCT return_line_id), COUNT(DISTINCT sales_line_id), COUNT(DISTINCT reason_code)\nFROM fact_return_line WHERE sales_line_id IN (SELECT sales_line_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22')\nUNION ALL\nSELECT 'returns all', COUNT(*), COUNT(DISTINCT return_line_id), COUNT(DISTINCT sales_line_id), 0 FROM fact_return_line\nUNION ALL\nSELECT 'orphan returns', COUNT(*), 0,0,0 FROM fact_return_line r WHERE NOT EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.sales_line_id=r.sales_line_id)\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "t | n | d_id | d_rl | loads\nsales | 53094 | 53094 | 53094 | 28\nreturns of those | 1992 | 1992 | 1992 | 5\nreturns all | 57144 | 57144 | 57144 | 0\norphan returns | 0 | 0 | 0 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:16:34",
+   "statement": "WITH sold AS (\n    SELECT f.sales_line_id, f.net_amount, f.quantity, cs.format, cs.store_id, p.category\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_date d    ON d.calendar_date = f.sale_date\n    WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\n      AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nret AS (\n    SELECT sales_line_id, SUM(refund_net) refund_net, SUM(quantity_returned) qty_ret FROM fact_return_line GROUP BY 1\n)\nSELECT s.format, COUNT(*) lines, SUM(s.net_amount) sold_net, SUM(COALESCE(r.refund_net,0)) refund_net,\n       ROUND(100.0*SUM(COALESCE(r.refund_net,0))/SUM(s.net_amount),3) rr,\n       SUM(CASE WHEN s.net_amount<=0 OR s.quantity<=0 THEN 1 ELSE 0 END) bad_sold,\n       SUM(CASE WHEN COALESCE(r.qty_ret,0)>s.quantity THEN 1 ELSE 0 END) over_ret\nFROM sold s LEFT JOIN ret r ON r.sales_line_id=s.sales_line_id\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "format | lines | sold_net | refund_net | rr | bad_sold | over_ret\nLarge | 16624 | 400763.11 | 17707.57 | 4.418 | 0 | 0\nMedium | 22644 | 552936.25 | 25030.11 | 4.527 | 0 | 0\nSmall | 7349 | 147668.20 | 6319.09 | 4.279 | 0 | 0\nWeb | 6350 | 183098.49 | 22388.29 | 12.227 | 0 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:16:37",
+   "statement": "SELECT MIN(r.return_date) mn, MAX(r.return_date) mx, COUNT(*) n,\n SUM(CASE WHEN r.return_date < f.sale_date THEN 1 ELSE 0 END) before_sale,\n SUM(CASE WHEN r.return_date > f.sale_date + 30 THEN 1 ELSE 0 END) over30,\n SUM(CASE WHEN s.store_id=999 THEN 1 ELSE 0 END) r999,\n SUM(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) rzz\nFROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id\nJOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mn | mx | n | before_sale | over30 | r999 | rzz\n2025-05-27 | 2025-07-23 | 1992 | 0 | 16 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:16:43",
+   "statement": "SELECT 'format varies by store' k, COUNT(*) v FROM (SELECT store_id FROM dim_store GROUP BY 1 HAVING COUNT(DISTINCT format)>1)\nUNION ALL\nSELECT 'excluded 999/ZZ lines in P2', COUNT(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22' AND (s.store_id=999 OR p.category='ZZ Test')\nUNION ALL\nSELECT 'web lines w/o web order', COUNT(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\n WHERE f.sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22' AND s.store_id=900 AND NOT EXISTS (SELECT 1 FROM fact_web_order o WHERE o.web_order_id=f.receipt_id)\nUNION ALL\nSELECT 'web lines of cancelled orders', COUNT(*) FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id=f.receipt_id\n WHERE f.sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22' AND o.status='cancelled'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "k | v\nformat varies by store | 0\nexcluded 999/ZZ lines in P2 | 127\nweb lines w/o web order | 0\nweb lines of cancelled orders | 0\n(4 rows)"
+  }
+ ]
+}

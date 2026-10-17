@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t31-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 30,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "03645ab5f0d0e380ef7d7eddcc2befdbe1541ee64f79cdc1e5c8bcbd598691e8",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:31:32",
+   "statement": "fiscal-calendar/scripts/fiscal.py P8 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P8 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P08\n  fiscal_weeks                       31-34\n  start_date                         2025-11-24\n  end_date                           2025-12-21\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 31 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:31:37",
+   "statement": "WITH params AS (SELECT DATE '2025-12-21' AS as_of_end),\nactive AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key, params p\n  WHERE f.sale_date > p.as_of_end - 364 AND f.sale_date <= p.as_of_end\n)\nSELECT cur.tier, COUNT(*) AS active_members, COUNT(DISTINCT a.member_id) AS dm\nFROM active a, params p\nJOIN dim_member cur ON p.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nWHERE cur.member_id = a.member_id\nGROUP BY GROUPING SETS ((cur.tier), ())\nORDER BY cur.tier NULLS LAST\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "tier | active_members | dm\nBasic | 14654 | 14654\nGold | 3901 | 3901\nSilver | 10971 | 10971\nNULL | 29526 | 29526\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:31:43",
+   "statement": "WITH p AS (SELECT DATE '2025-12-21' AS e),\nbase AS (\n  SELECT f.sales_line_id, f.sale_date, m.member_id, s.store_id, pr.category, f.etl_loaded_at\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product pr ON pr.product_key=f.product_key, p\n  WHERE f.sale_date > p.e-364 AND f.sale_date <= p.e\n)\nSELECT count(*) lines, count(distinct sales_line_id) dist_lines, count(distinct member_id) members,\n count(distinct CASE WHEN store_id<>999 AND category<>'ZZ Test' THEN member_id END) members_excl_test,\n count(distinct CASE WHEN store_id=999 THEN member_id END) m999,\n count(distinct CASE WHEN category='ZZ Test' THEN member_id END) mzz,\n (SELECT count(*) FROM fact_sales_line f2, p WHERE f2.member_key IS NOT NULL AND f2.sale_date > p.e-364 AND f2.sale_date<=p.e) all_member_lines,\n (SELECT max(sale_date) FROM fact_sales_line) maxdate,\n (SELECT count(distinct member_id) FROM dim_member) allmembers\nFROM base\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | dist_lines | members | members_excl_test | m999 | mzz | all_member_lines | maxdate | allmembers\n328182 | 328182 | 29526 | 29526 | 0 | 0 | 328182 | 2026-10-04 | 60000\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:31:46",
+   "statement": "WITH p AS (SELECT DATE '2025-12-21' AS e),\nact AS (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key, p WHERE f.sale_date > p.e-364 AND f.sale_date <= p.e)\nSELECT count(*) active, \n count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM dim_member c, p WHERE c.member_id=a.member_id AND p.e BETWEEN c.valid_from AND c.valid_to)) no_version,\n count(*) FILTER (WHERE (SELECT count(*) FROM dim_member c, p WHERE c.member_id=a.member_id AND p.e BETWEEN c.valid_from AND c.valid_to)>1) multi_version,\n count(*) FILTER (WHERE (SELECT min(join_date) FROM dim_member c WHERE c.member_id=a.member_id) > DATE '2025-12-21') joined_after\nFROM act a\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "active | no_version | multi_version | joined_after\n29526 | 0 | 0 | 0\n(1 row)"
+  }
+ ]
+}

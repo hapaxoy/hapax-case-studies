@@ -1,0 +1,121 @@
+{
+ "run_id": "full-haiku-L-t20-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T20",
+ "budget": 30,
+ "used": 12,
+ "refused": 0,
+ "packet_sha256": "923ba8e0b165cf4b0d617cd61428e8922e8325a177dc5a4e7a886510eaa8eefd",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:43:20",
+   "statement": "fiscal-calendar/scripts/fiscal.py this year",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: this year    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P01, FY2026/27 P02, FY2026/27 P03, FY2026/27 P04, FY2026/27 P05, FY2026/27 P06\n  fiscal_weeks                       1-22\n  start_date                         2026-05-04\n  end_date                           2027-05-02\n  weeks                              22\n  days                               364\n  includes_week_53                   False\n  complete_as_of                     False\n  loaded_through                     2026-10-04\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 22)\n  note: 'This year' = the current fiscal year (CAL-RELATIVE).\n  note: Only 22 of the 52 fiscal weeks are in dim_date.\n  note: The range runs past the last loaded date (2026-10-04); only data through 2026-10-04 exists (CAL-DATA-THROUGH).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:43:50",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year,\n           1 AS fiscal_week_start,\n           22 AS fiscal_week_end\n),\nnet_lines AS (\n    -- Sales from stores (excluding web shop and training store)\n    SELECT d.fiscal_year, cs.region, \n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_date d ON d.calendar_date = f.sale_date\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = f.product_key\n    CROSS JOIN params\n    WHERE d.fiscal_year = params.fiscal_year\n      AND d.fiscal_week BETWEEN params.fiscal_week_start AND params.fiscal_week_end\n      AND s.store_id < 900  -- Stores only, excluding web shop (900) and training (999)\n      AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- Returns reduce net sales on the return date\n    SELECT d.fiscal_year, cs.region,\n           -r.refund_net AS net_sales\n    FROM fact_return_line r\n    JOIN dim_date d ON d.calendar_date = r.return_date\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = r.product_key\n    CROSS JOIN params\n    WHERE d.fiscal_year = params.fiscal_year\n      AND d.fiscal_week BETWEEN params.fiscal_week_start AND params.fiscal_week_end\n      AND s.store_id < 900\n      AND p.category <> 'ZZ Test'\n)\nSELECT cs.region,\n       COUNT(DISTINCT cs.store_id) AS store_count,\n       ROUND(SUM(n.net_sales), 2) AS net_sales_eur\nFROM net_lines n\nJOIN dim_store cs ON cs.region = n.region AND cs.is_current\nGROUP BY cs.region\nORDER BY net_sales_eur DESC;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | store_count | net_sales_eur\nWest | 10 | 18151394.70\nSouth | 10 | 13092135.10\nEast | 8 | 7675394.48\nCapital Region | 5 | 4743337.50\nNorth | 6 | 4382317.44\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:43:57",
+   "statement": "query-check/scripts/query_check.py --file query_for_check.sql --grain region --start 2026-05-04 --end 2026-10-04 --control",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 5 rows, 2 columns: region, net_sales_eur\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 5 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-05-04 to 2026-10-04 (154 days; fiscal: FY2026/27 P06, FY2026/27 P01, FY2026/27 P02, FY2026/27 P05, FY2026/27 P04, FY2026/27 P03).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [FAIL] Value column not found; give --value-col (columns: region, net_sales_eur).\n\n== Preview (first 5 rows) ==\n  region | net_sales_eur\n  West | 18151394.70\n  South | 13092135.10\n  East | 7675394.48\n  North | 4382317.44\n  Capital Region | 4743337.50\n\nResult: FAILED - fix before sending\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:44:06",
+   "statement": "query-check/scripts/query_check.py --file query_for_check.sql --grain region --value-col net_sales_eur --start 2026-05-04 --end 2026-10-04 --control",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 5 rows, 2 columns: region, net_sales_eur\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 5 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-05-04 to 2026-10-04 (154 days; fiscal: FY2026/27 P05, FY2026/27 P04, FY2026/27 P03, FY2026/27 P01, FY2026/27 P02, FY2026/27 P06).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales_eur with rpt_daily_store_sales.net_sales, 2026-05-04 to 2026-10-04, stores: all, at level: total.\n  [INFO] Result total 48,044,579.22; control total 6,872,871.91; gap 41,171,707.31.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 48,044,579.22 vs control 6,872,871.91 (gap 41,171,707.31). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (first 5 rows) ==\n  reg"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:17",
+   "statement": "SELECT SUM(net_sales) as total_net_sales, \n       MIN(business_date) as min_date,\n       MAX(business_date) as max_date,\n       COUNT(*) as row_count,\n       COUNT(DISTINCT business_date) as distinct_dates,\n       COUNT(DISTINCT store_id) as distinct_stores\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-05-04' AND '2026-10-04'\n  AND store_id < 900;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_net_sales | min_date | max_date | row_count | distinct_dates | distinct_stores\n5762831.03 | 2026-05-04 | 2026-10-04 | 5735 | 152 | 38\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:25",
+   "statement": "-- Check for one day: what does rpt_daily_store_sales report vs my calculation\nWITH my_calc AS (\n    SELECT f.sale_date, s.store_id, SUM(f.net_amount) as net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE f.sale_date = '2026-05-04'\n      AND s.store_id < 900\n      AND p.category <> 'ZZ Test'\n    GROUP BY f.sale_date, s.store_id\n)\nSELECT 'my_calc' as source, COUNT(*) as rows, SUM(net_sales) as total\nFROM my_calc\nUNION ALL\nSELECT 'rpt_daily' as source, COUNT(*) as rows, SUM(net_sales) as total\nFROM rpt_daily_store_sales\nWHERE business_date = '2026-05-04'\n  AND store_id < 900;\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "source | rows | total\nmy_calc | 38 | 32344.51\nrpt_daily | 38 | 30809.42\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:34",
+   "statement": "-- Check the raw fact_sales_line data for stores in this period\nSELECT COUNT(*) as sales_line_count,\n       COUNT(DISTINCT sale_date) as distinct_dates,\n       COUNT(DISTINCT store_key) as distinct_store_keys,\n       SUM(net_amount) as total_net_amount\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date BETWEEN '2026-05-04' AND '2026-10-04'\n  AND s.store_id < 900\n  AND p.category <> 'ZZ Test';\n",
+   "n": 7,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Ambiguous reference to column name \"store_key\" (use: \"f.store_key\" or \"s.store_key\")\n\nLINE 4:        COUNT(DISTINCT store_key) as distinct_store_keys,\n                              ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:37",
+   "statement": "-- Check the raw fact_sales_line data for stores in this period\nSELECT COUNT(*) as sales_line_count,\n       COUNT(DISTINCT f.sale_date) as distinct_dates,\n       COUNT(DISTINCT f.store_key) as distinct_store_keys,\n       SUM(f.net_amount) as total_net_amount\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date BETWEEN '2026-05-04' AND '2026-10-04'\n  AND s.store_id < 900\n  AND p.category <> 'ZZ Test';\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sales_line_count | distinct_dates | distinct_store_keys | total_net_amount\n247879 | 152 | 38 | 6054883.11\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:40",
+   "statement": "-- Check returns\nSELECT COUNT(*) as return_line_count,\n       SUM(r.refund_net) as total_refund_net\nFROM fact_return_line r\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key\nWHERE r.return_date BETWEEN '2026-05-04' AND '2026-10-04'\n  AND s.store_id < 900\n  AND p.category <> 'ZZ Test';\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "return_line_count | total_refund_net\n8837 | 292052.08\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:50",
+   "statement": "WITH net_lines AS (\n    -- Sales from stores (excluding web shop and training store)\n    SELECT cs.region, \n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_date d ON d.calendar_date = f.sale_date\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE d.fiscal_year = 'FY2026/27'\n      AND d.fiscal_week BETWEEN 1 AND 22\n      AND s.store_id < 900  -- Stores only, excluding web shop (900) and training (999)\n      AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- Returns reduce net sales on the return date\n    SELECT cs.region,\n           -r.refund_net AS net_sales\n    FROM fact_return_line r\n    JOIN dim_date d ON d.calendar_date = r.return_date\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE d.fiscal_year = 'FY2026/27'\n      AND d.fiscal_week BETWEEN 1 AND 22\n      AND s.store_id < 900\n      AND p.category <> 'ZZ Test'\n)\nSELECT region,\n       ROUND(SUM(net_sales), 2) AS net_sales_eur\nFROM net_lines\nGROUP BY region\nORDER BY net_sales_eur DESC;\n",
+   "n": 10,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | net_sales_eur\nWest | 1815139.47\nSouth | 1309213.51\nEast | 959424.31\nCapital Region | 948667.50\nNorth | 730386.24\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:44:56",
+   "statement": "query-check/scripts/query_check.py --file query_for_check.sql --grain region --value-col net_sales_eur --start 2026-05-04 --end 2026-10-04 --control",
+   "n": 11,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 5 rows, 2 columns: region, net_sales_eur\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 5 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-05-04 to 2026-10-04 (154 days; fiscal: FY2026/27 P01, FY2026/27 P02, FY2026/27 P06, FY2026/27 P05, FY2026/27 P03, FY2026/27 P04).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales_eur with rpt_daily_store_sales.net_sales, 2026-05-04 to 2026-10-04, stores: all, at level: total.\n  [INFO] Result total 5,762,831.03; control total 6,872,871.91; gap -1,110,040.88.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 5,762,831.03 vs control 6,872,871.91 (gap -1,110,040.88). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (first 5 rows) ==\n  regio"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:05",
+   "statement": "-- Check what the total is with all stores and what happens when we exclude specific stores\nSELECT 'all stores' as filter_type, SUM(net_sales) as total\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-05-04' AND '2026-10-04'\nUNION ALL\nSELECT 'store_id < 900' as filter_type, SUM(net_sales) as total\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-05-04' AND '2026-10-04'\n  AND store_id < 900\nUNION ALL\nSELECT 'store_id = 900' as filter_type, SUM(net_sales) as total\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-05-04' AND '2026-10-04'\n  AND store_id = 900\nUNION ALL\nSELECT 'store_id = 999' as filter_type, SUM(net_sales) as total\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-05-04' AND '2026-10-04'\n  AND store_id = 999;\n",
+   "n": 12,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "filter_type | total\nall stores | 6872871.91\nstore_id < 900 | 5762831.03\nstore_id = 900 | 1110040.88\nstore_id = 999 | NULL\n(4 rows)"
+  }
+ ]
+}

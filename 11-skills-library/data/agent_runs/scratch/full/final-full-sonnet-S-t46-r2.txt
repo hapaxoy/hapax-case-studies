@@ -1,0 +1,42 @@
+```json
+{
+  "sql": "WITH w AS (SELECT f.sales_line_id, p.sku, p.product_name, f.net_amount FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key WHERE f.channel_id IN (2, 3) AND f.sale_date &gt;= DATE '2025-11-03'), r AS (SELECT sales_line_id, sum(refund_net) AS refund_net FROM fact_return_line GROUP BY 1), a AS (SELECT w.sku, any_value(w.product_name) AS product_name, sum(w.net_amount) - coalesce(sum(r.refund_net), 0) AS net_sales FROM w LEFT JOIN r USING (sales_line_id) GROUP BY w.sku) SELECT sku, product_name, net_sales FROM a ORDER BY net_sales DESC LIMIT 10",
+  "result": {
+    "columns": ["sku", "product_name", "net_sales"],
+    "rows": [
+      [100955, "Interior Paint Norvik 298", 14214.17],
+      [103774, "Christmas Decorations Poutaranta Home 601", 13104.80],
+      [103390, "Bedroom Peltola 793", 10137.07],
+      [100529, "Garden Furniture Raudikko 536", 10104.50],
+      [103747, "Christmas Decorations Mäntylä 402", 9102.61],
+      [103791, "Christmas Decorations Havu 430", 8811.59],
+      [100573, "Garden Furniture Ahvenisto 564", 6957.22],
+      [103928, "Sauna &amp; Winter Havu 699", 6957.04],
+      [103861, "Christmas Decorations Kuusela 620", 6638.97],
+      [100528, "Garden Furniture Norvik 499", 6610.15]
+    ]
+  },
+  "definitions_applied": [
+    "Web channel = channel_id 2 (web home delivery) and 3 (click and collect), the channel_group 'web' in dim_channel",
+    "Net sales = line value in EUR excluding VAT (net_amount), less refunds (refund_net) on those lines, matching the net-of-returns basis of rpt_daily_store_sales",
+    "Product identity = SKU, aggregated across slowly changing product versions (product_key is not used as the grouping key)",
+    "Returns linked to the original sales line through fact_return_line.sales_line_id"
+  ],
+  "assumptions": [
+    "'Web sales' is read as net sales in EUR excluding VAT, after returns, not units and not gross including VAT",
+    "'Since the platform migration on 3 November 2025' is read as sale_date on or after 2025-11-03 up to the latest loaded data (3 October 2026 for web)",
+    "'Top 10' ranks products by net sales value",
+    "Returns are deducted in full for every returned web line, whenever the return happened (up to 4 October 2026)",
+    "Both web fulfilment types (home delivery and click and collect) count as web sales"
+  ],
+  "caveats": [
+    "Channel field correction: from 3 November 2025 fact_sales_line.channel_code is NULL and only channel_id is filled. Before that date it is the other way round (channel_code ST or WB, channel_id NULL). Filtering on channel_code = 'WB' would return nothing for the period asked, so I filtered on channel_id IN (2, 3). The migration date matches the switch exactly.",
+    "Returns correction: ranking on sales before returns gives a different top 10. For example Bedroom Peltola 793 would rank first at 15,533 and Christmas Decorations Kuusela 620 would fall to 16th, because returns on bulky items such as bedroom and garden furniture are high. Bedroom Peltola 793 lost 5,396 EUR (35%) to refunds. Garden Furniture Raudikko 536 lost 1,847 EUR.",
+    "Product version correction: dim_product holds several versions per SKU (4,105 rows for 4,000 SKUs), so I grouped by SKU. Each SKU in the top 10 has a single product name.",
+    "Latest days are incomplete: web sales lines only appear once an order is delivered or collected. Orders still in 'processing' have no sales lines yet (about 300 orders on 1 to 4 October 2026). 3 October has only 20 web lines against roughly 200 on a normal day, and there are no web lines for 4 October. The last fiscal period (FY2026/27 P06) is flagged as not fully loaded. Recent web sales are therefore understated and may be revised.",
+    "Sensitivity: cutting the data off at the end of the last fully loaded period (27 September 2026) leaves the same ten products, with only the 9th and 10th places swapping (Garden Furniture Norvik 499 ahead of Christmas Decorations Kuusela 620).",
+    "Cancelled web orders have no sales lines and are excluded naturally. No staff purchases exist on the web channel, and I found no duplicate sales lines, no duplicate return lines, and no orphan product keys.",
+    "Figures are in EUR excluding VAT. The gross (VAT-inclusive) view would be about 24% higher at the standard VAT rate for these categories, and different for reduced-rate items."
+  ]
+}
+```

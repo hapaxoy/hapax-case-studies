@@ -1,0 +1,36 @@
+Perfect! I have verified the data. Let me now prepare the final JSON response with the required structure.
+
+```json
+{
+  "sql": "WITH q1_fy2025_26 AS (\n  SELECT MIN(calendar_date) as q_start, MAX(calendar_date) as q_end\n  FROM dim_date\n  WHERE fiscal_year = 'FY2025/26' AND fiscal_quarter = 1\n),\nsales_q1 AS (\n  SELECT \n    dp.subcategory,\n    fsl.sales_line_id,\n    fsl.quantity\n  FROM fact_sales_line fsl\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN q1_fy2025_26 q1 ON fsl.sale_date &gt;= q1.q_start AND fsl.sale_date &lt;= q1.q_end\n  WHERE dp.category = 'Garden' AND dp.is_current = true\n),\nreturns_for_q1_sales AS (\n  SELECT \n    sq.subcategory,\n    SUM(frl.quantity_returned) as total_units_returned\n  FROM sales_q1 sq\n  INNER JOIN fact_return_line frl ON sq.sales_line_id = frl.sales_line_id\n  GROUP BY sq.subcategory\n),\nsales_aggregated AS (\n  SELECT \n    subcategory,\n    SUM(quantity) as total_units_sold\n  FROM sales_q1\n  GROUP BY subcategory\n)\nSELECT \n  sa.subcategory,\n  sa.total_units_sold,\n  COALESCE(rfq.total_units_returned, 0) as total_units_returned,\n  ROUND(100.0 * COALESCE(rfq.total_units_returned, 0) / sa.total_units_sold, 2) as return_rate_pct\nFROM sales_aggregated sa\nLEFT JOIN returns_for_q1_sales rfq ON sa.subcategory = rfq.subcategory\nORDER BY sa.subcategory",
+  "result": {
+    "columns": ["subcategory", "total_units_sold", "total_units_returned", "return_rate_pct"],
+    "rows": [
+      ["Barbecue &amp; Grills", 2057, 133, 6.47],
+      ["Edible Plants &amp; Seeds", 22419, 221, 0.99],
+      ["Garden Furniture", 2849, 365, 12.81],
+      ["Garden Tools", 10562, 548, 5.19],
+      ["Outdoor Lighting", 20, 0, 0.0],
+      ["Plants &amp; Flowers", 52312, 1425, 2.72],
+      ["Pots &amp; Planters", 12246, 477, 3.9],
+      ["Soil &amp; Fertiliser", 20017, 343, 1.71]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate calculated as (units returned / units sold) × 100, by subcategory",
+    "Sales matched to returns via sales_line_id to identify which returns correspond to which sales",
+    "Q1 fiscal quarter for fiscal year FY2025/26 identified using dim_date.fiscal_quarter and fiscal_year columns",
+    "Current product version only (is_current = true) used to classify products by subcategory"
+  ],
+  "assumptions": [
+    "Interpreted 'last year' as FY2025/26, the fiscal year preceding the current fiscal year FY2026/27",
+    "Interpreted 'Q1' as fiscal Q1, not calendar Q1, consistent with the warehouse fiscal calendar",
+    "Return rate measured by quantity of units, not monetary value",
+    "A return is counted if the original sale occurred in Q1 FY2025/26, regardless of when the return was processed"
+  ],
+  "caveats": [
+    "Outdoor Lighting has only 20 units sold in the period, so the 0.0% return rate is based on a very small sample size",
+    "Return rates vary significantly by subcategory (0% to 12.81%), suggesting different product types have different durability or satisfaction profiles"
+  ]
+}
+```

@@ -1,0 +1,112 @@
+{
+ "run_id": "full-haiku-S-t27-r2",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T27",
+ "budget": 30,
+ "used": 11,
+ "refused": 0,
+ "packet_sha256": "8a1edf5d1f8cd217d113898b11eb425b00d5d4e2dda4213599e91c453ca58d02",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:10",
+   "statement": "SELECT DISTINCT region FROM dim_store WHERE is_current = true\n",
+   "n": 1,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region\nCapital Region\nNorth\nEast\nWest\nOnline\nSouth\nHead office\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:14",
+   "statement": "SELECT DISTINCT d.region, MIN(s.valid_from) as first_valid, MAX(s.valid_to) as last_valid\nFROM dim_store s\nJOIN dim_store s2 ON s.store_id = s2.store_id\nWHERE s.valid_from <= '2024-09-30' AND s.valid_to >= '2024-08-01'\nGROUP BY d.region\nORDER BY d.region\n",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Referenced table \"d\" not found!\nCandidate tables: \"s\"\n\nLINE 5: GROUP BY d.region\n                 ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:17",
+   "statement": "SELECT DISTINCT region FROM dim_store \nWHERE valid_from <= '2024-09-30' AND valid_to >= '2024-08-01'\nORDER BY region\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region\nEast\nHead office\nNorth\nOnline\nSouth\nWest\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:22",
+   "statement": "SELECT \n    EXTRACT(MONTH FROM f.sale_date) as month,\n    s.region,\n    SUM(f.gross_amount) as total_gross,\n    COUNT(*) as line_count\nFROM fact_sales_line f\nJOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2024-08-01' AND f.sale_date <= '2024-09-30'\nGROUP BY EXTRACT(MONTH FROM f.sale_date), s.region\nORDER BY month, s.region\n",
+   "n": 4,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "month | region | total_gross | line_count\n8 | East | 296762.31 | 9300\n8 | Head office | 4282.23 | 158\n8 | North | 175960.85 | 5849\n8 | Online | 174410.47 | 4354\n8 | South | 489776.38 | 15097\n8 | West | 402582.35 | 12511\n9 | East | 249751.64 | 8096\n9 | Head office | 3351.71 | 125\n9 | North | 149625.27 | 5087\n9 | Online | 160395.63 | 4325\n9 | South | 445837.96 | 13966\n9 | West | 363697.29 | 12085\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:28",
+   "statement": "SELECT \n    s.region,\n    SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 8 THEN f.gross_amount ELSE 0 END) as august_2024_gross,\n    SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 9 THEN f.gross_amount ELSE 0 END) as september_2024_gross\nFROM fact_sales_line f\nJOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2024-08-01' AND f.sale_date <= '2024-09-30'\n  AND s.valid_from <= f.sale_date AND s.valid_to >= f.sale_date\nGROUP BY s.region\nORDER BY s.region\n",
+   "n": 5,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | august_2024_gross | september_2024_gross\nEast | 296762.31 | 249751.64\nHead office | 4282.23 | 3351.71\nNorth | 175960.85 | 149625.27\nOnline | 174410.47 | 160395.63\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:32",
+   "statement": "SELECT \n    staff_purchase_flag,\n    COUNT(*) as line_count,\n    SUM(gross_amount) as total_gross\nFROM fact_sales_line\nWHERE sale_date >= '2024-08-01' AND sale_date <= '2024-09-30'\nGROUP BY staff_purchase_flag\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "staff_purchase_flag | line_count | total_gross\ntrue | 1446 | 40737.29\nfalse | 89507 | 2875696.80\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:38",
+   "statement": "SELECT \n    COUNT(*) as total_lines,\n    COUNT(CASE WHEN gross_amount IS NULL THEN 1 END) as null_gross,\n    COUNT(CASE WHEN store_key IS NULL THEN 1 END) as null_store,\n    COUNT(CASE WHEN sale_date IS NULL THEN 1 END) as null_date,\n    SUM(CASE WHEN gross_amount < 0 THEN 1 ELSE 0 END) as negative_gross_count\nFROM fact_sales_line\nWHERE sale_date >= '2024-08-01' AND sale_date <= '2024-09-30'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_lines | null_gross | null_store | null_date | negative_gross_count\n90953 | 0 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:42",
+   "statement": "SELECT \n    COUNT(*) as lines_with_region,\n    SUM(f.gross_amount) as total_gross_with_region\nFROM fact_sales_line f\nJOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2024-08-01' AND f.sale_date <= '2024-09-30'\n  AND s.valid_from <= f.sale_date AND s.valid_to >= f.sale_date\n  AND s.region IS NOT NULL\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines_with_region | total_gross_with_region\n90953 | 2916434.09\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:46",
+   "statement": "SELECT DISTINCT region FROM dim_store_old ORDER BY region\n",
+   "n": 9,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "region\nEast\nNorth\nSouth\nWest\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:50",
+   "statement": "SELECT \n    region,\n    COUNT(DISTINCT store_id) as store_count,\n    MIN(valid_from) as first_version,\n    MAX(valid_to) as last_version\nFROM dim_store\nGROUP BY region\nORDER BY region\n",
+   "n": 10,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region | store_count | first_version | last_version\nCapital Region | 5 | 2025-04-28 | 9999-12-31\nEast | 9 | 2000-01-01 | 9999-12-31\nHead office | 1 | 2000-01-01 | 9999-12-31\nNorth | 6 | 2000-01-01 | 9999-12-31\nOnline | 1 | 2000-01-01 | 9999-12-31\nSouth | 15 | 2000-01-01 | 9999-12-31\nWest | 10 | 2000-01-01 | 9999-12-31\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:30:55",
+   "statement": "SELECT \n    s.region,\n    SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 8 THEN f.gross_amount ELSE 0 END) as august_2024,\n    SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 9 THEN f.gross_amount ELSE 0 END) as september_2024\nFROM fact_sales_line f\nJOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2024-08-01' AND f.sale_date <= '2024-09-30'\n  AND s.valid_from <= f.sale_date AND s.valid_to >= f.sale_date\nGROUP BY s.region\nORDER BY s.region\n",
+   "n": 11,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | august_2024 | september_2024\nEast | 296762.31 | 249751.64\nHead office | 4282.23 | 3351.71\nNorth | 175960.85 | 149625.27\nOnline | 174410.47 | 160395.63\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(6 rows)"
+  }
+ ]
+}

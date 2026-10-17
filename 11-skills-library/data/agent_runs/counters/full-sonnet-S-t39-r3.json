@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-S-t39-r3",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T39",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "0f69f7d38969faa2791f61bbe4e1136d0a3721e7d5fb7c71e2bc9e7c07b5c4c8",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:05",
+   "statement": "SELECT CAST(order_ts_utc AS DATE) AS d_utc, CAST(order_ts_utc + INTERVAL 2 HOUR AS DATE) AS d_hki, status, count(*) AS n, count(DISTINCT web_order_id) AS n_distinct\nFROM fact_web_order\nWHERE order_ts_utc >= TIMESTAMP '2025-11-29 00:00:00' AND order_ts_utc < TIMESTAMP '2025-12-03 00:00:00'\nGROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 21,
+   "output_preview": "d_utc | d_hki | status | n | n_distinct\n2025-11-29 | 2025-11-29 | cancelled | 5 | 5\n2025-11-29 | 2025-11-29 | collected | 31 | 31\n2025-11-29 | 2025-11-29 | delivered | 84 | 84\n2025-11-29 | 2025-11-30 | collected | 3 | 3\n2025-11-29 | 2025-11-30 | delivered | 3 | 3\n2025-11-30 | 2025-11-30 | cancelled | 4 | 4\n2025-11-30 | 2025-11-30 | collected | 29 | 29\n2025-11-30 | 2025-11-30 | delivered | 106 | 106\n2025-11-30 | 2025-12-01 | cancelled | 2 | 2\n2025-11-30 | 2025-12-01 | collected | 10 | 10\n2025-11-30 | 2025-12-01 | delivered | 49 | 49\n2025-12-01 | 2025-12-01 | cancelled | 17 | 17\n2025-12-01 | 2025-12-01 | collected | 77 | 77\n2025-12-01 | 2025-12-01 | delivered | 190 | 190\n2025-12-01 | 2025-12-02 | collected | 4 | 4\n2025-12-01 | 2025-12-02 | delivered | 3 | 3\n2025-12-02 | 2025-12-02 | cancelled | 6 | 6\n2025-12-02 | 2025-12-02 | collected | 38 | 38\n2025-12-02 | 2025-12-02 | delivered | 105 | 105\n2025-12-02 | 2025-12-03 | collected | 1 | 1\n2025-12-02 | 2025-12-03 | delivered | 5 | 5\n(21 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:12",
+   "statement": "WITH o AS (\n  SELECT w.*, CAST(order_ts_utc + INTERVAL 2 HOUR AS DATE) AS d_hki\n  FROM fact_web_order w\n  WHERE order_ts_utc >= TIMESTAMP '2025-11-30 20:00:00' AND order_ts_utc < TIMESTAMP '2025-12-01 23:00:00'\n), l AS (\n  SELECT receipt_id, count(*) AS nl, min(sale_date) AS sd, min(channel_code) AS cc, max(channel_code) cc2, sum(gross_amount) g\n  FROM fact_sales_line WHERE channel_code='WB' AND receipt_id IN (SELECT web_order_id FROM o) GROUP BY 1\n)\nSELECT o.d_hki, o.status, o.login_state, o.fulfilment_type, count(*) n, count(DISTINCT o.web_order_id) nd,\n  sum(CASE WHEN l.receipt_id IS NULL THEN 1 ELSE 0 END) AS no_lines,\n  sum(CASE WHEN l.nl <> o.line_count THEN 1 ELSE 0 END) AS line_mismatch,\n  sum(CASE WHEN l.sd <> o.d_hki THEN 1 ELSE 0 END) AS saledate_ne_hki,\n  sum(CASE WHEN l.sd <> CAST(o.order_ts_utc AS DATE) THEN 1 ELSE 0 END) AS saledate_ne_utc\nFROM o LEFT JOIN l ON l.receipt_id = o.web_order_id\nGROUP BY ALL ORDER BY 1,2,3,4\n",
+   "n": 2,
+   "ok": true,
+   "rows": 16,
+   "output_preview": "d_hki | status | login_state | fulfilment_type | n | nd | no_lines | line_mismatch | saledate_ne_hki | saledate_ne_utc\n2025-11-30 | collected | guest | click_and_collect | 2 | 2 | 2 | 0 | 0 | 0\n2025-11-30 | collected | logged_in | click_and_collect | 2 | 2 | 2 | 0 | 0 | 0\n2025-11-30 | delivered | guest | home_delivery | 6 | 6 | 6 | 0 | 0 | 0\n2025-11-30 | delivered | logged_in | home_delivery | 10 | 10 | 10 | 0 | 0 | 0\n2025-12-01 | cancelled | guest | click_and_collect | 2 | 2 | 2 | 0 | 0 | 0\n2025-12-01 | cancelled | guest | home_delivery | 3 | 3 | 3 | 0 | 0 | 0\n2025-12-01 | cancelled | logged_in | click_and_collect | 4 | 4 | 4 | 0 | 0 | 0\n2025-12-01 | cancelled | logged_in | home_delivery | 10 | 10 | 10 | 0 | 0 | 0\n2025-12-01 | collected | guest | click_and_collect | 26 | 26 | 26 | 0 | 0 | 0\n2025-12-01 | collected | logged_in | click_and_collect | 61 | 61 | 61 | 0 | 0 | 0\n2025-12-01 | delivered | guest | home_delivery | 77 | 77 | 77 | 0 | 0 | 0\n2025-12-01 | delivered | logged_in | home_delivery | 162 | 162 | 162 | 0 | 0 | 0\n2025-12-02 | collected | guest | click_and_collect | 1 | 1 | 1 | 0 | 0 | 0\n2025-12-02 | collected | logged_in | click_and_collect | 2 | 2 | 2 | 0 | 0 | 0\n2025-12-02 | delivered | guest | home_delivery | 2 | 2 | 2 | 0 | 0 | 0\n2025-12-02 | delivered | logged_in | home_delivery | 1 | 1 | 1 | 0 | 0 | 0\n(16 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:16",
+   "statement": "SELECT sale_date, channel_code, channel_id, count(*) lines, count(DISTINCT receipt_id) receipts, min(sale_ts_utc) mn, max(sale_ts_utc) mx\nFROM fact_sales_line\nWHERE sale_date BETWEEN DATE '2025-11-29' AND DATE '2025-12-03' AND (channel_code <> 'ST' OR channel_code IS NULL OR channel_id IS NOT NULL)\nGROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 3,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sale_date | channel_code | channel_id | lines | receipts | mn | mx\n2025-11-29 | NULL | 1 | 2544 | 1113 | 2025-11-29T07:02:32 | 2025-11-29T15:59:35\n2025-11-29 | NULL | 2 | 172 | 89 | 2025-11-28T22:01:18 | 2025-11-29T21:56:37\n2025-11-29 | NULL | 3 | 72 | 33 | 2025-11-28T22:03:20 | 2025-11-29T20:16:43\n2025-11-30 | NULL | 1 | 1212 | 531 | 2025-11-30T10:00:30 | 2025-11-30T15:59:16\n2025-11-30 | NULL | 2 | 219 | 109 | 2025-11-29T22:34:57 | 2025-11-30T21:45:32\n2025-11-30 | NULL | 3 | 61 | 32 | 2025-11-29T22:14:14 | 2025-11-30T21:23:25\n2025-12-01 | NULL | 1 | 1770 | 784 | 2025-12-01T07:02:47 | 2025-12-01T18:59:16\n2025-12-01 | NULL | 2 | 467 | 239 | 2025-11-30T22:03:10 | 2025-12-01T21:50:12\n2025-12-01 | NULL | 3 | 166 | 87 | 2025-11-30T22:04:28 | 2025-12-01T21:54:46\n2025-12-02 | NULL | 1 | 1920 | 790 | 2025-12-02T07:01:22 | 2025-12-02T18:57:58\n2025-12-02 | NULL | 2 | 236 | 108 | 2025-12-01T22:19:26 | 2025-12-02T21:59:54\n2025-12-02 | NULL | 3 | 85 | 42 | 2025-12-01T22:02:06 | 2025-12-02T21:37:16\n2025-12-03 | NULL | 1 | 2029 | 882 | 2025-12-03T07:03:54 | 2025-12-03T18:57:30\n2025-12-03 | NULL | 2 | 207 | 94 | 2025-12-02T22:26:20 | 2025-12-03T21:43:08\n2025-12-03 | NULL | 3 | 83 | 42 | 2025-12-02T22:37:55 | 2025-12-03T21:27:36\n(15 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:17",
+   "statement": "SELECT count(*) n, count(DISTINCT web_order_id) nd, min(order_ts_utc) mn, max(order_ts_utc) mx FROM fact_web_order\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | nd | mn | mx\n94876 | 94876 | 2024-04-28T21:24:15 | 2026-10-04T20:56:59\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:20",
+   "statement": "SELECT * FROM dim_channel ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_id | channel_name | channel_group | legacy_channel_code\n1 | Store | store | ST\n2 | Web home delivery | web | WB\n3 | Click and collect | web | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:23",
+   "statement": "WITH o AS (\n  SELECT w.*, CAST(order_ts_utc + INTERVAL 2 HOUR AS DATE) AS d_hki\n  FROM fact_web_order w\n  WHERE order_ts_utc >= TIMESTAMP '2025-11-30 20:00:00' AND order_ts_utc < TIMESTAMP '2025-12-01 23:00:00'\n), l AS (\n  SELECT receipt_id, count(*) AS nl, min(sale_date) AS sd, count(DISTINCT channel_id) nch, min(channel_id) ch, sum(gross_amount) g\n  FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-11-29' AND DATE '2025-12-03' AND channel_id IN (2,3) GROUP BY 1\n)\nSELECT o.d_hki, o.status, count(*) n, count(DISTINCT o.web_order_id) nd,\n  sum(CASE WHEN l.receipt_id IS NULL THEN 1 ELSE 0 END) AS no_lines,\n  sum(CASE WHEN l.nl <> o.line_count THEN 1 ELSE 0 END) AS line_mismatch,\n  sum(CASE WHEN l.sd <> o.d_hki THEN 1 ELSE 0 END) AS saledate_ne_hki,\n  sum(CASE WHEN abs(l.g - o.order_total_gross) > 0.01 THEN 1 ELSE 0 END) AS total_mismatch\nFROM o LEFT JOIN l ON l.receipt_id = o.web_order_id\nGROUP BY ALL ORDER BY 1,2\n",
+   "n": 6,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "d_hki | status | n | nd | no_lines | line_mismatch | saledate_ne_hki | total_mismatch\n2025-11-30 | collected | 4 | 4 | 0 | 0 | 0 | 0\n2025-11-30 | delivered | 16 | 16 | 0 | 0 | 0 | 0\n2025-12-01 | cancelled | 19 | 19 | 19 | 0 | 0 | 0\n2025-12-01 | collected | 87 | 87 | 0 | 0 | 0 | 0\n2025-12-01 | delivered | 239 | 239 | 0 | 0 | 0 | 0\n2025-12-02 | collected | 3 | 3 | 0 | 0 | 0 | 0\n2025-12-02 | delivered | 3 | 3 | 0 | 0 | 0 | 0\n(7 rows)"
+  }
+ ]
+}

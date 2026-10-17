@@ -1,0 +1,31 @@
+{
+ "run_id": "full-haiku-L-t04-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T04",
+ "budget": 30,
+ "used": 2,
+ "refused": 0,
+ "packet_sha256": "21b881a72f4d58f7bf15396ad50740a5902b8c8ddf42bd5e3cde3a93c82ce4d9",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:49",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales_by_month AS (\n    SELECT \n        EXTRACT(YEAR FROM COALESCE(w.dispatch_date, f.sale_date)) AS sales_year,\n        EXTRACT(MONTH FROM COALESCE(w.dispatch_date, f.sale_date)) AS sales_month,\n        SUM(f.gross_amount) AS gross_sales_incl_vat\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND EXTRACT(YEAR FROM COALESCE(w.dispatch_date, f.sale_date)) = 2024\n      AND EXTRACT(MONTH FROM COALESCE(w.dispatch_date, f.sale_date)) IN (8, 9)\n    GROUP BY \n        EXTRACT(YEAR FROM COALESCE(w.dispatch_date, f.sale_date)),\n        EXTRACT(MONTH FROM COALESCE(w.dispatch_date, f.sale_date))\n)\nSELECT \n    CASE \n        WHEN sales_month = 8 THEN 'August 2024'\n        WHEN sales_month = 9 THEN 'September 2024'\n    END AS month,\n    gross_sales_incl_vat\nFROM sales_by_month\nORDER BY sales_month\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "month | gross_sales_incl_vat\nAugust 2024 | 1538645.88\nSeptember 2024 | 1369219.80\n(2 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:39:08",
+   "statement": "query-check/scripts/query_check.py --sql WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales_by_month AS (\n    SELECT \n        EXTRACT(YEAR FROM COALESCE(w.dispatch_date, f.sale_date)) AS sales_year,\n        EXTRACT(MONTH FROM COALESCE(w.dispatch_date, f.sale_date)) AS sales_month,\n        SUM(f.gross_amount) AS gross_sales_incl_vat\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND EXTRACT(YEAR FROM COALESCE(w.dispatch_date, f.sale_date)) = 2024\n      AND EXTRACT(MONTH FROM COALESCE(w.dispatch_date, f.sale_date)) IN (8, 9)\n    GROUP BY \n        EXTRACT(YEAR FROM COALESCE(w.dispatch_date, f.sale_date)),\n        EXTRACT(MONTH FROM COALESCE(w.dispatch_date, f.sale_date))\n)\nSELECT \n    CASE \n        WHEN sales_month = 8 THEN 'August 2024'\n        WHEN sales_month = 9 THEN 'September 2024'\n    END AS month,\n    gross_sales_incl_vat\nFROM sales_by_month\nORDER BY sales_month --start 2024-08-01 --end 2024-09-30",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 2 rows, 2 columns: month, gross_sales_incl_vat\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2024-08-01 to 2024-09-30 (61 days; fiscal: FY2024/25 P04, FY2024/25 P05, FY2024/25 P06).\n  [WARN] Requested range is not whole fiscal weeks (Monday to Sunday) (CAL-YEAR). Fine for daily requests; check it for weekly or period figures.\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 1 rows in the range only in Helsinki time, 2 only in UTC; fact_web_order.dispatch_ts_utc: 7 rows in the range only in Helsinki time, 13 only in UTC; fact_sales_line.sale_ts_utc: 1 rows in the range only in Helsinki time, 4 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 2 rows) ==\n  month | gross_sales_incl_vat\n  August 2024 | 1538645.88\n  September 2024 | 1369219.80\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

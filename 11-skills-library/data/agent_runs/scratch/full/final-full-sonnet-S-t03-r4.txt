@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH sales AS (SELECT f.* FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key WHERE f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND s.store_id &lt;&gt; 999), ret AS (SELECT r.* FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key WHERE r.return_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND s.store_id &lt;&gt; 999) SELECT 'FY2026/27' AS fiscal_year, ROUND(((SELECT SUM(net_amount) FROM sales) - (SELECT SUM(refund_net) FROM ret)) / (SELECT COUNT(DISTINCT receipt_id) FROM sales), 2) AS atv_eur",
+  "result": {
+    "columns": ["fiscal_year", "atv_eur"],
+    "rows": [["FY2026/27", 53.04]]
+  },
+  "definitions_applied": [
+    "ATV = net sales excluding VAT, after returns, divided by the number of receipts (a web order counts as one receipt)",
+    "Net sales after returns follows rpt_daily_store_sales: net_amount on the sale date minus refund_net booked on the return date",
+    "Fiscal periods from ref_fiscal_calendar: P01 to P03 of FY2026/27 run 2026-05-04 to 2026-08-02, fully_loaded = true",
+    "Company-wide scope: all physical stores, including store 129 Savonlinna, which closed on 2026-01-25 and has no sales in the window, plus the web shop (store 900)",
+    "Web scope: channel_id 2 (web home delivery) and 3 (click and collect); web lines are identified by channel_id because channel_code is NULL in this period",
+    "Receipts counted with COUNT(DISTINCT receipt_id)"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year FY2026/27, because the request was received on 2026-10-05. Periods 1 to 3 are 2026-05-04 to 2026-08-02 (13 weeks).",
+    "'ATV' means average transaction value, with the value taken excluding VAT and after returns, in line with the net sales definition used in rpt_daily_store_sales. The warehouse documents no ATV definition, so this is my reading.",
+    "Staff purchases are kept, as they are in rpt_daily_store_sales. Excluding them would give a slightly different figure.",
+    "Returns are deducted in the period they were booked. They are not matched back to the original sale date, and returns of web orders count in the same way.",
+    "Web orders in the sales data are all delivered or collected. I found no cancelled or processing orders with sales lines, so no web status filter was needed."
+  ],
+  "caveats": [
+    "Correction: store 999 (Training store, head office) is excluded. It has 186 receipts and 7,806.26 EUR net in the window, and rpt_daily_store_sales also leaves it out. Including it would not belong in company results.",
+    "Correction: web lines were identified through channel_id (2 and 3) and the web-shop pseudo-store 900, not channel_code = 'WB'. In FY2026/27 channel_code is NULL on every line. The rpt.v_daily_sales view filters on channel_code = 'WB', so it would drop all web sales for this period.",
+    "Inputs behind the figure: net sales of 4,538,952.58 EUR before returns, 243,627.84 EUR of refunds booked in the window, and 80,983 receipts. That includes 12,962 web receipts (9,037 home delivery and 3,925 click and collect).",
+    "ATV before returns would be 56.04 EUR. Including VAT it would be 70.22 EUR before returns. The 53.04 figure is net of returns and excludes VAT.",
+    "rpt_daily_store_sales shows 13,004 web receipts for the window against 12,962 in the sales lines, a difference of 42 that I did not resolve. I used the sales lines, which reconcile exactly to the report for the physical stores (68,021 receipts).",
+    "No duplicate lines (same receipt and line number), no receipts spanning more than one store, and no null or negative amounts were found in the window. Slowly changing store versions were joined through store_key and did not affect the count."
+  ]
+}
+```

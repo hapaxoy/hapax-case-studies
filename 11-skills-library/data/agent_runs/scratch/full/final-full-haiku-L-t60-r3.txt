@@ -1,0 +1,28 @@
+Perfect! The query passed all verification checks and the control total matches rpt_daily_store_sales exactly. Now I'll format the final response:
+
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS net_sales\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nWHERE n.store_id = 900\n  AND d.fiscal_year = 'FY2025/26'\n  AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period;",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "net_sales"],
+    "rows": [
+      ["FY2025/26", 5, 145626.90],
+      ["FY2025/26", 6, 175588.62],
+      ["FY2025/26", 7, 154977.27],
+      ["FY2025/26", 8, 225265.08]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales on dispatch date (Helsinki timezone)",
+    "Net sales excluding VAT after returns",
+    "Store 900 as the web shop",
+    "Exclusions: store 999 and test articles (category ZZ Test)"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26, the fiscal year prior to FY2026/27 (current on request date 2026-10-09)"
+  ],
+  "caveats": [
+    "None detected. Query verified against control total rpt_daily_store_sales with zero gap."
+  ]
+}
+```

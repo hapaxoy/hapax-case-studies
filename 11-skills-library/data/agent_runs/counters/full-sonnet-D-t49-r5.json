@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-D-t49-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T49",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "7b57113473b0539301a020aeec42f9e793d38fab335b6c7d41d51ac64070aba4",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:01:49",
+   "statement": "SELECT d.fiscal_year, d.fiscal_period, MIN(d.calendar_date) mn, MAX(d.calendar_date) mx, COUNT(*) days,\n (SELECT COUNT(*) FROM fact_sales_line f WHERE f.sale_date BETWEEN MIN(d.calendar_date) AND MAX(d.calendar_date)) n_lines,\n (SELECT COUNT(*) FROM (SELECT receipt_id, line_no FROM fact_sales_line f WHERE f.sale_date BETWEEN MIN(d.calendar_date) AND MAX(d.calendar_date) GROUP BY 1,2 HAVING COUNT(*)>1)) dup_keys,\n (SELECT COUNT(DISTINCT sales_line_id) FROM fact_sales_line f WHERE f.sale_date BETWEEN MIN(d.calendar_date) AND MAX(d.calendar_date)) distinct_ids\nFROM dim_date d WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 GROUP BY 1,2\n",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"days\"\n\nLINE 1: ..., MIN(d.calendar_date) mn, MAX(d.calendar_date) mx, COUNT(*) days,\n                                                                        ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:01:50",
+   "statement": "SELECT format, COUNT(DISTINCT store_id) stores, COUNT(*) versions, COUNT(DISTINCT is_current) FROM dim_store GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | stores | versions | count(DISTINCT is_current)\nLarge | 8 | 10 | 2\nMedium | 18 | 21 | 2\nSmall | 13 | 14 | 2\nTraining | 1 | 1 | 1\nWeb | 1 | 1 | 1\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:01:54",
+   "statement": "WITH p AS (SELECT MIN(calendar_date) mn, MAX(calendar_date) mx FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=4),\nl AS (SELECT f.* FROM fact_sales_line f, p WHERE f.sale_date BETWEEN p.mn AND p.mx)\nSELECT (SELECT mn FROM p) mn, (SELECT mx FROM p) mx, COUNT(*) n_lines, COUNT(DISTINCT sales_line_id) ids,\n COUNT(DISTINCT (receipt_id, line_no)) keys, MIN(sale_date) minsale, MAX(sale_date) maxsale,\n COUNT(DISTINCT etl_loaded_at) loads, MIN(etl_loaded_at) l1, MAX(etl_loaded_at) l2\nFROM l\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mn | mx | n_lines | ids | keys | minsale | maxsale | loads | l1 | l2\n2026-08-03 | 2026-08-30 | 48107 | 48107 | 48107 | 2026-08-03 | 2026-08-30 | 28 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:02:02",
+   "statement": "WITH l AS (\n SELECT f.*, s.store_id, cs.format, p.category\n FROM fact_sales_line f\n JOIN dim_store s ON s.store_key=f.store_key\n JOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\n JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30')\nSELECT format,\n COUNT(DISTINCT CASE WHEN NOT staff_purchase_flag AND category<>'ZZ Test' AND store_id<900 THEN receipt_id END) receipts,\n SUM(CASE WHEN NOT staff_purchase_flag AND category<>'ZZ Test' AND store_id<900 THEN net_amount END) net,\n ROUND(SUM(CASE WHEN NOT staff_purchase_flag AND category<>'ZZ Test' AND store_id<900 THEN net_amount END)/COUNT(DISTINCT CASE WHEN NOT staff_purchase_flag AND category<>'ZZ Test' AND store_id<900 THEN receipt_id END),2) atv,\n COUNT(DISTINCT CASE WHEN staff_purchase_flag THEN receipt_id END) staff_receipts,\n COUNT(DISTINCT CASE WHEN category='ZZ Test' THEN receipt_id END) test_receipts,\n COUNT(DISTINCT CASE WHEN category<>'ZZ Test' AND NOT staff_purchase_flag AND store_id<900 AND channel_code='WB' THEN receipt_id END) wb_in_stores,\n SUM(CASE WHEN net_amount<=0 THEN 1 ELSE 0 END) nonpos_lines,\n COUNT(DISTINCT store_id) stores,\n SUM(CASE WHEN store_id<900 AND category<>'ZZ Test' THEN net_amount END) net_all_incl_staff\nFROM l GROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | receipts | net | atv | staff_receipts | test_receipts | wb_in_stores | nonpos_lines | stores | net_all_incl_staff\nLarge | 6508 | 394865.46 | 60.67 | 99 | 0 | 0 | 0 | 8 | 400409.69\nMedium | 8641 | 520763.45 | 60.27 | 138 | 0 | 0 | 0 | 18 | 528036.85\nSmall | 2598 | 131841.05 | 50.75 | 43 | 0 | 0 | 0 | 12 | 133820.18\nTraining | 0 | NULL | NULL | 32 | 23 | 0 | 0 | 1 | NULL\nWeb | 0 | NULL | NULL | 0 | 1 | 0 | 0 | 1 | NULL\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:02:04",
+   "statement": "WITH l AS (\n SELECT s.store_id, SUM(f.net_amount) net, COUNT(DISTINCT f.receipt_id) rc\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND p.category<>'ZZ Test' GROUP BY 1),\nr AS (SELECT store_id, SUM(net_sales_before_returns) nsbr, SUM(receipts) rc FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id<900 GROUP BY 1)\nSELECT l.store_id, l.net, r.nsbr, ROUND(l.net-r.nsbr,2) diff, l.rc, r.rc rpt_rc FROM l FULL JOIN r USING(store_id) WHERE r.nsbr IS NULL OR l.net IS NULL OR ABS(l.net-r.nsbr)>0.5 OR l.rc<>r.rc ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "store_id | net | nsbr | diff | rc | rpt_rc\n(0 rows)"
+  }
+ ]
+}

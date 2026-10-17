@@ -1,0 +1,12 @@
+```json
+{
+  "sql": "WITH web_order_periods AS (SELECT d.fiscal_year, d.fiscal_period, o.fulfilment_type, SUM(o.order_total_gross) as total_value FROM fact_web_order o INNER JOIN dim_date d ON DATE(o.order_ts_utc) = d.calendar_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (6, 7, 8) AND o.status != 'cancelled' GROUP BY d.fiscal_year, d.fiscal_period, o.fulfilment_type), period_totals AS (SELECT fiscal_year, fiscal_period, SUM(total_value) as period_total_value, SUM(CASE WHEN fulfilment_type = 'click_and_collect' THEN total_value ELSE 0 END) as cac_value FROM web_order_periods GROUP BY fiscal_year, fiscal_period) SELECT fiscal_period, ROUND(100.0 * cac_value / period_total_value, 2) as click_and_collect_share_pct FROM period_totals ORDER BY fiscal_period",
+  "result": {
+    "columns": ["fiscal_period", "click_and_collect_share_pct"],
+    "rows": [[6, 27.56], [7, 26.64], [8, 26.53]]
+  },
+  "definitions_applied": ["Web shop sales: orders with completed status (delivered or collected), excluding cancelled orders", "Click-and-collect share: click_and_collect order value as percentage of total web order value", "Fiscal periods: from ref_fiscal_calendar table, periods 6-8 of FY2025/26"],
+  "assumptions": ["Interpreted 'last year' as FY2025/26, the previous fiscal year relative to current date 2026-10-15", "Sales measured by order_total_gross value from fact_web_order", "Excluded cancelled orders as they do not represent completed sales", "Order timestamp converted from UTC to calendar date for joining with dim_date fiscal periods"],
+  "caveats": ["Cancelled orders (476 total across the three periods with value EUR 34,697.92) were excluded from the calculation as they do not represent completed web shop sales", "The share percentages are calculated from order values (EUR gross including VAT), not from order counts or units", "Click-and-collect orders include both 'collected' and 'processing' status orders; 'processing' orders are counted as part of click-and-collect volume"]
+}
+```

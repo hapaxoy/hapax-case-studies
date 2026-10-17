@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH per_store AS (SELECT business_date, store_id, net_sales FROM rpt_daily_store_sales WHERE store_id &lt; 900), period AS (SELECT p.store_id, d.fiscal_year, sum(p.net_sales) AS net_sales FROM per_store p JOIN dim_date d ON d.calendar_date = p.business_date WHERE d.fiscal_period = 1 AND d.fiscal_year IN ('FY2025/26','FY2026/27') GROUP BY 1,2), wide AS (SELECT store_id, max(net_sales) FILTER (WHERE fiscal_year='FY2025/26') AS last_year, max(net_sales) FILTER (WHERE fiscal_year='FY2026/27') AS this_year FROM period GROUP BY 1) SELECT 'FY2026/27' AS fiscal_year, 1 AS fiscal_period, round((sum(this_year)/sum(last_year)-1)*100, 2) AS lfl_net_sales_growth_pct FROM wide WHERE last_year IS NOT NULL AND this_year IS NOT NULL AND store_id NOT IN (136,137)",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "lfl_net_sales_growth_pct"],
+    "rows": [["FY2026/27", 1, 6.12]]
+  },
+  "definitions_applied": [
+    "Fiscal period 1 compared with fiscal period 1 of the prior fiscal year (FY2026/27 P01, 4 May to 31 May 2026, against FY2025/26 P01, 28 Apr to 25 May 2025), matched by fiscal period as laid out in ref_fiscal_calendar",
+    "Net sales as defined in rpt_daily_store_sales: sales excluding VAT, less refunds booked on the day of return",
+    "Like-for-like store set: physical stores that traded in both periods, which excludes stores that opened less than about 20 months before the comparison period or that closed",
+    "Store identity by store_id, not store_key or region, so the April 2025 region reassignments do not affect the match",
+    "Web shop (store 900) and training store (999) excluded because they are not physical stores"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year FY2026/27, whose period 1 is 4 to 31 May 2026. 'Period 1' means fiscal period 1, not calendar month or quarter.",
+    "No written company definition of like-for-like was available in the warehouse. I used the usual retail rule: a store counts only if it traded in both periods and was past its opening ramp-up. The FP&amp;A like-for-like store lists for 2024 and 2025 (tmp_lfl_store_list_2024 and _2025) also leave out stores 136 and 137.",
+    "Stores 136 Tampere Lamminpää (opened 2 Sep 2024) and 137 Lohja (opened 4 Nov 2024) are excluded. They were still ramping up in the base period, only 5 to 8 months after opening. They traded in both periods, and including them would give 6.70%.",
+    "Like-for-like is measured on physical-store sales only. Web home delivery and click-and-collect are not included; they are booked to the web shop pseudo-store 900.",
+    "Staff purchases are left in, as in the company's own daily store sales report. Excluding them would change the result only slightly.",
+    "Growth is on the reported fiscal-period totals, not adjusted for the number of trading days. The figures are 1,063,979.18 EUR last year and 1,129,059.26 EUR this year across 36 stores."
+  ],
+  "caveats": [
+    "The prior-year period had 27 trading days and this year's has 28, because the stores were shut on 1 May 2025 (May Day) and there is no equivalent closed day in 4 to 31 May 2026. This lifts the headline. On sales per trading day, like-for-like growth is about 2.33%, against 6.12% unadjusted. FP&amp;A should decide which basis they report; I used the unadjusted one.",
+    "The warehouse has no like-for-like definition (no flag or documented rule), so the store set is my judgement. Including stores 136 and 137 gives 6.70% (38 stores). All 39 stores that traded in either year would give 5.55%, but that is not a like-for-like figure.",
+    "Store 129 Savonlinna is excluded because it closed on 25 Jan 2026 and has no sales in FY2026/27 P01. Its FY2025/26 P01 net sales were 12,014.04 EUR.",
+    "Stores 104, 119 and 125 had refit closures (July to August 2024, September to October 2025, June to July 2026), but none fell in either P01. All three traded all 27/28 days in both periods and stay in the store set. Store 125's refit starts in June 2026, so its P02/P03 will need excluding in later like-for-like runs.",
+    "In FY2026/27 fact_sales_line.channel_code is NULL (the field was replaced by channel_id after the web-platform migration), so any filter on channel_code = 'ST' would silently drop the whole of this year. I identified stores through dim_store.store_id &lt; 900 instead. The old rpt.v_daily_sales view filters on channel_code and would give a wrong this-year figure.",
+    "The comment for dim_store.format lists Hyper, Standard and Express, but the data holds Large, Medium and Small. Regions were also restated on 28 Apr 2025 (the South region split into South and Capital Region, and store 114 moved from East to South). I did not use either field, so the answer is unaffected, but any regional like-for-like cut needs the restated regions applied to both years.",
+    "Staff purchases are 1.7% to 1.8% of period sales in both years, so excluding them would hardly change the growth rate.",
+    "I did not use the bak_, stg_, tmp_ (other than as a cross-check of the store list) or _old tables. I checked for duplicate sales lines in the period and found none. The daily store sales report reconciles exactly to the sales and return fact tables for every store in the period."
+  ]
+}
+```

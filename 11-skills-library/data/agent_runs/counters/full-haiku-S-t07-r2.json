@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-S-t07-r2",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T07",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "5007398006a88537efa5afae3eb520031e70ed3568d2d52774414e16b03f2d48",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:29:13",
+   "statement": "SELECT DISTINCT fiscal_year \nFROM dim_date \nWHERE fiscal_year LIKE 'FY%' \nORDER BY fiscal_year DESC\nLIMIT 10\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:29:15",
+   "statement": "SELECT DISTINCT region \nFROM dim_store \nWHERE is_current = TRUE \nORDER BY region\n",
+   "n": 2,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region\nCapital Region\nEast\nHead office\nNorth\nOnline\nSouth\nWest\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:29:18",
+   "statement": "SELECT fiscal_year, fiscal_quarter, MIN(calendar_date) AS quarter_start, MAX(calendar_date) AS quarter_end\nFROM dim_date\nWHERE fiscal_year = 'FY2024/25'\nGROUP BY fiscal_year, fiscal_quarter\nORDER BY fiscal_quarter\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_quarter | quarter_start | quarter_end\nFY2024/25 | 1 | 2024-04-29 | 2024-07-28\nFY2024/25 | 2 | 2024-07-29 | 2024-10-27\nFY2024/25 | 3 | 2024-10-28 | 2025-01-26\nFY2024/25 | 4 | 2025-01-27 | 2025-04-27\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:29:23",
+   "statement": "SELECT \n  f.product_key,\n  p.sku,\n  p.product_name,\n  SUM(f.net_amount) AS total_net_sales,\n  SUM(f.standard_cost) AS total_standard_cost,\n  SUM(f.net_amount) - SUM(f.standard_cost) AS gross_margin,\n  ROUND((SUM(f.net_amount) - SUM(f.standard_cost)) / NULLIF(SUM(f.net_amount), 0) * 100, 2) AS margin_pct\nFROM fact_sales_line f\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_quarter = 4\n  AND s.region = 'South'\n  AND f.staff_purchase_flag = FALSE\nGROUP BY f.product_key, p.sku, p.product_name\nORDER BY gross_margin DESC\nLIMIT 10\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "product_key | sku | product_name | total_net_sales | total_standard_cost | gross_margin | margin_pct\n3167 | 103075 | Cushions & Throws Tuulikki 338 | 7374.80 | 3275.68 | 4099.12 | 55.58\n1029 | 100955 | Interior Paint Norvik 298 | 11760.75 | 8066.88 | 3693.87 | 31.41\n3487 | 103390 | Bedroom Peltola 793 | 10406.87 | 7032.20 | 3374.67 | 32.43\n1844 | 101763 | Fixings & Fasteners Nordhem 594 | 5414.49 | 2114.94 | 3299.55 | 60.94\n1027 | 100953 | Interior Paint Tuulikki 224 | 7526.44 | 4912.80 | 2613.64 | 34.73\n3153 | 103062 | Cushions & Throws Kuusela 657 | 4375.47 | 2021.20 | 2354.27 | 53.81\n1476 | 101398 | Power Tools Havu Pro 689 | 7009.44 | 4662.84 | 2346.60 | 33.48\n2623 | 102538 | Cookware Nordhem 469 | 4783.15 | 3016.92 | 1766.23 | 36.93\n1489 | 101411 | Power Tools Nordhem 370 | 6117.45 | 4426.95 | 1690.50 | 27.63\n1446 | 101369 | Power Tools Koivuranta 416 | 5203.19 | 3515.82 | 1687.37 | 32.43\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:29:31",
+   "statement": "SELECT \n  f.product_key,\n  p.sku,\n  p.product_name,\n  SUM(f.net_amount) AS total_net_sales,\n  SUM(f.standard_cost) AS total_standard_cost,\n  COALESCE(SUM(r.refund_net), 0) AS total_returns_refunded,\n  COALESCE(SUM(r.standard_cost_returned), 0) AS total_cost_returned,\n  (SUM(f.net_amount) - COALESCE(SUM(r.refund_net), 0)) - (SUM(f.standard_cost) - COALESCE(SUM(r.standard_cost_returned), 0)) AS gross_margin_net_of_returns\nFROM fact_sales_line f\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id AND r.return_date >= '2025-01-27' AND r.return_date <= '2025-04-27'\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_quarter = 4\n  AND s.region = 'South'\n  AND f.staff_purchase_flag = FALSE\nGROUP BY f.product_key, p.sku, p.product_name\nORDER BY (SUM(f.net_amount) - COALESCE(SUM(r.refund_net), 0)) - (SUM(f.standard_cost) - COALESCE(SUM(r.standard_cost_returned), 0)) DESC\nLIMIT 10\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "product_key | sku | product_name | total_net_sales | total_standard_cost | total_returns_refunded | total_cost_returned | gross_margin_net_of_returns\n3167 | 103075 | Cushions & Throws Tuulikki 338 | 7374.80 | 3275.68 | 456.07 | 198.24 | 3841.29\n1029 | 100955 | Interior Paint Norvik 298 | 11760.75 | 8066.88 | 168.04 | 112.04 | 3637.87\n1844 | 101763 | Fixings & Fasteners Nordhem 594 | 5414.49 | 2114.94 | 54.96 | 20.94 | 3265.53\n3487 | 103390 | Bedroom Peltola 793 | 10406.87 | 7032.20 | 385.44 | 251.15 | 3240.38\n1027 | 100953 | Interior Paint Tuulikki 224 | 7526.44 | 4912.80 | 43.33 | 27.60 | 2597.91\n3153 | 103062 | Cushions & Throws Kuusela 657 | 4375.47 | 2021.20 | 193.63 | 91.28 | 2251.92\n1476 | 101398 | Power Tools Havu Pro 689 | 7009.44 | 4662.84 | 429.50 | 277.55 | 2194.65\n2623 | 102538 | Cookware Nordhem 469 | 4783.15 | 3016.92 | 288.43 | 194.64 | 1672.44\n1446 | 101369 | Power Tools Koivuranta 416 | 5203.19 | 3515.82 | 243.90 | 159.81 | 1603.28\n1489 | 101411 | Power Tools Nordhem 370 | 6117.45 | 4426.95 | 751.76 | 536.60 | 1475.34\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:29:42",
+   "statement": "SELECT \n  COUNT(f.sales_line_id) AS sales_lines,\n  COUNT(r.return_line_id) AS returns,\n  SUM(CASE WHEN r.return_line_id IS NOT NULL THEN 1 ELSE 0 END) AS returned_items\nFROM fact_sales_line f\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id AND r.return_date >= '2025-01-27' AND r.return_date <= '2025-04-27'\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_quarter = 4\n  AND s.region = 'South'\n  AND f.staff_purchase_flag = FALSE\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sales_lines | returns | returned_items\n41212 | 1311 | 1311\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:29:54",
+   "statement": "SELECT \n  p.sku,\n  p.product_name,\n  ROUND(SUM(f.net_amount) - COALESCE(SUM(r.refund_net), 0), 2) AS net_revenue,\n  ROUND(SUM(f.standard_cost) - COALESCE(SUM(r.standard_cost_returned), 0), 2) AS cost_of_goods,\n  ROUND((SUM(f.net_amount) - COALESCE(SUM(r.refund_net), 0)) - (SUM(f.standard_cost) - COALESCE(SUM(r.standard_cost_returned), 0)), 2) AS gross_margin\nFROM fact_sales_line f\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id AND r.return_date >= '2025-01-27' AND r.return_date <= '2025-04-27'\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_quarter = 4\n  AND s.region = 'South'\n  AND f.staff_purchase_flag = FALSE\nGROUP BY p.sku, p.product_name\nORDER BY gross_margin DESC\nLIMIT 10\n",
+   "n": 7,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "sku | product_name | net_revenue | cost_of_goods | gross_margin\n103075 | Cushions & Throws Tuulikki 338 | 6918.73 | 3077.44 | 3841.29\n100955 | Interior Paint Norvik 298 | 11592.71 | 7954.84 | 3637.87\n101763 | Fixings & Fasteners Nordhem 594 | 5359.53 | 2094.00 | 3265.53\n103390 | Bedroom Peltola 793 | 10021.43 | 6781.05 | 3240.38\n100953 | Interior Paint Tuulikki 224 | 7483.11 | 4885.20 | 2597.91\n103062 | Cushions & Throws Kuusela 657 | 4181.84 | 1929.92 | 2251.92\n101398 | Power Tools Havu Pro 689 | 6579.94 | 4385.29 | 2194.65\n102538 | Cookware Nordhem 469 | 4494.72 | 2822.28 | 1672.44\n101369 | Power Tools Koivuranta 416 | 4959.29 | 3356.01 | 1603.28\n101411 | Power Tools Nordhem 370 | 5365.69 | 3890.35 | 1475.34\n(10 rows)"
+  }
+ ]
+}

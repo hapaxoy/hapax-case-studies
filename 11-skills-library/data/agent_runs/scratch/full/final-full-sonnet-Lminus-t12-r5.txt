@@ -1,0 +1,40 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2026-02-23' AS start_date, DATE '2026-03-22' AS end_date), dedup AS (SELECT store_key, product_key, week_ending_date, arg_max(closing_value, etl_loaded_at) AS closing_value FROM fact_stock_week, params WHERE week_ending_date BETWEEN start_date AND end_date GROUP BY 1,2,3), weekly AS (SELECT d.week_ending_date, cp.category, SUM(d.closing_value) AS closing_value FROM dedup d JOIN dim_store s ON s.store_key = d.store_key JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current JOIN dim_product p ON p.product_key = d.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current WHERE cs.region = 'West' AND s.store_id &lt; 900 AND s.store_id &lt;&gt; 999 AND cp.category &lt;&gt; 'ZZ Test' GROUP BY 1,2) SELECT category, ROUND(AVG(closing_value),2) AS avg_stock_value FROM weekly GROUP BY 1 ORDER BY 1",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "region", "category", "avg_stock_value"],
+    "rows": [
+      ["FY2025/26", 11, "West", "Bathroom &amp; Plumbing", 75701.53],
+      ["FY2025/26", 11, "West", "Cleaning &amp; Household", 24179.52],
+      ["FY2025/26", 11, "West", "Electrical", 68684.23],
+      ["FY2025/26", 11, "West", "Furniture", 139710.73],
+      ["FY2025/26", 11, "West", "Garden", 157755.23],
+      ["FY2025/26", 11, "West", "Home Textiles &amp; Decor", 43663.29],
+      ["FY2025/26", 11, "West", "Kitchen &amp; Dining", 56414.75],
+      ["FY2025/26", 11, "West", "Paint &amp; Decorating", 80430.48],
+      ["FY2025/26", 11, "West", "Seasonal", 64998.54],
+      ["FY2025/26", 11, "West", "Tools &amp; Hardware", 101986.72]
+    ]
+  },
+  "definitions_applied": [
+    "Closing stock is semi-additive: summed across stores and articles within each week, then averaged across the weeks, never summed across weeks",
+    "Stock value is closing_value, at standard cost, EUR",
+    "Fiscal period 11 is four weeks, fiscal weeks 44 to 47, week endings 1, 8, 15 and 22 March 2026",
+    "Region and category are as-is, on the current store and article versions (is_current)",
+    "Physical stores only (store_id below 900, so no web shop 900); store 999 and category ZZ Test left out",
+    "Stock rows exist only for articles a store ranges; there is no web stock in this table"
+  ],
+  "assumptions": [
+    "'Last year' on a request received 5 October 2026 is read as FY2025/26 (the fiscal year just ended; the current year is FY2026/27). This follows the accepted readings of May 2026 in FY2026/27. Period 11 of FY2025/26 is 23 February to 22 March 2026.",
+    "'Average stock value' is the average of the four weekly closing stock values at standard cost, each summed over all West stores, per category.",
+    "Region and category are as-is (current hierarchy), the company default, since the request did not ask for as-was. The as-is and as-was readings agree for this period: the West stores were not affected by the April 2025 reorganisation (the stores that moved were Capital Region and Kouvola), and the outdoor lighting move to Electrical happened in October 2025, before this period.",
+    "West contains 9 stores: 115 to 123 and 136 Tampere Lamminpää."
+  ],
+  "caveats": [
+    "Duplicate load corrected: fact_stock_week holds two loads for the week ending 8 March 2026 (etl_loaded_at 9 March 01:00 and 10 March 02:45). That gave 7,439 repeated store-article rows with identical values. Left in, they would have double-counted stock for that week. I kept one row per store, article and week, the latest load. The other three weeks have no repeats.",
+    "The category averages are for the whole period, over four weeks of snapshots.",
+    "Test articles (ZZ Test) and store 999 were filtered out. No such rows appeared in this period's stock rows for the West, so the filters did not change the totals.",
+    "I did not run the library's query_check.py, because no script runner was available in this session. The checks were done by hand with SQL: the grain check at store, article and week, and the date coverage check. The rpt_daily_store_sales control total does not apply to stock."
+  ]
+}
+```

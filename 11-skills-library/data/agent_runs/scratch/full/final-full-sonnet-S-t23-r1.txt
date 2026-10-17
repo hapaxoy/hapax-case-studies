@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "WITH p AS (SELECT period_start_date, period_end_date FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 2), sold AS (SELECT st.format, f.sales_line_id, f.net_amount FROM fact_sales_line f JOIN dim_store st ON st.store_key = f.store_key JOIN p ON f.sale_date BETWEEN p.period_start_date AND p.period_end_date WHERE st.store_id &lt; 900), ret AS (SELECT sales_line_id, sum(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT 'FY2025/26' AS fiscal_year, 2 AS fiscal_period, s.format AS store_format, round(100 * sum(coalesce(r.refund_net, 0)) / sum(s.net_amount), 2) AS return_rate_pct FROM sold s LEFT JOIN ret r USING (sales_line_id) GROUP BY s.format ORDER BY CASE s.format WHEN 'Large' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_format", "return_rate_pct"],
+    "rows": [
+      ["FY2025/26", 2, "Large", 4.42],
+      ["FY2025/26", 2, "Medium", 4.53],
+      ["FY2025/26", 2, "Small", 4.28]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 2 of FY2025/26 is 2025-05-26 to 2025-06-22 (ref_fiscal_calendar)",
+    "Net sales in EUR excluding VAT (net_amount for sales, refund_net for returns)",
+    "Store format taken from the store version in force at the sale date (fact_sales_line.store_key to dim_store)",
+    "Return rate = refund_net on returns of lines sold in the period divided by net_amount sold in the period",
+    "Returns linked to the original sale through fact_return_line.sales_line_id",
+    "Stores only: store_id below 900, so the web shop (900, format Web) and the training store (999) are excluded"
+  ],
+  "assumptions": [
+    "'Last year' is read as the previous fiscal year, FY2025/26. The current fiscal year is FY2026/27 (started 2026-05-04, request dated 2026-10-06). 'Period 2' is fiscal period 2, not calendar month 2.",
+    "'What was sold came back' is read as a cohort: refunds on lines sold in period 2, whenever the return was booked. This differs from the 'returns booked on the day' basis of rpt_daily_store_sales.",
+    "The share is measured in value (EUR excluding VAT), not units. On units the rates are lower: Large 2.37%, Medium 2.44%, Small 2.39%.",
+    "Staff purchases are kept in, as they are in the Data &amp; Analytics daily store sales report. Taking them out moves each rate by 0.02 to 0.03 points (Large 4.45, Medium 4.56, Small 4.30).",
+    "'Store format' means the three store formats only. The web shop is not a store format and is not shown."
+  ],
+  "caveats": [
+    "Format labels in the data are Large, Medium and Small. The dim_store column comment says Hyper, Standard or Express, which is out of date.",
+    "The training store (999) is excluded. It had 126 lines and EUR 2,222 net in the period, almost all of it staff purchases. It is not part of the daily store sales report either.",
+    "Returns on period 2 sales are complete: the longest gap between sale and return in the data is 30 days, and the data runs to 2026-10-04. Of the EUR 49,057 refunded on these sales, EUR 7,105 was booked after 2025-06-22. A 'returns booked in the period' basis would leave that out and add refunds on earlier sales.",
+    "Duplicate sales lines exist (418 receipt and line pairs, loaded twice, all in September 2025). None fall in period 2, so no correction was needed. They would inflate sales for September 2025.",
+    "The store sales figures I compared match rpt_daily_store_sales exactly, store by store, for the period. No store changed format between versions; the 2025-04-28 store versions changed region only.",
+    "No returned quantity or refund amount exceeds what was sold, and there are no orphan returns."
+  ]
+}
+```

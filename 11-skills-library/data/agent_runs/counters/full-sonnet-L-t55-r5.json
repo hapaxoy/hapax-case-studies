@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t55-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T55",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "8cf6e15a7f2cd6c589b8e8f111f97ae6e0d55e3063665cb6ef716f661561a46f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:31:36",
+   "statement": "fiscal-calendar/scripts/fiscal.py P9-P11 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P9-P11 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P09, FY2025/26 P10, FY2025/26 P11\n  fiscal_weeks                       35-47\n  start_date                         2025-12-22\n  end_date                           2026-03-22\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-03-22\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 35 AND 47)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:31:44",
+   "statement": "WITH wd AS (\n  SELECT web_order_id, member_key AS order_member_key, login_state, status,\n         CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n  FROM fact_web_order WHERE status IN ('delivered','collected')\n),\nl AS (\n  SELECT d.fiscal_period, f.sales_line_id, f.receipt_id, f.line_no, f.net_amount, f.member_key, w.order_member_key, w.login_state, s.store_id, s.region, p.category\n  FROM fact_sales_line f\n  JOIN wd w ON w.web_order_id = f.receipt_id\n  JOIN dim_date d ON d.calendar_date = w.dispatch_date\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE d.fiscal_year='FY2025/26' AND d.fiscal_week BETWEEN 35 AND 47\n)\nSELECT fiscal_period, store_id, region,\n  count(*) AS lines, count(DISTINCT sales_line_id) AS dist_lines, count(DISTINCT (receipt_id, line_no)) AS dist_rl,\n  sum(CASE WHEN category='ZZ Test' THEN 1 ELSE 0 END) AS test_lines,\n  sum(net_amount) AS net_all,\n  sum(CASE WHEN member_key IS NOT NULL THEN net_amount ELSE 0 END) AS net_member_line,\n  sum(CASE WHEN order_member_key IS NOT NULL THEN net_amount ELSE 0 END) AS net_member_order,\n  sum(CASE WHEN login_state='logged_in' THEN net_amount ELSE 0 END) AS net_loggedin,\n  sum(CASE WHEN login_state='logged_in' AND member_key IS NULL THEN 1 ELSE 0 END) AS loggedin_nomember_lines,\n  sum(CASE WHEN login_state='guest' AND member_key IS NOT NULL THEN 1 ELSE 0 END) AS guest_member_lines\nFROM l GROUP BY 1,2,3 ORDER BY 1,2;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | store_id | region | lines | dist_lines | dist_rl | test_lines | net_all | net_member_line | net_member_order | net_loggedin | loggedin_nomember_lines | guest_member_lines\n9 | 900 | Online | 7898 | 7898 | 7898 | 0 | 219929.50 | 149523.93 | 149523.93 | 149523.93 | 0 | 0\n10 | 900 | Online | 4749 | 4749 | 4749 | 0 | 137569.07 | 71223.59 | 92893.33 | 92893.33 | 706 | 0\n11 | 900 | Online | 5186 | 5186 | 5186 | 1 | 149802.62 | 83597.77 | 99909.32 | 99909.32 | 603 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:31:51",
+   "statement": "SELECT d.fiscal_period, d.fiscal_week,\n  count(*) AS lines,\n  sum(CASE WHEN o.login_state='logged_in' THEN 1 ELSE 0 END) AS loggedin_lines,\n  sum(CASE WHEN o.login_state='logged_in' AND f.member_key IS NULL THEN 1 ELSE 0 END) AS loggedin_line_null,\n  sum(CASE WHEN o.member_key IS NOT NULL AND m.member_key IS NULL THEN 1 ELSE 0 END) AS order_key_not_in_dim,\n  sum(CASE WHEN o.login_state='logged_in' AND f.member_key IS NOT NULL AND f.member_key<>o.member_key THEN 1 ELSE 0 END) AS key_mismatch,\n  sum(CASE WHEN o.login_state='guest' AND o.member_key IS NOT NULL THEN 1 ELSE 0 END) AS guest_with_key\nFROM fact_sales_line f\nJOIN fact_web_order o ON o.web_order_id=f.receipt_id\nJOIN dim_date d ON d.calendar_date = CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)\nLEFT JOIN dim_member m ON m.member_key=o.member_key\nWHERE o.status IN ('delivered','collected') AND d.fiscal_year='FY2025/26' AND d.fiscal_week BETWEEN 33 AND 49\nGROUP BY 1,2 ORDER BY 1,2;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 17,
+   "output_preview": "fiscal_period | fiscal_week | lines | loggedin_lines | loggedin_line_null | order_key_not_in_dim | key_mismatch | guest_with_key\n8 | 33 | 2309 | 1615 | 0 | 0 | 0 | 0\n8 | 34 | 2764 | 1857 | 0 | 0 | 0 | 0\n9 | 35 | 2399 | 1652 | 0 | 0 | 0 | 0\n9 | 36 | 1818 | 1260 | 0 | 0 | 0 | 0\n9 | 37 | 1250 | 863 | 0 | 0 | 0 | 0\n9 | 38 | 1215 | 823 | 0 | 0 | 0 | 0\n9 | 39 | 1216 | 837 | 0 | 0 | 0 | 0\n10 | 40 | 1207 | 851 | 0 | 0 | 0 | 0\n10 | 41 | 1206 | 810 | 0 | 0 | 0 | 0\n10 | 42 | 1208 | 787 | 299 | 0 | 0 | 0\n10 | 43 | 1128 | 766 | 407 | 0 | 0 | 0\n11 | 44 | 1204 | 818 | 465 | 0 | 0 | 0\n11 | 45 | 1285 | 842 | 138 | 0 | 0 | 0\n11 | 46 | 1396 | 958 | 0 | 0 | 0 | 0\n11 | 47 | 1301 | 890 | 0 | 0 | 0 | 0\n12 | 48 | 1303 | 898 | 0 | 0 | 0 | 0\n12 | 49 | 1449 | 958 | 0 | 0 | 0 | 0\n(17 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:31:58",
+   "statement": "WITH web_dispatch AS (\n  SELECT web_order_id, member_key AS order_member_key,\n         CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n  FROM fact_web_order\n  WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n  SELECT w.dispatch_date, w.order_member_key, f.net_amount\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n  WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period,\n       ROUND(100.0 * SUM(CASE WHEN l.order_member_key IS NOT NULL THEN l.net_amount ELSE 0 END) / SUM(l.net_amount), 1) AS member_share_of_web_sales_pct\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.dispatch_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 9 AND 11\nGROUP BY 1, 2\nORDER BY 1, 2;\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | member_share_of_web_sales_pct\nFY2025/26 | 9 | 68.0\nFY2025/26 | 10 | 67.5\nFY2025/26 | 11 | 66.7\n(3 rows)"
+  }
+ ]
+}

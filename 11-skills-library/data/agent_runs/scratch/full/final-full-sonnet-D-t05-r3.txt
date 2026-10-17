@@ -1,0 +1,37 @@
+{"sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), weekly AS (SELECT d.fiscal_year, d.fiscal_week, SUM(n.net_sales) AS net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date WHERE d.fiscal_period = 2 AND d.fiscal_year IN ('FY2026/27', 'FY2025/26') GROUP BY 1, 2) SELECT 'FY2026/27' AS fiscal_year, 2 AS fiscal_period, ty.fiscal_week, ty.net_sales AS this_year_net_sales, ly.net_sales AS last_year_net_sales, ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct FROM weekly ty JOIN weekly ly ON ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = 'FY2025/26' WHERE ty.fiscal_year = 'FY2026/27' ORDER BY ty.fiscal_week",
+"result": {
+"columns": ["fiscal_year", "fiscal_period", "fiscal_week", "this_year_net_sales", "last_year_net_sales", "growth_pct"],
+"rows": [
+["FY2026/27", 2, 5, 341054.61, 330868.04, 3.1],
+["FY2026/27", 2, 6, 362249.20, 329334.78, 10.0],
+["FY2026/27", 2, 7, 220623.76, 325472.70, -32.2],
+["FY2026/27", 2, 8, 370720.07, 210207.18, 76.4]
+]
+},
+"definitions_applied": [
+"Net sales: net amount excluding VAT, after returns, with returns deducted on their own return date",
+"Total company: physical stores plus the web shop (store 900) as one figure, no regional or channel split",
+"Web sales recognised on the Helsinki dispatch date (delivered and collected orders only); cancelled and processing orders excluded",
+"Store 999 and category ZZ Test excluded",
+"Staff purchases included",
+"Fiscal calendar: weeks run Monday to Sunday; period 2 is fiscal weeks 5 to 8",
+"Same fiscal week compared with the same fiscal week last year, not the same calendar dates",
+"Growth = this year / last year - 1, in percent",
+"Control total: weekly net sales checked against rpt_daily_store_sales net_sales and agree to the cent in all 8 weeks",
+"Deprecated objects (rpt.v_daily_sales, rpt.v_weekly_store_sales, channel_code, stg_, bak_, tmp_ tables) not used"
+],
+"assumptions": [
+"'This year' is FY2026/27, the current fiscal year on 5 October 2026, so period 2 is 1 to 28 June 2026 (weeks 5 to 8)",
+"'Last year' is FY2025/26 (the reading used for requests made in FY2026/27), so period 2 is 26 May to 22 June 2025 (weeks 5 to 8)",
+"'Sales' means net sales (excluding VAT, after returns), the company default",
+"Regions and categories are not involved, so as-is versus as-was does not affect the figures",
+"Period 2 is fully loaded in the warehouse for both years, and week 53 is not involved"
+],
+"caveats": [
+"No data errors were found: no duplicate sales lines, and the totals tie exactly to rpt_daily_store_sales. No corrections were needed and the filters excluding store 999 and ZZ Test did not change any total in these weeks.",
+"Weeks 7 and 8 are distorted by Midsummer. Midsummer Eve and Midsummer Day (stores shut by law) fell on 20 to 21 June 2025, in last year's week 8, but on 19 to 20 June 2026, in this year's week 7. This is why week 7 shows -32.2% and week 8 shows +76.4%. The two weeks together are 591,343.83 this year against 535,679.88 last year, +10.4%.",
+"Week 7 of this year is also reduced by the Kuopio (store 125) refit closure, which began 15 June 2026 and runs through 26 July 2026. Store 125 had no sales in weeks 7 and 8 of this year, so 38 stores traded instead of 39 in those weeks. The Kuopio refit therefore also holds back the total in week 8.",
+"Savonlinna (store 129) closed on 25 January 2026, so it trades last year but not this year, which lowers the growth in all four weeks. Total-company growth is not like-for-like.",
+"Part of the web growth comes from recognising web sales on the dispatch date. Some orders placed before the Midsummer break were dispatched afterwards, which inflates the Monday 22 June 2026 sales (about 70,000 on the day) and the week 8 figure."
+]
+}

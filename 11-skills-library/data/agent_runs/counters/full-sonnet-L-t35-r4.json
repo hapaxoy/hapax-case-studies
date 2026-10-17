@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t35-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T35",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "cca52d7aee5e055ec9150f88e02132c2c0d6697fcb87d72bf4c54851dd4e30b6",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:40:26",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 --as-of 2026-10-07",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5    as of: 2026-10-07    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:31",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, valid_from, valid_to, is_current FROM dim_store WHERE store_name ILIKE '%Pit%' OR store_id=102 ORDER BY store_key\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "store_key | store_id | store_name | city | region | format | valid_from | valid_to | is_current\n3 | 102 | Helsinki Pitäjänmäki | Helsinki | South | Large | 2000-01-01 | 2025-04-27 | false\n4 | 102 | Helsinki Pitäjänmäki | Helsinki | Capital Region | Large | 2025-04-28 | 9999-12-31 | true\n15 | 110 | Turku Kupittaa | Turku | South | Large | 2000-01-01 | 9999-12-31 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:37",
+   "statement": "WITH lines AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.quantity, p.sku, cp.product_name, cp.category, cp.subcategory, f.staff_purchase_flag\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE s.store_id = 102\n    AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n    AND cp.category <> 'ZZ Test' AND p.category <> 'ZZ Test'\n)\nSELECT sku, product_name, category, subcategory, SUM(quantity) AS units, COUNT(*) AS n_lines, COUNT(DISTINCT sales_line_id) AS n_distinct_lines, COUNT(DISTINCT (receipt_id, line_no)) AS n_distinct_rl, SUM(CASE WHEN staff_purchase_flag THEN quantity ELSE 0 END) AS staff_units\nFROM lines GROUP BY ALL ORDER BY units DESC LIMIT 8\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "sku | product_name | category | subcategory | units | n_lines | n_distinct_lines | n_distinct_rl | staff_units\n101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | Fixings & Fasteners | 52 | 14 | 14 | 14 | 0\n101778 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | Fixings & Fasteners | 44 | 13 | 13 | 13 | 0\n102244 | Batteries & Bulbs Havu Pro 791 | Electrical | Batteries & Bulbs | 42 | 19 | 19 | 19 | 2\n103670 | Storage Boxes Vesikko 753 | Cleaning & Household | Storage Boxes | 30 | 17 | 17 | 17 | 0\n102233 | Batteries & Bulbs Havu Pro 384 | Electrical | Batteries & Bulbs | 30 | 12 | 12 | 12 | 0\n103545 | Cleaning Products Poutaranta Home 928 | Cleaning & Household | Cleaning Products | 29 | 15 | 15 | 15 | 0\n102213 | Batteries & Bulbs Kuusela 444 | Electrical | Batteries & Bulbs | 29 | 12 | 12 | 12 | 0\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | Plumbing Parts | 29 | 14 | 14 | 14 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:43",
+   "statement": "WITH f AS (\n  SELECT f.sale_date, SUM(f.quantity) AS units_all, SUM(CASE WHEN p.category='ZZ Test' THEN f.quantity ELSE 0 END) AS units_test, COUNT(DISTINCT f.receipt_id) AS receipts, COUNT(*) AS n_lines, COUNT(DISTINCT f.sales_line_id) AS n_ids\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE s.store_id=102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' GROUP BY 1)\nSELECT COALESCE(f.sale_date, r.business_date) AS d, f.units_all, f.units_test, f.receipts, f.n_lines, f.n_ids, r.units_sold, r.receipts AS rpt_receipts\nFROM f FULL JOIN (SELECT * FROM rpt_daily_store_sales WHERE store_id=102 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') r ON r.business_date=f.sale_date\nORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 28,
+   "output_preview": "d | units_all | units_test | receipts | n_lines | n_ids | units_sold | rpt_receipts\n2026-08-31 | 140 | 0 | 32 | 80 | 80 | 140 | 32\n2026-09-01 | 106 | 0 | 23 | 57 | 57 | 106 | 23\n2026-09-02 | 191 | 0 | 48 | 111 | 111 | 191 | 48\n2026-09-03 | 130 | 0 | 32 | 75 | 75 | 130 | 32\n2026-09-04 | 150 | 0 | 35 | 83 | 83 | 150 | 35\n2026-09-05 | 203 | 0 | 50 | 113 | 113 | 203 | 50\n2026-09-06 | 82 | 0 | 21 | 42 | 42 | 82 | 21\n2026-09-07 | 70 | 0 | 18 | 40 | 40 | 70 | 18\n2026-09-08 | 89 | 0 | 23 | 52 | 52 | 89 | 23\n2026-09-09 | 98 | 0 | 28 | 60 | 60 | 98 | 28\n2026-09-10 | 140 | 0 | 33 | 78 | 78 | 140 | 33\n2026-09-11 | 173 | 0 | 40 | 100 | 100 | 173 | 40\n2026-09-12 | 159 | 0 | 45 | 97 | 97 | 159 | 45\n2026-09-13 | 143 | 0 | 31 | 80 | 80 | 143 | 31\n2026-09-14 | 121 | 0 | 26 | 68 | 68 | 121 | 26\n2026-09-15 | 95 | 0 | 20 | 48 | 48 | 95 | 20\n2026-09-16 | 103 | 0 | 28 | 62 | 62 | 103 | 28\n2026-09-17 | 104 | 0 | 26 | 62 | 62 | 104 | 26\n2026-09-18 | 182 | 0 | 46 | 110 | 110 | 182 | 46\n2026-09-19 | 217 | 0 | 52 | 119 | 119 | 217 | 52\n2026-09-20 | 124 | 0 | 28 | 71 | 71 | 124 | 28\n2026-09-21 | 97 | 0 | 21 | 51 | 51 | 97 | 21\n2026-09-22 | 149 | 0 | 43 | 92 | 92 | 149 | 43\n2026-09-23 | 94 | 0 | 25 | 54 | 54 | 94 | 25\n2026-09-24 | 148 | 0 | 42 | 81 | 81 | 148 | 42\n2026-09-25 | 184 | 0 | 47 | 104 | 104 | 184 | 47\n2026-09-26 | 195 | 0 | 48 | 100 | 100 | 195 | 48\n2026-09-27 | 53 | 0 | 12 | 31 | 31 | 53 | 12\n(28 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:47",
+   "statement": "SELECT p.sku, SUM(r.quantity_returned) AS returned_units_booked_in_period\nFROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\nWHERE s.store_id=102 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND p.sku IN (101624,101778,102244,103670,102233)\nGROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sku | returned_units_booked_in_period\n102244 | 1\n(1 row)"
+  }
+ ]
+}

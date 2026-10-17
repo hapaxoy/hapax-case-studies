@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2025-12-21' AS as_of_end), active AS (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key CROSS JOIN params p WHERE f.sale_date &gt; p.as_of_end - 364 AND f.sale_date &lt;= p.as_of_end) SELECT 'FY2025/26' AS fiscal_year, 8 AS fiscal_period, cur.tier, COUNT(*) AS active_members FROM active a CROSS JOIN params p JOIN dim_member cur ON cur.member_id = a.member_id AND p.as_of_end BETWEEN cur.valid_from AND cur.valid_to GROUP BY cur.tier ORDER BY CASE cur.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 WHEN 'Gold' THEN 3 END",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "tier", "active_members"],
+    "rows": [
+      ["FY2025/26", 8, "Basic", 14654],
+      ["FY2025/26", 8, "Silver", 10971],
+      ["FY2025/26", 8, "Gold", 3901]
+    ]
+  },
+  "definitions_applied": [
+    "Active member: at least one purchase in any channel in the trailing 52 fiscal weeks, ending with and including the as-of week (sale_date &gt; as-of Sunday - 364 and &lt;= as-of Sunday)",
+    "Members counted by distinct member_id, not member_key, so versions do not double count",
+    "Tier read from the dim_member version valid on the as-of Sunday",
+    "Fiscal calendar: FY2025/26 P08 is fiscal weeks 31 to 34, 24 Nov 2025 to 21 Dec 2025; end of the period is Sunday 21 Dec 2025",
+    "Sales lines linked to a member through member_key; guest orders carry no member key and so are not counted"
+  ],
+  "assumptions": [
+    "\"Last year\" asked on 7 Oct 2026 (FY2026/27) is read as FY2025/26, the previous fiscal year, as in accepted requests from May 2026. So \"period 8 last year\" is FY2025/26 P08.",
+    "\"End of period 8\" means the Sunday ending the period, 21 Dec 2025, which is the last day of fiscal week 34. The 52-week window runs 23 Dec 2024 to 21 Dec 2025.",
+    "Tier is the tier on 21 Dec 2025, not the current tier.",
+    "No total row was given because the request asked for a breakdown by tier only. The three tiers sum to 29,526 distinct active members."
+  ],
+  "caveats": [
+    "No data problems were found that needed correcting. All 328,182 member-linked sale lines in the window are unique. None are in training store 999 or the ZZ Test category, so the usual exclusions change nothing. Every active member had exactly one dim_member version valid on 21 Dec 2025, so none were dropped by the tier lookup.",
+    "If \"last year\" was meant as the 12 months before the request date, or as FY2024/25, the answer would differ. FY2025/26 was used."
+  ]
+}
+```

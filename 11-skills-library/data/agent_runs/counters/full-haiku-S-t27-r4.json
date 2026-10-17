@@ -1,0 +1,85 @@
+{
+ "run_id": "full-haiku-S-t27-r4",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T27",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "11afe311bc3fc3db81f94ed527119191fd52ab378b9aeadc9718985f2aee3051",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:54:55",
+   "statement": "SELECT DISTINCT region FROM dim_store WHERE is_current = TRUE ORDER BY region;\n",
+   "n": 1,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region\nCapital Region\nEast\nHead office\nNorth\nOnline\nSouth\nWest\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:54:59",
+   "statement": "SELECT DISTINCT region FROM dim_store_old ORDER BY region;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "region\nEast\nNorth\nSouth\nWest\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:55:04",
+   "statement": "SELECT MIN(sale_date) AS min_date, MAX(sale_date) AS max_date FROM fact_sales_line;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min_date | max_date\n2024-04-29 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:55:09",
+   "statement": "SELECT \n    EXTRACT(MONTH FROM f.sale_date) AS month_num,\n    TO_CHAR(f.sale_date, 'YYYY-MM') AS month,\n    o.region,\n    SUM(f.gross_amount) AS gross_sales_with_vat\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nINNER JOIN dim_store_old o ON ds.store_id = o.store_id\nWHERE f.sale_date >= '2024-08-01' \n  AND f.sale_date <= '2024-09-30'\n  AND ds.store_id < 900  -- Exclude pseudo-locations like online\nGROUP BY month_num, month, o.region\nORDER BY month_num, o.region;\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Catalog Error: Scalar Function with name to_char does not exist!\nDid you mean \"to_hours\"?\n\nLINE 3:     TO_CHAR(f.sale_date, 'YYYY-MM') AS month,\n            ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:55:13",
+   "statement": "SELECT \n    EXTRACT(MONTH FROM f.sale_date) AS month_num,\n    STRFTIME(f.sale_date, '%Y-%m') AS month,\n    o.region,\n    SUM(f.gross_amount) AS gross_sales_with_vat\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nINNER JOIN dim_store_old o ON ds.store_id = o.store_id\nWHERE f.sale_date >= '2024-08-01' \n  AND f.sale_date <= '2024-09-30'\n  AND ds.store_id < 900  -- Exclude pseudo-locations like online\nGROUP BY month_num, month, o.region\nORDER BY month_num, o.region;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "month_num | month | region | gross_sales_with_vat\n8 | 2024-08 | East | 296762.31\n8 | 2024-08 | North | 175960.85\n8 | 2024-08 | South | 489776.38\n8 | 2024-08 | West | 402582.35\n9 | 2024-09 | East | 249751.64\n9 | 2024-09 | North | 149625.27\n9 | 2024-09 | South | 445837.96\n9 | 2024-09 | West | 363697.29\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:55:17",
+   "statement": "SELECT \n    o.region,\n    SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 8 THEN f.gross_amount ELSE 0 END) AS august_2024,\n    SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 9 THEN f.gross_amount ELSE 0 END) AS september_2024\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nINNER JOIN dim_store_old o ON ds.store_id = o.store_id\nWHERE f.sale_date >= '2024-08-01' \n  AND f.sale_date <= '2024-09-30'\n  AND ds.store_id < 900  -- Exclude pseudo-locations like online\nGROUP BY o.region\nORDER BY o.region;\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "region | august_2024 | september_2024\nEast | 296762.31 | 249751.64\nNorth | 175960.85 | 149625.27\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:55:22",
+   "statement": "SELECT DISTINCT store_id, store_name, region \nFROM dim_store \nWHERE is_current = TRUE AND store_id >= 900\nORDER BY store_id;\n",
+   "n": 7,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_id | store_name | region\n900 | Tuomimetsä web shop | Online\n999 | Training store | Head office\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:55:26",
+   "statement": "SELECT COUNT(*) AS sales_with_unmatched_stores\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nLEFT JOIN dim_store_old o ON ds.store_id = o.store_id\nWHERE f.sale_date >= '2024-08-01' \n  AND f.sale_date <= '2024-09-30'\n  AND ds.store_id < 900\n  AND o.region IS NULL;\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sales_with_unmatched_stores\n0\n(1 row)"
+  }
+ ]
+}

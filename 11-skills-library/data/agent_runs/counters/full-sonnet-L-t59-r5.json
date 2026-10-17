@@ -1,0 +1,31 @@
+{
+ "run_id": "full-sonnet-L-t59-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T59",
+ "budget": 12,
+ "used": 2,
+ "refused": 0,
+ "packet_sha256": "684b04a8364acc3eadf91b3dfa66df785a6b1da91bb84603ae31b641052ce707",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:34",
+   "statement": "SELECT status, COUNT(*) AS n, COUNT(DISTINCT web_order_id) AS distinct_ids,\n SUM(CASE WHEN CAST(order_ts_utc AS DATE)=DATE '2025-11-28' THEN 1 ELSE 0 END) AS utc_day,\n SUM(CASE WHEN CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE)=DATE '2025-11-28' THEN 1 ELSE 0 END) AS hel_day,\n MIN(order_ts_utc), MAX(order_ts_utc)\nFROM fact_web_order\nWHERE order_ts_utc >= TIMESTAMP '2025-11-27 00:00:00' AND order_ts_utc < TIMESTAMP '2025-11-30 00:00:00'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | n | distinct_ids | utc_day | hel_day | min(order_ts_utc) | max(order_ts_utc)\ncancelled | 33 | 33 | 20 | 22 | 2025-11-27T08:29:08 | 2025-11-29T18:31:28\ncollected | 174 | 174 | 97 | 111 | 2025-11-27T04:26:10 | 2025-11-29T22:39:49\ndelivered | 483 | 483 | 260 | 291 | 2025-11-27T05:48:30 | 2025-11-29T23:47:59\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:41",
+   "statement": "WITH o AS (\n SELECT * FROM fact_web_order\n WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28' AND status<>'cancelled'\n), t AS (\n SELECT l.receipt_id, MAX(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS has_test,\n        MIN(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS all_test, COUNT(*) AS lines, MAX(s.store_id) AS sid\n FROM fact_sales_line l JOIN dim_product p ON p.product_key=l.product_key JOIN dim_store s ON s.store_key=l.store_key\n WHERE l.receipt_id IN (SELECT web_order_id FROM o) GROUP BY 1\n)\nSELECT COUNT(*) AS orders, COUNT(DISTINCT o.web_order_id) AS d, SUM(CASE WHEN t.receipt_id IS NULL THEN 1 ELSE 0 END) AS no_lines,\n SUM(COALESCE(t.has_test,0)) AS with_test, SUM(COALESCE(t.all_test,0)) AS all_test,\n SUM(CASE WHEN t.lines<>o.line_count THEN 1 ELSE 0 END) AS linecount_mismatch,\n SUM(CASE WHEN o.status='processing' THEN 1 ELSE 0 END) AS processing,\n COUNT(DISTINCT t.sid) AS store_ids, MIN(t.sid), MAX(t.sid)\nFROM o LEFT JOIN t ON t.receipt_id=o.web_order_id\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | d | no_lines | with_test | all_test | linecount_mismatch | processing | store_ids | min(t.sid) | max(t.sid)\n357 | 357 | 0 | 0 | 0 | 0 | 0 | 1 | 900 | 900\n(1 row)"
+  }
+ ]
+}

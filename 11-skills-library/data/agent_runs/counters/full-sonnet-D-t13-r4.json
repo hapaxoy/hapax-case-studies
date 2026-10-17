@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-D-t13-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T13",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "2c7e551c8c1d50a8d3c87a3c220ad4eca51ad9766201245849f0bfea5e567b06",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:12:33",
+   "statement": "SELECT fiscal_year, fiscal_period, MIN(calendar_date) s, MAX(calendar_date) e, MIN(fiscal_week) w1, MAX(fiscal_week) w2, (SELECT string_agg(DISTINCT format, ',') FROM dim_store) formats\nFROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=4 GROUP BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | s | e | w1 | w2 | formats\nFY2026/27 | 4 | 2026-08-03 | 2026-08-30 | 14 | 17 | Small,Large,Medium,Web,Training\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:12:35",
+   "statement": "SELECT COUNT(*) n, COUNT(DISTINCT (receipt_id, line_no)) dist_lines, COUNT(DISTINCT sales_line_id) dist_id, COUNT(DISTINCT etl_loaded_at) loads, MIN(etl_loaded_at), MAX(etl_loaded_at)\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | dist_lines | dist_id | loads | min(etl_loaded_at) | max(etl_loaded_at)\n48107 | 48107 | 48107 | 28 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:12:40",
+   "statement": "SELECT s.format, COUNT(DISTINCT s.store_id) stores, COUNT(DISTINCT f.receipt_id) receipts, SUM(f.net_amount) net,\n ROUND(SUM(f.net_amount)/COUNT(DISTINCT f.receipt_id),4) atv,\n COUNT(DISTINCT CASE WHEN f.net_amount<=0 THEN f.receipt_id END) nonpos_receipts,\n COUNT(DISTINCT CASE WHEN p.category='ZZ Test' THEN f.receipt_id END) test_receipts,\n COUNT(DISTINCT f.channel_code) chcodes\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n  AND s.store_id<900 AND s.store_id<>999 AND NOT f.staff_purchase_flag AND p.category<>'ZZ Test'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | stores | receipts | net | atv | nonpos_receipts | test_receipts | chcodes\nLarge | 8 | 6508 | 394865.46 | 60.6739 | 0 | 0 | 0\nMedium | 18 | 8641 | 520763.45 | 60.2666 | 0 | 0 | 0\nSmall | 12 | 2598 | 131841.05 | 50.7471 | 0 | 0 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:12:44",
+   "statement": "SELECT 'multi-store receipts' k, COUNT(*) v FROM (SELECT receipt_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY 1 HAVING COUNT(DISTINCT store_key)>1)\nUNION ALL SELECT 'mixed staff flag receipts', COUNT(*) FROM (SELECT receipt_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY 1 HAVING COUNT(DISTINCT staff_purchase_flag)>1)\nUNION ALL SELECT 'stores w/ >1 format', COUNT(*) FROM (SELECT store_id FROM dim_store GROUP BY 1 HAVING COUNT(DISTINCT format)>1)\nUNION ALL SELECT 'store 900 / 999 rows', COUNT(*) FROM fact_sales_line f JOIN dim_store s USING(store_key) WHERE s.store_id>=900 AND f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\nUNION ALL SELECT 'null format current stores', COUNT(*) FROM dim_store WHERE is_current AND format IS NULL\nUNION ALL SELECT 'closed/refit store rows in P4', COUNT(*) FROM ref_store_closure WHERE closure_end_date>=DATE '2026-08-03' AND closure_start_date<=DATE '2026-08-30'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "k | v\nmulti-store receipts | 0\nmixed staff flag receipts | 0\nstores w/ >1 format | 0\nstore 900 / 999 rows | 6586\nnull format current stores | 0\nclosed/refit store rows in P4 | 0\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:12:49",
+   "statement": "WITH a AS (\n SELECT s.store_id, COUNT(DISTINCT f.receipt_id) receipts, SUM(f.net_amount) net, COUNT(DISTINCT f.sale_date) days\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND p.category<>'ZZ Test'\n GROUP BY 1),\nb AS (SELECT store_id, SUM(receipts) receipts, SUM(net_sales_before_returns) net, COUNT(*) days FROM rpt_daily_store_sales\n WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id<900 GROUP BY 1)\nSELECT COALESCE(a.store_id,b.store_id) id, a.receipts ar, b.receipts br, a.net, b.net bnet, a.days, b.days bd\nFROM a FULL JOIN b ON a.store_id=b.store_id\nWHERE a.receipts IS DISTINCT FROM b.receipts OR abs(a.net-b.net)>0.5 OR a.days<>b.days\nORDER BY 1\n",
+   "n": 5,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"days\"\n\nLINE 2: ...) receipts, SUM(f.net_amount) net, COUNT(DISTINCT f.sale_date) days\n                                                                          ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:12:51",
+   "statement": "SELECT store_id, store_name, format, region, is_current, valid_from, valid_to FROM dim_store WHERE store_id<900 AND store_id NOT IN (SELECT store_id FROM dim_store WHERE is_current AND format IN ('Small','Medium','Large')) OR (store_id IN (SELECT store_id FROM dim_store GROUP BY 1 HAVING COUNT(*)>1) AND store_id>=100 AND store_id<110)\nORDER BY 1,6\n",
+   "n": 6,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | store_name | format | region | is_current | valid_from | valid_to\n101 | Helsinki Vuosaari | Medium | South | false | 2000-01-01 | 2025-04-27\n101 | Helsinki Vuosaari | Medium | Capital Region | true | 2025-04-28 | 9999-12-31\n102 | Helsinki Pitäjänmäki | Large | South | false | 2000-01-01 | 2025-04-27\n102 | Helsinki Pitäjänmäki | Large | Capital Region | true | 2025-04-28 | 9999-12-31\n103 | Espoo Lommila | Medium | South | false | 2000-01-01 | 2025-04-27\n103 | Espoo Lommila | Medium | Capital Region | true | 2025-04-28 | 9999-12-31\n104 | Vantaa Tammisto | Large | South | false | 2000-01-01 | 2025-04-27\n104 | Vantaa Tammisto | Large | Capital Region | true | 2025-04-28 | 9999-12-31\n105 | Kerava | Small | South | false | 2000-01-01 | 2025-04-27\n105 | Kerava | Small | Capital Region | true | 2025-04-28 | 9999-12-31\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:12:55",
+   "statement": "WITH a AS (\n SELECT s.store_id, COUNT(DISTINCT f.receipt_id) receipts, SUM(f.net_amount) net, COUNT(DISTINCT f.sale_date) ndays\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND s.store_id<>999 AND p.category<>'ZZ Test'\n GROUP BY 1),\nb AS (SELECT store_id, SUM(receipts) receipts, SUM(net_sales_before_returns) net, COUNT(*) ndays FROM rpt_daily_store_sales\n WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id<900 AND store_id<>999 GROUP BY 1)\nSELECT COALESCE(a.store_id,b.store_id) id, a.receipts ar, b.receipts br, a.net, b.net bnet, a.ndays, b.ndays bd\nFROM a FULL JOIN b ON a.store_id=b.store_id\nWHERE a.receipts IS DISTINCT FROM b.receipts OR abs(a.net-b.net)>0.5 OR a.ndays<>b.ndays\nORDER BY 1\n",
+   "n": 7,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "id | ar | br | net | bnet | ndays | bd\n(0 rows)"
+  }
+ ]
+}

@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t31-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "bb4665b0b2e8b21001e7b4fe0be380906b1dffd858109df4750837893f813cde",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:36",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded\nFROM ref_fiscal_calendar WHERE fiscal_period = 8 ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2024/25 | 8 | FY2024/25 P08 | 2024-11-25 | 2024-12-22 | 4 | 31 | 34 | true\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21 | 4 | 31 | 34 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:41",
+   "statement": "WITH active AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n),\nver AS (\n    SELECT a.member_id, count(cur.member_key) AS n_versions, min(cur.tier) AS tier\n    FROM active a\n    LEFT JOIN dim_member cur ON cur.member_id = a.member_id AND DATE '2025-12-21' BETWEEN cur.valid_from AND cur.valid_to\n    GROUP BY a.member_id\n)\nSELECT n_versions, tier, count(*) AS members FROM ver GROUP BY ALL ORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "n_versions | tier | members\n1 | Basic | 14654\n1 | Gold | 3901\n1 | Silver | 10971\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:49",
+   "statement": "WITH base AS (\n  SELECT f.sales_line_id, f.member_key, m.member_id, f.receipt_id, f.channel_code, s.store_id, p.category, wo.status\n  FROM fact_sales_line f\n  LEFT JOIN dim_member m ON m.member_key = f.member_key\n  LEFT JOIN dim_store s ON s.store_key = f.store_key\n  LEFT JOIN dim_product p ON p.product_key = f.product_key\n  LEFT JOIN fact_web_order wo ON wo.web_order_id = f.receipt_id AND s.store_id = 900\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n)\nSELECT\n  count(*) AS lines,\n  count(DISTINCT sales_line_id) AS distinct_line_ids,\n  count(*) FILTER (WHERE member_key IS NOT NULL AND member_id IS NULL) AS orphan_member_keys,\n  count(DISTINCT member_id) AS all_members,\n  count(DISTINCT member_id) FILTER (WHERE NOT (store_id = 999 OR category = 'ZZ Test')) AS excl_test,\n  count(DISTINCT member_id) FILTER (WHERE status IS DISTINCT FROM 'cancelled') AS excl_cancelled,\n  count(DISTINCT member_id) FILTER (WHERE NOT (store_id = 999 OR category = 'ZZ Test') AND status IS DISTINCT FROM 'cancelled') AS excl_both,\n  count(DISTINCT member_id) FILTER (WHERE store_id = 999) AS in_999,\n  count(DISTINCT member_id) FILTER (WHERE status = 'cancelled') AS in_cancelled\nFROM base\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | distinct_line_ids | orphan_member_keys | all_members | excl_test | excl_cancelled | excl_both | in_999 | in_cancelled\n617345 | 617345 | 0 | 29526 | 29526 | 29526 | 29526 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:48",
+   "statement": "SELECT d.fiscal_week_end_date AS week_end, count(*) AS lines, count(*) FILTER (WHERE f.member_key IS NOT NULL) AS member_lines, count(DISTINCT f.sale_date) AS days\nFROM fact_sales_line f JOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 52,
+   "output_preview": "week_end | lines | member_lines | days\n2024-12-29 | 11440 | 5875 | 7\n2025-01-05 | 9402 | 4707 | 7\n2025-01-12 | 8371 | 4245 | 7\n2025-01-19 | 9738 | 4855 | 7\n2025-01-26 | 9981 | 5055 | 7\n2025-02-02 | 9602 | 4955 | 7\n2025-02-09 | 8802 | 4483 | 7\n2025-02-16 | 8897 | 4461 | 7\n2025-02-23 | 8937 | 4418 | 7\n2025-03-02 | 9341 | 4762 | 7\n2025-03-09 | 9913 | 5066 | 7\n2025-03-16 | 10159 | 5143 | 7\n2025-03-23 | 10057 | 5013 | 7\n2025-03-30 | 10200 | 5251 | 7\n2025-04-06 | 11526 | 5785 | 7\n2025-04-13 | 11734 | 5919 | 7\n2025-04-20 | 8994 | 4756 | 7\n2025-04-27 | 11532 | 5916 | 7\n2025-05-04 | 11797 | 6086 | 7\n2025-05-11 | 14901 | 7732 | 7\n2025-05-18 | 15305 | 8159 | 7\n2025-05-25 | 15571 | 8273 | 7\n2025-06-01 | 14777 | 7995 | 7\n2025-06-08 | 14238 | 7601 | 7\n2025-06-15 | 14310 | 7432 | 7\n2025-06-22 | 9769 | 5511 | 7\n2025-06-29 | 14868 | 8196 | 7\n2025-07-06 | 13429 | 7320 | 7\n2025-07-13 | 12743 | 6588 | 7\n2025-07-20 | 12766 | 6775 | 7\n2025-07-27 | 12765 | 6722 | 7\n2025-08-03 | 12244 | 6407 | 7\n2025-08-10 | 11619 | 6118 | 7\n2025-08-17 | 11637 | 6198 | 7\n2025-08-24 | 11597 | 6166 | 7\n2025-08-31 | 11765 | 6256 | 7\n2025-09-07 | 11525 | 6243 | 7\n2025-09-14 | 10901 | 5907 | 7\n2025-09-21 | 11558 | 6180 | 7\n2025-09-28 | 10587 | 5808 | 7\n2025-10-05 | 11252 | 6307 | 7\n2025-10-12 | 11336 | 6163 | 7\n2025-10-19 | 11330 | 6039 | 7\n2025-10-26 | 11120 | 6010 | 7\n2025-11-02 | 11521 | 6272 | 7\n2025-11-09 | 12692 | 6925 | 7\n2025-11-16 | 12748 | 7009 | 7\n2025-11-23 | 13060 | 7027 | 7\n2025-11-30 | 15185 | 8778 | 7\n202"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:52",
+   "statement": "SELECT wo.login_state, (f.member_key IS NULL) AS line_member_null, (wo.member_key IS NULL) AS order_member_null, count(*) AS lines, count(DISTINCT wo.web_order_id) AS orders\nFROM fact_sales_line f JOIN fact_web_order wo ON wo.web_order_id = f.receipt_id\nWHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "login_state | line_member_null | order_member_null | lines | orders\nguest | true | true | 23319 | 11670\nlogged_in | false | false | 50286 | 25110\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:58",
+   "statement": "WITH as_of AS (\n    SELECT DISTINCT d.fiscal_year, d.fiscal_period, r.period_end_date AS as_of_end\n    FROM dim_date d\n    JOIN ref_fiscal_calendar r ON r.fiscal_year = d.fiscal_year AND r.fiscal_period = d.fiscal_period\n    WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 8\n),\nactive AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    CROSS JOIN as_of\n    WHERE f.sale_date > as_of.as_of_end - 364\n      AND f.sale_date <= as_of.as_of_end\n)\nSELECT as_of.fiscal_year, as_of.fiscal_period, cur.tier, COUNT(*) AS active_members\nFROM active a\nCROSS JOIN as_of\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nGROUP BY as_of.fiscal_year, as_of.fiscal_period, cur.tier\nORDER BY CASE cur.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 WHEN 'Gold' THEN 3 END\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | tier | active_members\nFY2025/26 | 8 | Basic | 14654\nFY2025/26 | 8 | Silver | 10971\nFY2025/26 | 8 | Gold | 3901\n(3 rows)"
+  }
+ ]
+}

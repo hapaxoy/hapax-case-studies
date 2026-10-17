@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t27-r4",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T27",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "1df4bac5c6a8d15957b96ac3872eae95b2702f86c95c9891ee4cb39e80ea5d9a",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:55",
+   "statement": "SELECT count(*) AS n, count(DISTINCT sales_line_id) AS d_line, count(DISTINCT (receipt_id, line_no)) AS d_rl, min(sale_date), max(sale_date), count(DISTINCT etl_loaded_at) AS loads,\n sum(CASE WHEN gross_amount <> round(net_amount*(1+vat_rate),2) THEN 1 ELSE 0 END) AS vat_mismatch,\n sum(CASE WHEN channel_code='WB' THEN 1 ELSE 0 END) AS wb_lines\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d_line | d_rl | min(sale_date) | max(sale_date) | loads | vat_mismatch | wb_lines\n90953 | 90953 | 90953 | 2024-08-01 | 2024-09-30 | 61 | 0 | 8679\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:59",
+   "statement": "SELECT w.status, count(*) AS orders, sum(CASE WHEN dispatch_ts_utc IS NULL THEN 1 ELSE 0 END) AS no_dispatch,\n min(CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE)) AS min_order, max(CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE)) AS max_order,\n min(CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)) AS min_disp, max(CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)) AS max_disp,\n count(DISTINCT web_order_id) AS dist\nFROM fact_web_order w\nWHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2024-07-15' AND DATE '2024-10-15'\nGROUP BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | orders | no_dispatch | min_order | max_order | min_disp | max_disp | dist\ncancelled | 281 | 281 | 2024-07-15 | 2024-10-15 | NULL | NULL | 281\ndelivered | 5274 | 0 | 2024-07-15 | 2024-10-15 | 2024-07-15 | 2024-10-19 | 5274\ncollected | 1574 | 0 | 2024-07-15 | 2024-10-15 | 2024-07-16 | 2024-10-18 | 1574\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:06",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales AS (\n    SELECT CASE WHEN s.store_id = 900 THEN w.dispatch_date ELSE f.sale_date END AS business_date,\n           s.region, s.store_id, f.gross_amount, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT region,\n       SUM(CASE WHEN business_date BETWEEN DATE '2024-08-01' AND DATE '2024-08-31' THEN gross_amount END) AS aug_2024,\n       SUM(CASE WHEN business_date BETWEEN DATE '2024-09-01' AND DATE '2024-09-30' THEN gross_amount END) AS sep_2024,\n       SUM(CASE WHEN business_date BETWEEN DATE '2024-08-01' AND DATE '2024-08-31' THEN net_amount END) AS aug_net,\n       SUM(CASE WHEN business_date BETWEEN DATE '2024-09-01' AND DATE '2024-09-30' THEN net_amount END) AS sep_net,\n       count(DISTINCT store_id) AS stores\nFROM sales\nWHERE business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | aug_2024 | sep_2024 | aug_net | sep_net | stores\nEast | 296762.31 | 249751.64 | 239523.83 | 199180.14 | 9\nNorth | 175960.85 | 149625.27 | 142048.63 | 119338.13 | 6\nOnline | 173563.99 | 160307.64 | 140078.41 | 127903.40 | 1\nSouth | 489776.38 | 445837.96 | 395312.92 | 355474.53 | 13\nWest | 402582.35 | 363697.29 | 324922.53 | 290023.29 | 10\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:12",
+   "statement": "SELECT date_trunc('month', f.sale_date) AS m, p.vat_class, f.vat_rate, count(*) AS n, sum(f.net_amount) AS net, sum(f.gross_amount) AS gross,\n  min(f.sale_date) AS mind, max(f.sale_date) AS maxd\nFROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY 1,2,3 ORDER BY 1,2,3\n",
+   "n": 4,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "m | vat_class | vat_rate | n | net | gross | mind | maxd\n2024-08-01T00:00:00 | reduced10 | 0.1000 | 62 | 1748.72 | 1923.63 | 2024-08-01 | 2024-08-31\n2024-08-01T00:00:00 | reduced14 | 0.1400 | 2082 | 10424.03 | 11884.33 | 2024-08-01 | 2024-08-31\n2024-08-01T00:00:00 | standard | 0.2400 | 45125 | 1233846.93 | 1529966.63 | 2024-08-01 | 2024-08-31\n2024-09-01T00:00:00 | reduced10 | 0.1000 | 65 | 2056.39 | 2262.11 | 2024-09-01 | 2024-09-30\n2024-09-01T00:00:00 | reduced14 | 0.1400 | 1258 | 6185.59 | 7051.98 | 2024-09-01 | 2024-09-30\n2024-09-01T00:00:00 | standard | 0.2550 | 42361 | 1086329.28 | 1363345.41 | 2024-09-01 | 2024-09-30\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:15",
+   "statement": "SELECT 'store_key dup' AS chk, count(*) - count(DISTINCT store_key) AS v FROM dim_store\nUNION ALL SELECT 'product_key dup', count(*) - count(DISTINCT product_key) FROM dim_product\nUNION ALL SELECT 'fact lines without store', count(*) FROM fact_sales_line f WHERE NOT EXISTS (SELECT 1 FROM dim_store s WHERE s.store_key=f.store_key)\nUNION ALL SELECT 'fact lines without product', count(*) FROM fact_sales_line f WHERE NOT EXISTS (SELECT 1 FROM dim_product s WHERE s.product_key=f.product_key)\nUNION ALL SELECT 'web lines w/o order', count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=900 AND NOT EXISTS (SELECT 1 FROM fact_web_order w WHERE w.web_order_id=f.receipt_id)\nUNION ALL SELECT 'store lines in Aug-Sep 2024 with 999', count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=999 AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nUNION ALL SELECT 'ZZ lines Aug-Sep 2024', count(*) FROM fact_sales_line f JOIN dim_product s ON s.product_key=f.product_key WHERE s.category='ZZ Test' AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "chk | v\nstore_key dup | 0\nproduct_key dup | 0\nfact lines without store | 0\nfact lines without product | 0\nweb lines w/o order | 0\nstore lines in Aug-Sep 2024 with 999 | 283\nZZ lines Aug-Sep 2024 | 68\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:22",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nmine AS (\n    SELECT CASE WHEN s.store_id = 900 THEN w.dispatch_date ELSE f.sale_date END AS d, s.store_id, f.net_amount\n    FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\na AS (SELECT store_id, sum(net_amount) AS mine FROM mine WHERE d BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' GROUP BY 1),\nb AS (SELECT store_id, sum(net_sales_before_returns) AS ctl FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' GROUP BY 1)\nSELECT coalesce(a.store_id,b.store_id) AS store_id, a.mine, b.ctl, a.mine-b.ctl AS gap\nFROM a FULL JOIN b ON a.store_id=b.store_id\nWHERE abs(coalesce(a.mine,0)-coalesce(b.ctl,0)) > 0.5\nUNION ALL SELECT -1, sum(mine), NULL, NULL FROM a\nUNION ALL SELECT -2, NULL, sum(ctl), NULL FROM b\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_id | mine | ctl | gap\n-1 | 2333805.81 | NULL | NULL\n-2 | NULL | 2333805.81 | NULL\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:29",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales AS (\n    SELECT CASE WHEN s.store_id = 900 THEN w.dispatch_date ELSE f.sale_date END AS business_date,\n           s.region, f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT region,\n       ROUND(SUM(CASE WHEN business_date BETWEEN DATE '2024-08-01' AND DATE '2024-08-31' THEN gross_amount END), 2) AS august_2024_gross_sales_incl_vat,\n       ROUND(SUM(CASE WHEN business_date BETWEEN DATE '2024-09-01' AND DATE '2024-09-30' THEN gross_amount END), 2) AS september_2024_gross_sales_incl_vat\nFROM sales\nWHERE business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY region\nORDER BY region\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | august_2024_gross_sales_incl_vat | september_2024_gross_sales_incl_vat\nEast | 296762.31 | 249751.64\nNorth | 175960.85 | 149625.27\nOnline | 173563.99 | 160307.64\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(5 rows)"
+  }
+ ]
+}

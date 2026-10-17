@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t25-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T25",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "c38674ce2326ead6278c52a47838da2fbf4217ef697e2c87682e4f56cded86aa",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:27:51",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id, valid_from, member_key,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) rn,\n         COUNT(*) OVER (PARTITION BY member_id) nv\n  FROM dim_member)\nSELECT 'members' k, COUNT(*) a, COUNT(DISTINCT member_id) b, SUM(CASE WHEN rn=1 AND valid_from<>join_date THEN 1 ELSE 0 END) c FROM fv\nUNION ALL SELECT 'rows_dupkey', COUNT(*), COUNT(DISTINCT member_key), 0 FROM dim_member\nUNION ALL SELECT 'fy_dates', 0, 0, 0\nUNION ALL SELECT 'joinrange '||min(join_date)||' '||max(join_date), 0,0,0 FROM dim_member\nUNION ALL SELECT 'fy '||fiscal_year||' '||min(calendar_date)||' '||max(calendar_date), COUNT(*),0,0 FROM dim_date WHERE fiscal_year='FY2025/26' GROUP BY fiscal_year\n",
+   "n": 1,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "k | a | b | c\nmembers | 89314 | 60000 | 0\nrows_dupkey | 89314 | 89314 | 0\nfy_dates | 0 | 0 | 0\njoinrange 2019-01-01 2026-10-04 | 0 | 0 | 0\nfy FY2025/26 2025-04-28 2026-05-03 | 371 | 0 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:27:57",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id, valid_from,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) rn\n  FROM dim_member),\nj AS (SELECT member_id, COUNT(DISTINCT join_date) nj FROM dim_member GROUP BY 1)\nSELECT 'multi_joindate' k, COUNT(*) v FROM j WHERE nj>1\nUNION ALL SELECT 'fy25_26_first_versions', COUNT(*) FROM fv WHERE rn=1 AND join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03'\nUNION ALL SELECT 'home_not_in_store', COUNT(*) FROM fv WHERE rn=1 AND join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03' AND home_store_id NOT IN (SELECT store_id FROM dim_store)\nUNION ALL SELECT 'home_999', COUNT(*) FROM fv WHERE rn=1 AND join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03' AND home_store_id=999\nUNION ALL SELECT 'cal2025_firstver', COUNT(*) FROM fv WHERE rn=1 AND year(join_date)=2025\nUNION ALL SELECT 'fy_after_load_joins', COUNT(*) FROM fv WHERE rn=1 AND join_date>DATE '2026-05-03'\nUNION ALL SELECT 'dup_keyvalid', COUNT(*) FROM (SELECT member_id, valid_from FROM dim_member GROUP BY 1,2 HAVING COUNT(*)>1)\n",
+   "n": 2,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "k | v\nmulti_joindate | 0\nfy25_26_first_versions | 14854\nhome_not_in_store | 0\nhome_999 | 0\ncal2025_firstver | 14629\nfy_after_load_joins | 6538\ndup_keyvalid | 0\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:28:01",
+   "statement": "WITH first_version AS (\n  SELECT member_id, join_date, home_store_id,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS version_no\n  FROM dim_member)\nSELECT fv.home_store_id AS store_id, cs.store_name, cs.region, cs.close_date, COUNT(*) AS new_members\nFROM first_version fv\nJOIN dim_date d ON d.calendar_date = fv.join_date\nLEFT JOIN dim_store cs ON cs.store_id = fv.home_store_id AND cs.is_current\nWHERE fv.version_no = 1 AND d.fiscal_year = 'FY2025/26'\nGROUP BY 1,2,3,4 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "store_id | store_name | region | close_date | new_members\n101 | Helsinki Vuosaari | Capital Region | NULL | 351\n102 | Helsinki Pitäjänmäki | Capital Region | NULL | 597\n103 | Espoo Lommila | Capital Region | NULL | 281\n104 | Vantaa Tammisto | Capital Region | NULL | 485\n105 | Kerava | Capital Region | NULL | 147\n106 | Porvoo | South | NULL | 171\n107 | Hyvinkää | South | NULL | 287\n108 | Lahti | South | NULL | 500\n109 | Hämeenlinna | South | NULL | 295\n110 | Turku Kupittaa | South | NULL | 500\n111 | Turku Härmälä | South | NULL | 261\n112 | Raisio | South | NULL | 156\n113 | Salo | South | NULL | 133\n114 | Kouvola | South | NULL | 249\n115 | Tampere Hervanta | West | NULL | 696\n116 | Tampere Lielahti | West | NULL | 459\n117 | Tampere Kaleva | West | NULL | 447\n118 | Nokia | West | NULL | 373\n119 | Pori | West | NULL | 342\n120 | Rauma | West | NULL | 144\n121 | Vaasa | West | NULL | 344\n122 | Seinäjoki | West | NULL | 331\n123 | Kokkola | West | NULL | 167\n124 | Jyväskylä Palokka | East | NULL | 309\n125 | Kuopio | East | NULL | 484\n126 | Joensuu | East | NULL | 378\n127 | Mikkeli | East | NULL | 289\n128 | Lappeenranta | East | NULL | 330\n129 | Savonlinna | East | 2026-01-25 | 113\n130 | Kotka | East | NULL | 143\n131 | Oulu Kaakkuri | North | NULL | 536\n132 | Oulu Linnanmaa | North | NULL | 311\n133 | Kemi | North | NULL | 157\n134 | Rovaniemi | North | NULL | 237\n135 | Kajaani | North | NULL | 133\n136 | Tampere Lamminpää | West | NULL | 304\n137 | Lohja | South | NULL | 155\n138 | Iisalmi"
+  }
+ ]
+}

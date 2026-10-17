@@ -1,0 +1,139 @@
+{
+ "run_id": "full-haiku-L-t14-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T14",
+ "budget": 30,
+ "used": 14,
+ "refused": 0,
+ "packet_sha256": "e2bba5b1124d433af7de58b9e33686fa9651b2f60d0aac77d9621395f7b6f842",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:20:22",
+   "statement": "SELECT \n  s.store_id,\n  s.store_name,\n  s.region,\n  s.format,\n  ROUND(SUM(f.net_amount) - COALESCE(SUM(r.refund_net), 0), 2) as net_sales\nFROM fact_sales_line f\nJOIN dim_store s ON f.store_key = s.store_key\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE s.store_id < 900  -- Exclude web shop (900) and training store (999)\n  AND f.product_key NOT IN (SELECT product_key FROM dim_product WHERE category = 'ZZ Test')\nGROUP BY s.store_id, s.store_name, s.region, s.format\nORDER BY net_sales DESC\nLIMIT 10\n",
+   "n": 1,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | store_name | region | format | net_sales\n115 | Tampere Hervanta | West | Large | 1962767.40\n110 | Turku Kupittaa | South | Large | 1345218.97\n131 | Oulu Kaakkuri | North | Large | 1337576.58\n108 | Lahti | South | Large | 1333475.01\n116 | Tampere Lielahti | West | Large | 1236621.74\n125 | Kuopio | East | Large | 1166246.53\n117 | Tampere Kaleva | West | Medium | 1163763.04\n102 | Helsinki Pitäjänmäki | Capital Region | Large | 1023422.47\n118 | Nokia | West | Medium | 987657.88\n119 | Pori | West | Medium | 968262.72\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:20:30",
+   "statement": "SELECT \n  store_id,\n  SUM(net_sales) as total_from_control\nFROM rpt_daily_store_sales\nWHERE store_id < 900\nGROUP BY store_id\nORDER BY total_from_control DESC\nLIMIT 10\n",
+   "n": 2,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | total_from_control\n115 | 1949839.42\n102 | 1651475.47\n110 | 1336678.69\n131 | 1329593.06\n108 | 1323795.16\n104 | 1265005.55\n116 | 1218444.71\n125 | 1160876.51\n117 | 1158519.34\n118 | 983196.98\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:20:38",
+   "statement": "WITH sales_by_store AS (\n  SELECT \n    f.store_key,\n    SUM(f.net_amount) as total_sales\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  WHERE s.store_id < 900  -- Exclude web shop and training store\n    AND f.product_key IN (SELECT product_key FROM dim_product WHERE category <> 'ZZ Test' AND is_current = TRUE)\n  GROUP BY f.store_key\n),\nreturns_by_store AS (\n  SELECT \n    r.store_key,\n    SUM(r.refund_net) as total_returns\n  FROM fact_return_line r\n  JOIN dim_store s ON r.store_key = s.store_key\n  WHERE s.store_id < 900\n    AND r.product_key IN (SELECT product_key FROM dim_product WHERE category <> 'ZZ Test' AND is_current = TRUE)\n  GROUP BY r.store_key\n)\nSELECT \n  s.store_id,\n  s.store_name,\n  s.region,\n  s.format,\n  ROUND(COALESCE(sales.total_sales, 0) - COALESCE(returns.total_returns, 0), 2) as net_sales\nFROM dim_store s\nLEFT JOIN sales_by_store sales ON s.store_key = sales.store_key\nLEFT JOIN returns_by_store returns ON s.store_key = returns.store_key\nWHERE s.is_current = TRUE\n  AND s.store_id < 900\nORDER BY net_sales DESC\nLIMIT 10\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | store_name | region | format | net_sales\n115 | Tampere Hervanta | West | Large | 1912510.78\n110 | Turku Kupittaa | South | Large | 1313536.29\n131 | Oulu Kaakkuri | North | Large | 1307067.23\n108 | Lahti | South | Large | 1297011.43\n116 | Tampere Lielahti | West | Large | 1218428.21\n117 | Tampere Kaleva | West | Medium | 1148219.75\n125 | Kuopio | East | Large | 1136292.77\n102 | Helsinki Pitäjänmäki | Capital Region | Large | 1008092.38\n118 | Nokia | West | Medium | 966829.68\n119 | Pori | West | Medium | 960274.34\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:20:48",
+   "statement": "WITH sales_by_store AS (\n  SELECT \n    f.store_key,\n    SUM(f.net_amount) as total_sales\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  JOIN dim_product p ON f.product_key = p.product_key\n  WHERE s.store_id < 900  -- Exclude web shop and training store\n    AND p.category <> 'ZZ Test'\n  GROUP BY f.store_key\n),\nreturns_by_store AS (\n  SELECT \n    r.store_key,\n    SUM(r.refund_net) as total_returns\n  FROM fact_return_line r\n  JOIN dim_store s ON r.store_key = s.store_key\n  JOIN dim_product p ON r.product_key = p.product_key\n  WHERE s.store_id < 900\n    AND p.category <> 'ZZ Test'\n  GROUP BY r.store_key\n)\nSELECT \n  s.store_id,\n  s.store_name,\n  s.region,\n  s.format,\n  ROUND(COALESCE(sales.total_sales, 0) - COALESCE(returns.total_returns, 0), 2) as net_sales\nFROM dim_store s\nLEFT JOIN sales_by_store sales ON s.store_key = sales.store_key\nLEFT JOIN returns_by_store returns ON s.store_key = returns.store_key\nWHERE s.is_current = TRUE\n  AND s.store_id < 900\nORDER BY net_sales DESC\nLIMIT 10\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | store_name | region | format | net_sales\n115 | Tampere Hervanta | West | Large | 1949839.42\n110 | Turku Kupittaa | South | Large | 1336678.69\n131 | Oulu Kaakkuri | North | Large | 1329593.06\n108 | Lahti | South | Large | 1323795.16\n116 | Tampere Lielahti | West | Large | 1228835.24\n125 | Kuopio | East | Large | 1160876.51\n117 | Tampere Kaleva | West | Medium | 1158519.34\n102 | Helsinki Pitäjänmäki | Capital Region | Large | 1014664.03\n118 | Nokia | West | Medium | 983196.98\n119 | Pori | West | Medium | 964304.52\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:20:59",
+   "statement": "SELECT SUM(net_sales) as total_net_sales_all_stores\nFROM rpt_daily_store_sales\nWHERE store_id < 900\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_net_sales_all_stores\n30579233.17\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:21:05",
+   "statement": "WITH sales_by_store AS (\n  SELECT \n    f.store_key,\n    SUM(f.net_amount) as total_sales\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  JOIN dim_product p ON f.product_key = p.product_key\n  WHERE s.store_id < 900\n    AND p.category <> 'ZZ Test'\n  GROUP BY f.store_key\n),\nreturns_by_store AS (\n  SELECT \n    r.store_key,\n    SUM(r.refund_net) as total_returns\n  FROM fact_return_line r\n  JOIN dim_store s ON r.store_key = s.store_key\n  JOIN dim_product p ON r.product_key = p.product_key\n  WHERE s.store_id < 900\n    AND p.category <> 'ZZ Test'\n  GROUP BY r.store_key\n)\nSELECT \n  ROUND(SUM(COALESCE(sales.total_sales, 0) - COALESCE(returns.total_returns, 0)), 2) as net_sales_total\nFROM dim_store s\nLEFT JOIN sales_by_store sales ON s.store_key = sales.store_key\nLEFT JOIN returns_by_store returns ON s.store_key = returns.store_key\nWHERE s.is_current = TRUE\n  AND s.store_id < 900\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "net_sales_total\n28365493.80\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:21:14",
+   "statement": "WITH sales_by_store AS (\n  SELECT \n    f.store_key,\n    SUM(f.net_amount) as total_sales\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  JOIN dim_product p ON f.product_key = p.product_key\n  WHERE s.store_id < 900\n    AND p.category <> 'ZZ Test'\n  GROUP BY f.store_key\n),\nreturns_by_store AS (\n  SELECT \n    r.store_key,\n    SUM(r.refund_net) as total_returns\n  FROM fact_return_line r\n  JOIN dim_store s ON r.store_key = s.store_key\n  JOIN dim_product p ON r.product_key = p.product_key\n  WHERE s.store_id < 900\n    AND p.category <> 'ZZ Test'\n  GROUP BY r.store_key\n)\nSELECT \n  s.store_id,\n  s.store_name,\n  ROUND(COALESCE(sales.total_sales, 0) - COALESCE(returns.total_returns, 0), 2) as net_sales\nFROM dim_store s\nLEFT JOIN sales_by_store sales ON s.store_key = sales.store_key\nLEFT JOIN returns_by_store returns ON s.store_key = returns.store_key\nWHERE s.is_current = TRUE\n  AND s.store_id < 900\nORDER BY s.store_id\n",
+   "n": 7,
+   "ok": true,
+   "rows": 39,
+   "output_preview": "store_id | store_name | net_sales\n101 | Helsinki Vuosaari | 581711.58\n102 | Helsinki Pitäjänmäki | 1014664.03\n103 | Espoo Lommila | 449628.01\n104 | Vantaa Tammisto | 780397.66\n105 | Kerava | 179682.51\n106 | Porvoo | 354640.51\n107 | Hyvinkää | 841254.30\n108 | Lahti | 1323795.16\n109 | Hämeenlinna | 764118.05\n110 | Turku Kupittaa | 1336678.69\n111 | Turku Härmälä | 631511.57\n112 | Raisio | 345092.46\n113 | Salo | 327736.63\n114 | Kouvola | 420343.63\n115 | Tampere Hervanta | 1949839.42\n116 | Tampere Lielahti | 1228835.24\n117 | Tampere Kaleva | 1158519.34\n118 | Nokia | 983196.98\n119 | Pori | 964304.52\n120 | Rauma | 289257.51\n121 | Vaasa | 937576.54\n122 | Seinäjoki | 789293.90\n123 | Kokkola | 337597.37\n124 | Jyväskylä Palokka | 898125.02\n125 | Kuopio | 1160876.51\n126 | Joensuu | 931330.96\n127 | Mikkeli | 708549.65\n128 | Lappeenranta | 940437.42\n129 | Savonlinna | 228074.58\n130 | Kotka | 409345.53\n131 | Oulu Kaakkuri | 1329593.06\n132 | Oulu Linnanmaa | 861928.80\n133 | Kemi | 348970.08\n134 | Rovaniemi | 562809.77\n135 | Kajaani | 295145.74\n136 | Tampere Lamminpää | 683085.13\n137 | Lohja | 265239.22\n138 | Iisalmi | 326030.05\n139 | Raahe | 426276.67\n(39 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:21:24",
+   "statement": "SELECT COUNT(DISTINCT store_id) as store_count, SUM(net_sales) as total_net_sales\nFROM rpt_daily_store_sales\nWHERE store_id < 900\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_count | total_net_sales\n39 | 30579233.17\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:21:30",
+   "statement": "WITH sales_by_store AS (\n  SELECT \n    f.store_key,\n    SUM(f.net_amount) as total_sales\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  WHERE s.store_id < 900\n  GROUP BY f.store_key\n),\nreturns_by_store AS (\n  SELECT \n    r.store_key,\n    SUM(r.refund_net) as total_returns\n  FROM fact_return_line r\n  JOIN dim_store s ON r.store_key = s.store_key\n  WHERE s.store_id < 900\n  GROUP BY r.store_key\n)\nSELECT \n  ROUND(SUM(COALESCE(sales.total_sales, 0) - COALESCE(returns.total_returns, 0)), 2) as net_sales_total\nFROM dim_store s\nLEFT JOIN sales_by_store sales ON s.store_key = sales.store_key\nLEFT JOIN returns_by_store returns ON s.store_key = returns.store_key\nWHERE s.is_current = TRUE\n  AND s.store_id < 900\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "net_sales_total\n28365493.80\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:21:35",
+   "statement": "SELECT \n  ROUND(SUM(net_amount), 2) as total_sales\nFROM fact_sales_line\nWHERE store_key IN (SELECT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900)\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_sales\n29752950.11\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:21:39",
+   "statement": "SELECT \n  ROUND(SUM(refund_net), 2) as total_returns\nFROM fact_return_line\nWHERE store_key IN (SELECT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900)\n",
+   "n": 11,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_returns\n1387456.31\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:21:49",
+   "statement": "WITH fact_sales_with_store AS (\n  SELECT \n    f.store_key,\n    f.net_amount\n  FROM fact_sales_line f\n),\nfact_returns_with_store AS (\n  SELECT \n    r.store_key,\n    r.refund_net\n  FROM fact_return_line r\n)\nSELECT \n  s.store_id,\n  s.store_name,\n  ROUND(\n    COALESCE((SELECT SUM(f.net_amount) FROM fact_sales_with_store f WHERE f.store_key = s.store_key), 0)\n    - \n    COALESCE((SELECT SUM(r.refund_net) FROM fact_returns_with_store r WHERE r.store_key = s.store_key), 0),\n    2\n  ) as net_sales\nFROM dim_store s\nWHERE s.is_current = TRUE\n  AND s.store_id < 900\nORDER BY net_sales DESC\nLIMIT 10\n",
+   "n": 12,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | store_name | net_sales\n115 | Tampere Hervanta | 1949839.42\n110 | Turku Kupittaa | 1336678.69\n131 | Oulu Kaakkuri | 1329593.06\n108 | Lahti | 1323795.16\n116 | Tampere Lielahti | 1228835.24\n125 | Kuopio | 1160876.51\n117 | Tampere Kaleva | 1158519.34\n102 | Helsinki Pitäjänmäki | 1014664.03\n118 | Nokia | 983196.98\n119 | Pori | 964304.52\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:03",
+   "statement": "WITH sales_by_store AS (\n  SELECT \n    f.store_key,\n    SUM(f.net_amount) as total_sales\n  FROM fact_sales_line f\n  WHERE f.store_key IN (SELECT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900)\n  GROUP BY f.store_key\n),\nreturns_by_store AS (\n  SELECT \n    r.store_key,\n    SUM(r.refund_net) as total_returns\n  FROM fact_return_line r\n  WHERE r.store_key IN (SELECT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900)\n  GROUP BY r.store_key\n)\nSELECT \n  'Including test articles' as version,\n  ROUND(SUM(COALESCE(s.total_sales, 0) - COALESCE(r.total_returns, 0)), 2) as total_net_sales\nFROM (SELECT DISTINCT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900) d\nLEFT JOIN sales_by_store s ON d.store_key = s.store_key\nLEFT JOIN returns_by_store r ON d.store_key = r.store_key\n\nUNION ALL\n\nWITH sales_by_store AS (\n  SELECT \n    f.store_key,\n    SUM(f.net_amount) as total_sales\n  FROM fact_sales_line f\n  JOIN dim_product p ON f.product_key = p.product_key\n  WHERE f.store_key IN (SELECT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900)\n    AND p.category <> 'ZZ Test'\n  GROUP BY f.store_key\n),\nreturns_by_store AS (\n  SELECT \n    r.store_key,\n    SUM(r.refund_net) as total_returns\n  FROM fact_return_line r\n  JOIN dim_product p ON r.product_key = p.product_key\n  WHERE r.store_key IN (SELECT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900)\n    AND p.category <> 'ZZ Test'\n  GROUP BY r.store_key\n)\nSELECT \n  'Excluding test articles' as version,\n  ROUND(SUM(COALESCE(s.total_sales, 0) - COALESCE(r.total_returns, 0)), 2) as total_net_sales\nFROM (SELECT DISTINCT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900) d\nLEFT JOIN sales_by_store s ON d.store_key = s.store_key\nLEFT JOIN returns_by_store r ON d.store_key = r.store_key\n",
+   "n": 13,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"WITH\"\n\nLINE 26: WITH sales_by_store AS (\n         ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:08",
+   "statement": "SELECT \n  ROUND(SUM(f.net_amount), 2) as total_sales,\n  ROUND(SUM(r.refund_net), 2) as total_returns\nFROM fact_sales_line f\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE f.store_key IN (SELECT store_key FROM dim_store WHERE is_current = TRUE AND store_id < 900)\n",
+   "n": 14,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_sales | total_returns\n29752950.11 | 1253171.04\n(1 row)"
+  }
+ ]
+}

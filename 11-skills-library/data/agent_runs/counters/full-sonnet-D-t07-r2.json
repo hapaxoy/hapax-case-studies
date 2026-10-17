@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-D-t07-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T07",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "6a45e81b7ab300e7546349eb4c11f158c89370715aa59946f2af0aeb22f409f8",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:11",
+   "statement": "SELECT 'cal' k, fiscal_year||' P'||fiscal_period||' Q'||fiscal_quarter a, CAST(period_start_date AS VARCHAR) b, CAST(period_end_date AS VARCHAR) c, CAST(fully_loaded AS VARCHAR) d FROM ref_fiscal_calendar WHERE fiscal_year='FY2024/25' AND fiscal_period>=10\nUNION ALL\nSELECT 'store', CAST(store_id AS VARCHAR)||' '||store_name, region, format, CAST(is_current AS VARCHAR)||' '||CAST(valid_from AS VARCHAR)||' '||CAST(valid_to AS VARCHAR) FROM dim_store WHERE region IN ('South') OR store_id IN (101,102,103,104,105,114,900,999)\nORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 26,
+   "output_preview": "k | a | b | c | d\ncal | FY2024/25 P10 Q4 | 2025-01-27 | 2025-02-23 | true\ncal | FY2024/25 P11 Q4 | 2025-02-24 | 2025-03-23 | true\ncal | FY2024/25 P12 Q4 | 2025-03-24 | 2025-04-27 | true\nstore | 101 Helsinki Vuosaari | South | Medium | false 2000-01-01 2025-04-27\nstore | 101 Helsinki Vuosaari | Capital Region | Medium | true 2025-04-28 9999-12-31\nstore | 102 Helsinki Pitäjänmäki | South | Large | false 2000-01-01 2025-04-27\nstore | 102 Helsinki Pitäjänmäki | Capital Region | Large | true 2025-04-28 9999-12-31\nstore | 103 Espoo Lommila | South | Medium | false 2000-01-01 2025-04-27\nstore | 103 Espoo Lommila | Capital Region | Medium | true 2025-04-28 9999-12-31\nstore | 104 Vantaa Tammisto | South | Large | false 2000-01-01 2025-04-27\nstore | 104 Vantaa Tammisto | Capital Region | Large | true 2025-04-28 9999-12-31\nstore | 105 Kerava | South | Small | false 2000-01-01 2025-04-27\nstore | 105 Kerava | Capital Region | Small | true 2025-04-28 9999-12-31\nstore | 106 Porvoo | South | Small | true 2000-01-01 9999-12-31\nstore | 107 Hyvinkää | South | Medium | true 2000-01-01 9999-12-31\nstore | 108 Lahti | South | Large | true 2000-01-01 9999-12-31\nstore | 109 Hämeenlinna | South | Medium | true 2000-01-01 9999-12-31\nstore | 110 Turku Kupittaa | South | Large | true 2000-01-01 9999-12-31\nstore | 111 Turku Härmälä | South | Medium | true 2000-01-01 9999-12-31\nstore | 112 Raisio | South | Small | true 2000-01-01 9999-12-31\nstore | 113 Salo | South | Small | true 2000-01-01 9999-12-31\nstor"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:16",
+   "statement": "SELECT 'sales' t, COUNT(*) n, COUNT(DISTINCT sales_line_id) d1, COUNT(DISTINCT (receipt_id, line_no)) d2, MIN(sale_date) mn, MAX(sale_date) mx\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27'\nUNION ALL\nSELECT 'ret', COUNT(*), COUNT(DISTINCT return_line_id), COUNT(DISTINCT sales_line_id), MIN(return_date), MAX(return_date)\nFROM fact_return_line WHERE return_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27'\nUNION ALL\nSELECT 'prodver', COUNT(*), COUNT(DISTINCT sku), SUM(CASE WHEN is_current THEN 1 ELSE 0 END), MIN(valid_from), MAX(valid_from) FROM dim_product\nUNION ALL\nSELECT 'cur_dup', COUNT(*), COUNT(DISTINCT sku), 0, NULL, NULL FROM dim_product WHERE is_current\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "t | n | d1 | d2 | mn | mx\nsales | 129694 | 129694 | 129694 | 2025-01-27 | 2025-04-27\nret | 4912 | 4912 | 4912 | 2025-01-27 | 2025-04-27\nprodver | 4105 | 4000 | 4000 | 2000-01-01 | 2026-06-01\ncur_dup | 4000 | 4000 | 0 | NULL | NULL\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:23",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, p.sku, f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, cp.category, cp.subcategory, cp.brand,\n       ROUND(SUM(n.net_sales),2) AS net_sales, ROUND(SUM(n.cost),2) AS cost,\n       ROUND(SUM(n.net_sales - n.cost),2) AS gross_margin,\n       ROUND(100.0*SUM(n.net_sales - n.cost)/SUM(n.net_sales),1) AS gm_pct\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4 AND cs.region = 'South'\nGROUP BY 1,2,3,4,5\nORDER BY gross_margin DESC\nLIMIT 14\n",
+   "n": 3,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "sku | product_name | category | subcategory | brand | net_sales | cost | gross_margin | gm_pct\n103075 | Cushions & Throws Tuulikki 338 | Home Textiles & Decor | Cushions & Throws | Tuulikki | 5292.14 | 2364.72 | 2927.42 | 55.3\n100955 | Interior Paint Norvik 298 | Paint & Decorating | Interior Paint | Norvik | 6816.15 | 4677.67 | 2138.48 | 31.4\n101763 | Fixings & Fasteners Nordhem 594 | Tools & Hardware | Fixings & Fasteners | Nordhem | 3418.53 | 1343.65 | 2074.88 | 60.7\n103390 | Bedroom Peltola 793 | Furniture | Bedroom | Peltola | 5877.95 | 4018.40 | 1859.55 | 31.6\n100953 | Interior Paint Tuulikki 224 | Paint & Decorating | Interior Paint | Tuulikki | 4005.86 | 2622.00 | 1383.86 | 34.5\n103062 | Cushions & Throws Kuusela 657 | Home Textiles & Decor | Cushions & Throws | Kuusela | 2494.08 | 1147.52 | 1346.56 | 54.0\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | Plumbing Parts | Ahvenisto | 2317.30 | 974.82 | 1342.48 | 57.9\n102538 | Cookware Nordhem 469 | Kitchen & Dining | Cookware | Nordhem | 3196.78 | 2019.39 | 1177.39 | 36.8\n101398 | Power Tools Havu Pro 689 | Tools & Hardware | Power Tools | Havu Pro | 3371.57 | 2275.91 | 1095.66 | 32.5\n101888 | Indoor Lighting Havu 419 | Electrical | Indoor Lighting | Havu | 2340.12 | 1361.28 | 978.84 | 41.8\n102116 | Smart Home Tuulikki 855 | Electrical | Smart Home | Tuulikki | 3032.49 | 2097.03 | 935.46 | 30.8\n103415 | Home Office Peltola 918 | Furniture | Home Office | Peltola | 2726.78 | 1801.50 | 925.28 | 33.9\n101512 |"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:26",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key\n    WHERE s.store_id <> 999\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key\n    WHERE s.store_id <> 999\n), a AS (\n  SELECT n.store_id, SUM(n.net_sales) ns FROM net_lines n\n  WHERE n.business_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND n.store_id IN (106,107,108,109,110,111,112,113,114,137) GROUP BY 1\n), b AS (\n  SELECT store_id, SUM(net_sales) rs FROM rpt_daily_store_sales\n  WHERE business_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND store_id IN (106,107,108,109,110,111,112,113,114,137) GROUP BY 1\n)\nSELECT COALESCE(a.store_id,b.store_id) store_id, a.ns, b.rs, ROUND(a.ns-b.rs,2) diff FROM a FULL JOIN b ON a.store_id=b.store_id ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "store_id | ns | rs | diff\n106 | 30140.14 | 30140.14 | 0.00\n107 | 72588.63 | 72588.63 | 0.00\n108 | 114098.08 | 114098.08 | 0.00\n109 | 61579.44 | 61579.44 | 0.00\n110 | 121982.77 | 121982.77 | 0.00\n111 | 54427.35 | 54427.35 | 0.00\n112 | 32088.17 | 32088.17 | 0.00\n113 | 27487.59 | 27487.59 | 0.00\n114 | 59789.82 | 59789.82 | 0.00\n137 | 19671.57 | 19671.57 | 0.00\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:33",
+   "statement": "SELECT COUNT(*) n, SUM(CASE WHEN f.standard_cost IS NULL THEN 1 ELSE 0 END) null_cost, SUM(CASE WHEN f.standard_cost<=0 THEN 1 ELSE 0 END) zero_cost,\n SUM(CASE WHEN f.net_amount IS NULL OR f.net_amount<=0 THEN 1 ELSE 0 END) bad_net,\n SUM(CASE WHEN ABS(f.standard_cost - f.quantity*p.standard_unit_cost) > 0.02 THEN 1 ELSE 0 END) cost_mismatch,\n SUM(CASE WHEN f.standard_cost > f.net_amount THEN 1 ELSE 0 END) cost_gt_net\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND s.store_id IN (106,107,108,109,110,111,112,113,114,137)\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | null_cost | zero_cost | bad_net | cost_mismatch | cost_gt_net\n25785 | 0 | 0 | 0 | 0 | 117\n(1 row)"
+  }
+ ]
+}

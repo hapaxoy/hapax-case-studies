@@ -1,0 +1,76 @@
+```json
+{
+  "sql": "WITH sales AS (SELECT f.sale_date AS business_date, st.store_id, f.net_amount AS net_sales FROM (SELECT *, row_number() OVER (PARTITION BY receipt_id, line_no ORDER BY etl_loaded_at, sales_line_id) AS rn FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-08-25' AND DATE '2025-09-21') f JOIN dim_store st ON st.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE f.rn = 1 AND st.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'), rets AS (SELECT r.return_date AS business_date, st.store_id, -r.refund_net AS net_sales FROM (SELECT *, row_number() OVER (PARTITION BY return_line_id ORDER BY return_ts_utc) AS rn FROM fact_return_line WHERE return_date BETWEEN DATE '2025-08-25' AND DATE '2025-09-21') r JOIN dim_store st ON st.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE r.rn = 1 AND st.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'), net AS (SELECT store_id, sum(net_sales) AS net_sales FROM (SELECT * FROM sales UNION ALL SELECT * FROM rets) GROUP BY 1), trading AS (SELECT st.store_id, count(*) AS trading_days FROM dim_store st JOIN dim_date d ON d.calendar_date BETWEEN DATE '2025-08-25' AND DATE '2025-09-21' WHERE st.is_current AND st.store_id &lt; 900 AND d.is_trading_day AND (st.open_date IS NULL OR st.open_date &lt;= d.calendar_date) AND (st.close_date IS NULL OR st.close_date &gt;= d.calendar_date) AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id = st.store_id AND d.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date) GROUP BY 1) SELECT rank() OVER (ORDER BY n.net_sales / t.trading_days DESC) AS rank, cs.store_id, cs.store_name, cs.region, round(n.net_sales, 2) AS net_sales, t.trading_days, round(n.net_sales / t.trading_days, 2) AS net_sales_per_trading_day FROM net n JOIN trading t USING (store_id) JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current ORDER BY rank",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "rank", "store_id", "store_name", "region", "net_sales", "trading_days", "net_sales_per_trading_day"],
+    "rows": [
+      ["FY2025/26", 5, 1, 115, "Tampere Hervanta", "West", 59872.99, 28, 2138.32],
+      ["FY2025/26", 5, 2, 102, "Helsinki Pitäjänmäki", "Capital Region", 49645.27, 28, 1773.05],
+      ["FY2025/26", 5, 3, 131, "Oulu Kaakkuri", "North", 44663.61, 28, 1595.13],
+      ["FY2025/26", 5, 4, 108, "Lahti", "South", 43038.90, 28, 1537.10],
+      ["FY2025/26", 5, 5, 104, "Vantaa Tammisto", "Capital Region", 41889.35, 28, 1496.05],
+      ["FY2025/26", 5, 6, 110, "Turku Kupittaa", "South", 37964.64, 28, 1355.88],
+      ["FY2025/26", 5, 7, 116, "Tampere Lielahti", "West", 37288.62, 28, 1331.74],
+      ["FY2025/26", 5, 8, 125, "Kuopio", "East", 37218.51, 28, 1329.23],
+      ["FY2025/26", 5, 9, 117, "Tampere Kaleva", "West", 36465.55, 28, 1302.34],
+      ["FY2025/26", 5, 10, 119, "Pori", "West", 16057.86, 14, 1146.99],
+      ["FY2025/26", 5, 11, 101, "Helsinki Vuosaari", "Capital Region", 29974.57, 28, 1070.52],
+      ["FY2025/26", 5, 12, 126, "Joensuu", "East", 29900.29, 28, 1067.87],
+      ["FY2025/26", 5, 13, 128, "Lappeenranta", "East", 29821.68, 28, 1065.06],
+      ["FY2025/26", 5, 14, 118, "Nokia", "West", 29618.45, 28, 1057.80],
+      ["FY2025/26", 5, 15, 121, "Vaasa", "West", 27847.90, 28, 994.57],
+      ["FY2025/26", 5, 16, 124, "Jyväskylä Palokka", "East", 26786.57, 28, 956.66],
+      ["FY2025/26", 5, 17, 122, "Seinäjoki", "West", 25881.11, 28, 924.33],
+      ["FY2025/26", 5, 18, 103, "Espoo Lommila", "Capital Region", 25774.70, 28, 920.53],
+      ["FY2025/26", 5, 19, 132, "Oulu Linnanmaa", "North", 25688.73, 28, 917.45],
+      ["FY2025/26", 5, 20, 136, "Tampere Lamminpää", "West", 24457.30, 28, 873.48],
+      ["FY2025/26", 5, 21, 107, "Hyvinkää", "South", 24062.70, 28, 859.38],
+      ["FY2025/26", 5, 22, 109, "Hämeenlinna", "South", 22384.54, 28, 799.45],
+      ["FY2025/26", 5, 23, 127, "Mikkeli", "East", 21734.54, 28, 776.23],
+      ["FY2025/26", 5, 24, 114, "Kouvola", "South", 21384.96, 28, 763.75],
+      ["FY2025/26", 5, 25, 111, "Turku Härmälä", "South", 19339.69, 28, 690.70],
+      ["FY2025/26", 5, 26, 134, "Rovaniemi", "North", 16704.95, 28, 596.61],
+      ["FY2025/26", 5, 27, 139, "Raahe", "North", 14028.34, 28, 501.01],
+      ["FY2025/26", 5, 28, 137, "Lohja", "South", 12084.90, 28, 431.60],
+      ["FY2025/26", 5, 29, 130, "Kotka", "East", 10855.23, 28, 387.69],
+      ["FY2025/26", 5, 30, 105, "Kerava", "Capital Region", 10757.43, 28, 384.19],
+      ["FY2025/26", 5, 31, 133, "Kemi", "North", 10748.91, 28, 383.89],
+      ["FY2025/26", 5, 32, 112, "Raisio", "South", 10742.69, 28, 383.67],
+      ["FY2025/26", 5, 33, 106, "Porvoo", "South", 10245.03, 28, 365.89],
+      ["FY2025/26", 5, 34, 138, "Iisalmi", "East", 10197.63, 28, 364.20],
+      ["FY2025/26", 5, 35, 113, "Salo", "South", 9648.93, 28, 344.60],
+      ["FY2025/26", 5, 36, 129, "Savonlinna", "East", 9247.82, 28, 330.28],
+      ["FY2025/26", 5, 37, 123, "Kokkola", "West", 9066.66, 28, 323.81],
+      ["FY2025/26", 5, 38, 120, "Rauma", "West", 8765.73, 28, 313.06],
+      ["FY2025/26", 5, 39, 135, "Kajaani", "North", 8539.34, 28, 304.98]
+    ]
+  },
+  "definitions_applied": [
+    "Store league table: stores ranked by net sales per trading day, physical stores only (store_id below 900); web shop (900) excluded",
+    "Net sales: net amount excluding VAT after returns; sales on sale_date, returns deducted on their own return date",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Staff purchases included in net sales",
+    "Trading days: days after opening, before closure, outside ref_store_closure refit closures, and not a closed holiday (dim_date.is_trading_day)",
+    "A store that traded only part of the period is still listed, ranked on its own trading days (Pori)",
+    "Fiscal calendar: FY2025/26 P5 = 25 Aug 2025 to 21 Sep 2025 (weeks 18 to 21, 28 days)",
+    "Regions shown as-is (current dim_store version, five regions including Capital Region)",
+    "Control total check against rpt_daily_store_sales (net sales and net sales before returns)",
+    "Deprecated objects (rpt.v_daily_sales, stg_, bak_, tmp_ tables, channel_code) not used"
+  ],
+  "assumptions": [
+    "'Period 5 last year' read as FY2025/26 P5 (25 Aug to 21 Sep 2025), because the request was made on 8 Oct 2026 (FY2026/27) and past requests in this situation took last year as the previous fiscal year (FY2025/26).",
+    "Ranking is by net sales per trading day, descending; ties would share a rank (none occurred).",
+    "Region is the current (as-is) region. As-was would put stores 101 to 105 in South and 114 in East, which is how the original four-region structure worked before 28 April 2025, but that structure no longer applies in the period requested, which started after the change.",
+    "Net sales per trading day is net sales for the store over the period divided by its own trading days, so Pori (14 trading days) is ranked on that basis even though its total is lower than stores trading the full 28 days.",
+    "No web sales are included, since the league table covers physical stores only."
+  ],
+  "caveats": [
+    "Correction: fact_sales_line contains duplicate rows for Tampere Lielahti (store 116) from 15 to 21 Sep 2025. A re-load on 23 Sep 2025 (etl_loaded_at 03:12) re-inserted 418 lines that had already been loaded the day after each sale, under new sales_line_ids. Left in, they would add EUR 10,390.53 to the store's net sales and wrongly lift it from rank 7 to rank 4 or so (EUR 49,995.41 before returns versus the correct EUR 39,604.88). I kept one row per receipt_id + line_no (the earliest load). After this fix every store matches rpt_daily_store_sales exactly (difference 0.00 for all 39 stores, net sales and net sales before returns).",
+    "Pori (119) was shut for a refit from 8 Sep to 12 Oct 2025, so it traded only 14 of the 28 days in this period (25 Aug to 7 Sep). Its figure is per those 14 trading days and it is ranked 10th on that basis; its period total of EUR 16,057.86 is not comparable with the full-period totals of other stores.",
+    "No public holidays or other closed days fall within 25 Aug to 21 Sep 2025, so no store lost trading days to holidays.",
+    "Savonlinna (129) closed on 25 Jan 2026, after this period, so it was fully trading in P5 FY2025/26 and is listed. Lamminpää (136) and Lohja (137) opened in 2024 and were open for the whole period.",
+    "The league table uses the later region assignment (as-is). Stores 101 to 105 are shown as Capital Region and 114 Kouvola as South, as in current management reporting.",
+    "Returns can arrive up to 30 days after sale, but this table deducts returns on their own return date within the period, so it is not a sale-week cohort measure."
+  ]
+}
+```

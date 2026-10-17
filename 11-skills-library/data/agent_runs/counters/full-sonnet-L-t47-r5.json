@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-L-t47-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T47",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "b157103b701ac3988e055062043e173102855b21f1fc39f5c3c407da49539872",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:20",
+   "statement": "SELECT tier, is_current, count(*) versions, count(DISTINCT member_id) members, min(valid_from), max(valid_from), min(valid_to), max(valid_to), min(join_date), max(join_date)\nFROM dim_member GROUP BY ALL ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tier | is_current | versions | members | min(valid_from) | max(valid_from) | min(valid_to) | max(valid_to) | min(join_date) | max(join_date)\nBasic | false | 19343 | 17903 | 2019-01-01 | 2026-10-01 | 2024-05-28 | 2026-10-02 | 2019-01-01 | 2026-09-03\nBasic | true | 31229 | 31229 | 2019-01-01 | 2026-10-04 | 9999-12-31 | 9999-12-31 | 2019-01-01 | 2026-10-04\nGold | false | 2412 | 2233 | 2019-01-01 | 2026-09-30 | 2024-05-28 | 2026-10-02 | 2019-01-01 | 2026-09-03\nGold | true | 5791 | 5791 | 2019-01-02 | 2026-10-04 | 9999-12-31 | 9999-12-31 | 2019-01-02 | 2026-10-04\nSilver | false | 7559 | 7068 | 2019-01-01 | 2026-10-02 | 2024-05-28 | 2026-10-02 | 2019-01-01 | 2026-09-03\nSilver | true | 22980 | 22980 | 2019-01-02 | 2026-10-04 | 9999-12-31 | 9999-12-31 | 2019-01-01 | 2026-10-04\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:21",
+   "statement": "SELECT count(*) n_member_ids_with_multi_current, sum(c) FROM (SELECT member_id, count(*) c FROM dim_member WHERE is_current GROUP BY 1 HAVING count(*)>1)\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n_member_ids_with_multi_current | sum(c)\n0 | NULL\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:29",
+   "statement": "WITH m AS (SELECT member_id, count(*) n, sum(is_current::int) cur, sum((valid_to='9999-12-31')::int) open_ended, max(valid_from) mx FROM dim_member GROUP BY 1)\nSELECT count(*) members, sum((cur=0)::int) no_current, sum((open_ended<>cur)::int) flag_mismatch, sum((cur>1)::int) multi,\n (SELECT count(*) FROM dim_member a JOIN dim_member b ON a.member_id=b.member_id AND a.member_key<b.member_key AND a.valid_from<=b.valid_to AND b.valid_from<=a.valid_to) overlaps,\n (SELECT count(*) FROM dim_member WHERE member_key IS NULL) null_key,\n (SELECT count(*)-count(DISTINCT member_key) FROM dim_member) dup_keys,\n (SELECT max(sale_date) FROM fact_sales_line) max_sale, (SELECT max(valid_from) FROM dim_member) maxvf,\n (SELECT count(*) FROM stg_member_updates) stg_rows\nFROM m\n",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"overlaps\"\n\nLINE 3: ... AND a.valid_from<=b.valid_to AND b.valid_from<=a.valid_to) overlaps,\n                                                                       ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:34",
+   "statement": "WITH m AS (SELECT member_id, count(*) n, sum(is_current::int) cur, sum((valid_to='9999-12-31')::int) open_ended, max(valid_from) mx FROM dim_member GROUP BY 1)\nSELECT count(*) members, sum((cur=0)::int) no_current, sum((open_ended<>cur)::int) flag_mismatch, sum((cur>1)::int) multi,\n (SELECT count(*) FROM dim_member a JOIN dim_member b ON a.member_id=b.member_id AND a.member_key<b.member_key AND a.valid_from<=b.valid_to AND b.valid_from<=a.valid_to) n_overlaps,\n (SELECT count(*) FROM dim_member WHERE member_key IS NULL) null_key,\n (SELECT count(*)-count(DISTINCT member_key) FROM dim_member) dup_keys,\n (SELECT max(sale_date) FROM fact_sales_line) max_sale, (SELECT max(valid_from) FROM dim_member) maxvf,\n (SELECT count(*) FROM stg_member_updates) stg_rows\nFROM m\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members | no_current | flag_mismatch | multi | n_overlaps | null_key | dup_keys | max_sale | maxvf | stg_rows\n60000 | 0 | 0 | 0 | 0 | 0 | 0 | 2026-10-04 | 2026-10-04 | 4061\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:41",
+   "statement": "SELECT home_store_id, count(*) gold_members, sum((join_date>DATE '2026-10-04')::int) future_join, sum((valid_from>DATE '2026-10-08')::int) future_ver\nFROM dim_member WHERE is_current AND tier='Gold' GROUP BY 1 ORDER BY 2 DESC LIMIT 8\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "home_store_id | gold_members | future_join | future_ver\n900 | 1161 | 0 | 0\n115 | 287 | 0 | 0\n102 | 244 | 0 | 0\n131 | 221 | 0 | 0\n110 | 214 | 0 | 0\n104 | 204 | 0 | 0\n108 | 202 | 0 | 0\n125 | 182 | 0 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:43",
+   "statement": "SELECT s.is_current, s.tier, count(*) n, count(d.member_key) key_in_dim, min(s.valid_from), max(s.valid_from)\nFROM stg_member_updates s LEFT JOIN dim_member d ON d.member_key=s.member_key GROUP BY ALL\n",
+   "n": 6,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "is_current | tier | n | key_in_dim | min(s.valid_from) | max(s.valid_from)\nfalse | Basic | 56 | 56 | 2026-09-05 | 2026-10-01\ntrue | Silver | 2020 | 2020 | 2026-09-04 | 2026-10-04\ntrue | Basic | 1486 | 1486 | 2026-09-04 | 2026-10-04\ntrue | Gold | 433 | 433 | 2026-09-04 | 2026-10-04\nfalse | Gold | 10 | 10 | 2026-09-07 | 2026-09-30\nfalse | Silver | 56 | 56 | 2026-09-04 | 2026-10-02\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:50",
+   "statement": "SELECT count(DISTINCT cm.member_id) active_gold\nFROM fact_sales_line f\nJOIN dim_member fm ON fm.member_key=f.member_key\nJOIN dim_member cm ON cm.member_id=fm.member_id AND cm.is_current AND cm.tier='Gold'\nJOIN dim_store s ON s.store_key=f.store_key AND s.store_id<>999\nJOIN dim_product p ON p.product_key=f.product_key AND p.category<>'ZZ Test'\nWHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "active_gold\n4827\n(1 row)"
+  }
+ ]
+}

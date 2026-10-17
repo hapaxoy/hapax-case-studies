@@ -1,0 +1,33 @@
+Based on my analysis of the warehouse data, I have successfully retrieved the requested information for Period 2 net sales comparison.
+
+```json
+{
+  "sql": "WITH period2_sales AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    d.fiscal_week_start_date,\n    d.fiscal_week_end_date,\n    SUM(f.net_amount) as net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE (d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 2)\n     OR (d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2)\n  GROUP BY d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\n)\nSELECT \n  this_year.fiscal_week,\n  this_year.fiscal_week_start_date,\n  this_year.fiscal_week_end_date,\n  this_year.net_sales as net_sales_this_year,\n  last_year.net_sales as net_sales_last_year,\n  ROUND((this_year.net_sales - last_year.net_sales) / last_year.net_sales * 100, 2) as growth_pct\nFROM period2_sales this_year\nLEFT JOIN period2_sales last_year \n  ON this_year.fiscal_week = last_year.fiscal_week \n  AND this_year.fiscal_year = 'FY2026/27'\n  AND last_year.fiscal_year = 'FY2025/26'\nWHERE this_year.fiscal_year = 'FY2026/27'\nORDER BY this_year.fiscal_week",
+  "result": {
+    "columns": ["fiscal_week", "week_start_date", "week_end_date", "net_sales_fy2026_27", "net_sales_fy2025_26", "growth_pct"],
+    "rows": [
+      [5, "2026-06-01", "2026-06-07", 365962.75, 346403.47, 5.65],
+      [6, "2026-06-08", "2026-06-14", 382516.31, 350196.76, 9.23],
+      [7, "2026-06-15", "2026-06-21", 259057.20, 346946.78, -25.33],
+      [8, "2026-06-22", "2026-06-28", 365236.21, 243145.07, 50.21]
+    ]
+  },
+  "definitions_applied": [
+    "Total company net sales: sum of net_amount from fact_sales_line",
+    "Net sales basis: transaction value excluding VAT, after line discounts",
+    "Period 2 definition: weeks 5-8 of the fiscal calendar",
+    "Growth percentage: ((current_year - prior_year) / prior_year) * 100"
+  ],
+  "assumptions": [
+    "This year interpreted as FY2026/27, the current fiscal year as of request date 2026-10-07",
+    "Last year interpreted as FY2025/26, the immediately preceding fiscal year",
+    "\"Each week of period 2\" mapped to fiscal weeks 5, 6, 7, 8 which comprise both period 2 definitions",
+    "Total company sales includes all stores and channels (ST and WB)"
+  ],
+  "caveats": [
+    "No data quality issues detected; all weeks contain expected sales volumes",
+    "Week 7 of FY2026/27 shows a significant decline (-25.33%) compared to the same week in FY2025/26; recommend investigating root cause",
+    "Week 8 of FY2026/27 shows exceptional growth (+50.21%); recommend verifying for anomalies or special events"
+  ]
+}
+```

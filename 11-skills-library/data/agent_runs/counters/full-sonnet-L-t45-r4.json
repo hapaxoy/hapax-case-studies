@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t45-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T45",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "08433a1cf87650e00a11ad85aa0d726896462dffdfbcd9db78b12d76ef1cb0e3",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:18:59",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE '%tampere%' OR store_name ILIKE '%tampere%' OR store_id >= 900 ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n21 | 115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n23 | 117 | Tampere Kaleva | Tampere | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n42 | 136 | Tampere Lamminpää | Tampere | West | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n46 | 900 | Tuomimetsä web shop | Tampere | Online | Web | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n47 | 999 | Training store | Tampere | Head office | Training | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:17",
+   "statement": "WITH tre AS (SELECT store_id FROM dim_store WHERE city = 'Tampere' AND store_id < 900 AND is_current),\ncur AS (SELECT member_id, home_store_id FROM dim_member WHERE is_current),\nasof AS (SELECT member_id, home_store_id FROM dim_member WHERE DATE '2026-10-04' BETWEEN valid_from AND valid_to),\nact_all AS (\n  SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'),\nact_clean AS (\n  SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key\n  JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test')\nSELECT 'registered_current_home_tampere' AS k, count(DISTINCT member_id) n FROM cur WHERE home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'registered_asof_home_tampere', count(DISTINCT member_id) FROM asof WHERE home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'active_all_home_tampere_asof', count(DISTINCT a.member_id) FROM act_all a JOIN asof o USING(member_id) WHERE o.home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'active_clean_home_tampere_asof', count(DISTINCT a.member_id) FROM act_clean a JOIN asof o USING(member_id) WHERE o.home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'active_clean_home_tampere_current', count(DISTINCT a.member_id) FROM act_clean a JOIN cur o USING(member_id) WHERE o.home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'asof_rows_dupe_check', count(*) - count(DISTINCT member_id) FROM asof\n",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"asof\"\n\nLINE 3: asof AS (SELECT member_id, home_store_id FROM dim_member...\n        ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:25",
+   "statement": "WITH tre AS (SELECT store_id FROM dim_store WHERE city = 'Tampere' AND store_id < 900 AND is_current),\ncur AS (SELECT member_id, home_store_id FROM dim_member WHERE is_current),\nmem_asof AS (SELECT member_id, home_store_id FROM dim_member WHERE DATE '2026-10-04' BETWEEN valid_from AND valid_to),\nact_all AS (\n  SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'),\nact_clean AS (\n  SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key\n  JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test')\nSELECT 'registered_current_home_tampere' AS k, count(DISTINCT member_id) n FROM cur WHERE home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'registered_asof_home_tampere', count(DISTINCT member_id) FROM mem_asof WHERE home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'active_all_home_tampere_asof', count(DISTINCT a.member_id) FROM act_all a JOIN mem_asof o USING(member_id) WHERE o.home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'active_clean_home_tampere_asof', count(DISTINCT a.member_id) FROM act_clean a JOIN mem_asof o USING(member_id) WHERE o.home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'active_clean_home_tampere_current', count(DISTINCT a.member_id) FROM act_clean a JOIN cur o USING(member_id) WHERE o.home_store_id IN (SELECT store_id FROM tre)\nUNION ALL SELECT 'asof_rows_dupe_check', count(*) - count(DISTINCT member_id) FROM mem_asof\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "k | n\nregistered_current_home_tampere | 7175\nregistered_asof_home_tampere | 7175\nactive_all_home_tampere_asof | 4441\nactive_clean_home_tampere_asof | 4441\nactive_clean_home_tampere_current | 4441\nasof_rows_dupe_check | 0\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:32",
+   "statement": "SELECT (SELECT count(*) - count(DISTINCT member_id) FROM dim_member WHERE is_current) AS dup_current,\n (SELECT count(*) FROM dim_member WHERE is_current AND home_store_id IN (115,116,117,136) AND join_date > DATE '2026-10-04') AS joined_after,\n (SELECT count(*) FROM dim_member WHERE is_current AND home_store_id=900) AS online_signups,\n (SELECT max(sale_date) FROM fact_sales_line) AS max_sale_date,\n (SELECT count(DISTINCT member_id) FROM dim_member WHERE is_current AND home_store_id IN (115,116,117,136) AND join_date <= DATE '2026-10-04') AS reg_joined_by\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_current | joined_after | online_signups | max_sale_date | reg_joined_by\n0 | 0 | 12028 | 2026-10-04 | 7175\n(1 row)"
+  }
+ ]
+}

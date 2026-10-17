@@ -1,6 +1,6 @@
 # Hapax case studies
 
-The complete pipelines, datasets and held-out answer keys behind the ten case
+The complete pipelines, datasets and held-out answer keys behind the eleven case
 studies published at [hapax.fi](https://hapax.fi) — an AI advisory and training
 boutique in Helsinki. Each folder is one case: the generator that built the
 dataset, the code that ran the method, the results, and the analysis, in full.
@@ -17,6 +17,7 @@ dataset, the code that ran the method, the results, and the analysis, in full.
 | [`08-inbox/`](08-inbox/) | A pipeline classifies 150 customer emails, drafts replies with policy citations, checks each draft against fixed rules and sends it or routes it to a person | [hapax.fi/case-inbox.html](https://hapax.fi/case-inbox.html) |
 | [`09-training-outcomes/`](09-training-outcomes/) | A before-and-after assessment of a training programme, tested on a simulated cohort whose true learning was set in advance | [hapax.fi/case-training-outcomes.html](https://hapax.fi/case-training-outcomes.html) |
 | [`10-talent-screening/`](10-talent-screening/) | 240 synthetic job applications screened four ways; a workflow returns evidence with verbatim quotes against twelve requirements, with no ranking or verdict | [hapax.fi/case-talent-screening.html](https://hapax.fi/case-talent-screening.html) |
+| [`11-skills-library/`](11-skills-library/) | Sixty data requests answered by an AI assistant in four setups differing only in whether it was given the company's written rules; accuracy went from 49.7% to 99.3% | [hapax.fi/case-skills-library.html](https://hapax.fi/case-skills-library.html) |
 
 Most case folders have their own `README.md` with the exact commands to run
 the pipeline; every case has its code, data, results and writeup. The design

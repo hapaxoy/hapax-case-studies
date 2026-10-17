@@ -1,0 +1,27 @@
+Perfect! The query passes all validation checks. Now I'll prepare the final JSON response.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 6 AS first_period, 6 AS last_period\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n),\nby_category AS (\n    SELECT cp.category, SUM(n.net_sales) AS net_sales, SUM(n.net_sales - n.cost) AS gross_margin\n    FROM net_lines n\n    JOIN dim_date d     ON d.calendar_date = n.business_date\n    JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period BETWEEN params.first_period AND params.last_period\n      AND cp.category IN ('Garden', 'Electrical')\n    GROUP BY 1\n)\nSELECT category, net_sales, ROUND(100.0 * gross_margin / net_sales, 1) AS gross_margin_pct\nFROM by_category\nORDER BY category;",
+  "result": {
+    "columns": ["category", "net_sales", "gross_margin_pct"],
+    "rows": [
+      ["Electrical", 219493.00, 41.0],
+      ["Garden", 114805.94, 40.2]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Gross margin percentage: (net sales minus standard cost) divided by net sales, both after returns",
+    "Scope: store_id &lt;&gt; 999, category &lt;&gt; 'ZZ Test'",
+    "Web sales recognized on dispatch date in Helsinki time",
+    "Product categories from current product version (as-is reporting)"
+  ],
+  "assumptions": [
+    "Interpreted 'period 6 last year' as period 6 of FY2025/26 (the most recent completed period 6), which ran 22 September to 26 October 2025"
+  ],
+  "caveats": [
+    "No data quality issues detected"
+  ]
+}
+```

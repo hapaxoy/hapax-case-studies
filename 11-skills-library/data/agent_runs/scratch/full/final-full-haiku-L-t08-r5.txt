@@ -1,0 +1,37 @@
+Excellent. The query is verified with no issues. Now let me prepare the final answer in JSON format. The result shows like-for-like growth by region for Q3 FY2025/26 (which is Q3 last year from the current FY2026/27 perspective).
+
+```json
+{
+  "sql": "WITH params AS (SELECT 'FY2025/26' AS ty_year, 'FY2024/25' AS ly_year, 27 AS first_week, 39 AS last_week), range_start AS (SELECT MIN(d.calendar_date) AS first_day FROM dim_date d CROSS JOIN params WHERE d.fiscal_year = params.ty_year AND d.fiscal_week = params.first_week), weeks AS (SELECT DISTINCT d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date FROM dim_date d CROSS JOIN params WHERE d.fiscal_year IN (params.ty_year, params.ly_year) AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)), store_weeks AS (SELECT st.store_id, w.fiscal_year, w.fiscal_week, (st.open_date IS NULL OR st.open_date <= w.fiscal_week_start_date) AND (st.close_date IS NULL OR st.close_date >= w.fiscal_week_end_date) AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id = st.store_id AND c.closure_start_date <= w.fiscal_week_end_date AND c.closure_end_date >= w.fiscal_week_start_date) AS trading FROM dim_store st CROSS JOIN weeks w WHERE st.is_current AND st.store_id < 900), lfl_store_weeks AS (SELECT ty.store_id, ty.fiscal_week FROM store_weeks ty CROSS JOIN params CROSS JOIN range_start JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = params.ly_year JOIN dim_store st ON st.store_id = ty.store_id AND st.is_current WHERE ty.fiscal_year = params.ty_year AND ty.trading AND ly.trading AND (st.open_date IS NULL OR st.open_date <= range_start.first_day - 364)), web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'), lfl_sales AS (SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales, COUNT(DISTINCT n.store_id || '-' || d.fiscal_week) AS store_weeks FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week CROSS JOIN params WHERE d.fiscal_year IN (params.ty_year, params.ly_year) AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52) GROUP BY GROUPING SETS ((d.fiscal_year), (d.fiscal_year, cs.region))) SELECT ty.region, ty.net_sales AS this_year, ly.net_sales AS last_year, ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct FROM lfl_sales ty CROSS JOIN params JOIN lfl_sales ly ON ly.region IS NOT DISTINCT FROM ty.region AND ly.fiscal_year = params.ly_year WHERE ty.fiscal_year = params.ty_year ORDER BY ty.region NULLS FIRST",
+  "result": {
+    "columns": ["region", "this_year", "last_year", "lfl_growth_pct"],
+    "rows": [
+      [null, 3223126.99, 3140011.17, 2.65],
+      ["Capital Region", 527026.01, 525151.30, 0.36],
+      ["East", 597583.01, 588069.69, 1.62],
+      ["North", 413618.24, 387519.62, 6.73],
+      ["South", 686946.66, 686791.06, 0.02],
+      ["West", 997953.07, 952479.50, 4.77]
+    ]
+  },
+  "definitions_applied": [
+    "Like-for-like (LFL) growth: net sales comparison between same fiscal weeks in two consecutive years",
+    "LFL store base: physical stores (store_id < 900) open at least 52 weeks before the period start",
+    "Store-week counting: fiscal weeks where the store traded in both years (open, not closed, no refit)",
+    "Net sales: EUR excluding VAT, after returns; returns reduce sales on their return date",
+    "Web dispatch date: converted from UTC to Helsinki timezone for correct day assignment",
+    "Store scope: excludes store 999 (test) and product category ZZ Test",
+    "Period definition: Q3 = fiscal weeks 27-39 (13 weeks)"
+  ],
+  "assumptions": [
+    "Q3 last year interpreted as FY2025/26 Q3 (weeks 27-39 from 27 Oct 2025 to 25 Jan 2026), compared with FY2024/25 Q3 (same week numbers in prior year)",
+    "Relative phrase 'Q3 last year' resolved from request date 2026-10-05 when current fiscal year is FY2026/27"
+  ],
+  "caveats": [
+    "Region column shows NULL for company total; Capital Region is the result of the April 2025 reorganisation in the warehouse data",
+    "No refit closures affected Q3 FY2025/26: Vantaa Tammisto refitted in July-August 2024 (previous year), Pori refitted September-October 2025 (covered in Q3 2025 - see store_weeks excluded), Kuopio refitted June-July 2026 (after the period)",
+    "The Savonlinna store (129) had not yet closed by Q3 FY2025/26 (closed 25 January 2026, during the period) and is included in the Q3 figures",
+    "Web orders dispatched on the specified date in Helsinki timezone; 3 web orders on the date boundary differ between UTC and Helsinki time but are correctly assigned to Helsinki dispatch date"
+  ]
+}
+```

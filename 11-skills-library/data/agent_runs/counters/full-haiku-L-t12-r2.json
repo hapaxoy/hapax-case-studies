@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-L-t12-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T12",
+ "budget": 30,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "5e7fdc376711a01801f2450581122e8b61a186109f7f04a36906c53c1eadb3c5",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:38:03",
+   "statement": "fiscal-calendar/scripts/fiscal.py P11 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P11 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P11\n  fiscal_weeks                       44-47\n  start_date                         2026-02-23\n  end_date                           2026-03-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-03-22\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 44 AND 47)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:38:45",
+   "statement": "WITH params AS (\n    SELECT DATE '2026-02-23' AS start_date, DATE '2026-03-22' AS end_date\n),\nweekly_stock AS (\n    -- step 1: sum closing_value across products within each week, category, and store\n    SELECT fs.week_ending_date, cp.category,\n           SUM(fs.closing_value) AS weekly_closing_value\n    FROM fact_stock_week fs\n    JOIN dim_store s    ON s.store_key = fs.store_key\n    JOIN dim_store cs   ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p  ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date BETWEEN params.start_date AND params.end_date\n      AND cs.region = 'West'\n      AND cs.store_id < 900 \n      AND cp.category <> 'ZZ Test'\n    GROUP BY 1, 2\n)\n-- step 2: average across weeks by category\nSELECT category,\n       ROUND(AVG(weekly_closing_value), 2) AS avg_stock_value\nFROM weekly_stock\nGROUP BY 1\nORDER BY 1;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | avg_stock_value\nBathroom & Plumbing | 94390.92\nCleaning & Household | 30134.45\nElectrical | 85769.79\nFurniture | 174781.98\nGarden | 197181.16\nHome Textiles & Decor | 54622.8\nKitchen & Dining | 70772.63\nPaint & Decorating | 100598.68\nSeasonal | 81396.52\nTools & Hardware | 127286.39\n(10 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:38:54",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 10 rows, 2 columns: category, avg_stock_value\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  category | avg_stock_value\n  Bathroom & Plumbing | 94390.92\n  Cleaning & Household | 30134.45\n  Electrical | 85769.79\n  Furniture | 174781.98\n  Garden | 197181.16\n  Home Textiles & Decor | 54622.8\n  Kitchen & Dining | 70772.63\n  Paint & Decorating | 100598.68\n  Seasonal | 81396.52\n  Tools & Hardware | 127286.39\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

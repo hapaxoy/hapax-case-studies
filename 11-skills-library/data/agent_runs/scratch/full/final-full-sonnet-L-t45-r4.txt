@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2026-10-04' AS as_of_end), tampere_stores AS (SELECT DISTINCT store_id FROM dim_store WHERE city = 'Tampere' AND store_id < 900 AND is_current), active AS (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key CROSS JOIN params WHERE f.sale_date > params.as_of_end - 364 AND f.sale_date <= params.as_of_end AND s.store_id <> 999 AND p.category <> 'ZZ Test') SELECT COUNT(DISTINCT a.member_id) AS active_members_tampere FROM active a CROSS JOIN params JOIN dim_member cur ON cur.member_id = a.member_id AND params.as_of_end BETWEEN cur.valid_from AND cur.valid_to WHERE cur.home_store_id IN (SELECT store_id FROM tampere_stores)",
+  "result": {
+    "columns": ["active_members_tampere"],
+    "rows": [[4441]]
+  },
+  "definitions_applied": [
+    "Active member: at least one purchase in the trailing 52 fiscal weeks, as-of week included, in any channel; distinct member_id",
+    "Member version valid on the as-of date used for home store",
+    "Store scope: physical stores only (store_id below 900); web shop 900 not treated as a Tampere store",
+    "Store 999 and category ZZ Test excluded",
+    "Count on stable natural key member_id, not member_key"
+  ],
+  "assumptions": [
+    "The warehouse has no customer table. Only loyalty members can be identified, so 'customers' is read as loyalty members. Non-member and guest buyers cannot be located or counted.",
+    "A member's location is their home store, since dim_member holds no city or address. 'In Tampere' means home store is one of the four Tampere stores: Hervanta (115), Lielahti (116), Kaleva (117) and Lamminpää (136).",
+    "'Customers' is read as active members under the company definition, as the metric dictionary has no definition of 'customers'. Total registered members is given as a secondary figure in the caveats.",
+    "As-of date is Sunday 4 October 2026, the end of the last loaded fiscal week (FY2026/27 week 22) before the 8 October 2026 request. The window is sale_date after 5 October 2025 and up to 4 October 2026.",
+    "Online sign-ups (home store 900) are not counted as Tampere, even though the web shop row in dim_store lists city Tampere."
+  ],
+  "caveats": [
+    "If Jukka meant everyone ever enrolled rather than currently active, the figure is 7175 members with a Tampere home store (none joined after the as-of date). Using their current home store or the home store on 4 October 2026 gives the same 7175 and the same 4441 active.",
+    "Home store is where the member enrolled or is registered, not necessarily where they live. Members who shop in Tampere but are registered elsewhere, and Tampere residents who signed up online (12028 online sign-ups company-wide, location unknown), are not included.",
+    "The web shop (store 900) has city = Tampere and the training store (999) has city = Tampere in dim_store. A plain filter on city = 'Tampere' would pick them up, so both were excluded. Only store 999 and ZZ Test activity was removed from the purchase test, and it did not change the count (4441 with or without that filter).",
+    "The figure is a count of people, not a sales measure, and the sales-based control total in rpt_daily_store_sales does not apply to it.",
+    "Not a Tampere-city-wide customer count. Please confirm with Jukka whether active loyalty members by home store is what he needs."
+  ]
+}
+```

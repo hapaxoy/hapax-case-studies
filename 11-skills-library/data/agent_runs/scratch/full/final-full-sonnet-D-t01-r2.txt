@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH store_weeks AS (SELECT st.store_id, d.fiscal_year, d.fiscal_week, (st.open_date IS NULL OR st.open_date &lt;= d.fiscal_week_start_date) AND (st.close_date IS NULL OR st.close_date &gt;= d.fiscal_week_end_date) AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id = st.store_id AND c.closure_start_date &lt;= d.fiscal_week_end_date AND c.closure_end_date &gt;= d.fiscal_week_start_date) AS trading FROM dim_store st CROSS JOIN (SELECT DISTINCT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date FROM dim_date WHERE fiscal_year IN ('FY2025/26', 'FY2026/27') AND fiscal_period = 4) d WHERE st.is_current AND st.store_id &lt; 900), lfl_store_weeks AS (SELECT ty.store_id, ty.fiscal_week FROM store_weeks ty JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = 'FY2025/26' JOIN dim_store st ON st.store_id = ty.store_id AND st.is_current WHERE ty.fiscal_year = 'FY2026/27' AND ty.trading AND ly.trading AND (st.open_date IS NULL OR st.open_date &lt;= DATE '2026-08-03' - 364)), net_lines AS (SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id &lt; 900 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt; 900 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), lfl_sales AS (SELECT d.fiscal_year, SUM(n.net_sales) AS net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week WHERE d.fiscal_year IN ('FY2026/27', 'FY2025/26') AND d.fiscal_period = 4 GROUP BY 1) SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, ty.net_sales AS this_year, ly.net_sales AS last_year, ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct FROM lfl_sales ty, lfl_sales ly WHERE ty.fiscal_year = 'FY2026/27' AND ly.fiscal_year = 'FY2025/26'",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "this_year", "last_year", "lfl_growth_pct"],
+    "rows": [["FY2026/27", 4, 1010478.52, 1010743.32, -0.03]]
+  },
+  "definitions_applied": [
+    "LFL growth: net sales in LFL stores for the period vs the same fiscal weeks last year, week by week",
+    "Net sales: excluding VAT, after returns; returns reduce net sales on their own return date",
+    "Physical stores only (store_id below 900); web shop excluded from LFL",
+    "Store 999 and category ZZ Test excluded",
+    "LFL base rule: store open at least 364 days before the first day of the period (open_date &lt;= 2026-08-03 minus 364 days)",
+    "Store-week counts only if the store traded in that fiscal week in both years (open/close dates and ref_store_closure refit weeks)",
+    "Fiscal calendar: P4 is fiscal weeks 14 to 17 in both years (FY2026/27: 3 to 30 Aug 2026; FY2025/26: 28 Jul to 24 Aug 2025), aligned by fiscal week, not calendar date",
+    "As-is hierarchy (no regional or category breakdown requested, so no effect on the result)",
+    "Control total: store-level net sales checked against rpt_daily_store_sales"
+  ],
+  "assumptions": [
+    "'Period 4 this year' is read as FY2026/27 P4, which is complete (ended 30 Aug 2026) and fully loaded.",
+    "'Last year' is read as FY2025/26 P4, the same fiscal weeks 14 to 17, in line with past requests asked during FY2026/27.",
+    "A single total was returned because no breakdown (by store or region) was requested.",
+    "Open and close dates were taken from the current dim_store version, as in the accepted LFL queries.",
+    "'Stores' was read as the physical store estate; the web shop is never part of LFL."
+  ],
+  "caveats": [
+    "Savonlinna (129) closed on 25 January 2026 and has no sales in FY2026/27 P4, so it is excluded. 38 of the 39 physical stores are in the LFL base for all four weeks.",
+    "No refit closures fall in P4 in either year (Pori's refit was 8 Sep to 12 Oct 2025 and Kuopio's ended 26 Jul 2026), so no store-weeks were dropped for refits. Week 53 is not involved.",
+    "Store-level net sales (stores below 900, store 999 and ZZ Test excluded) matched rpt_daily_store_sales store by store for P4 in both years, with no gaps. I found no duplicate sales or return lines in P4 in either year. No data corrections were needed.",
+    "Growth is essentially flat at -0.03% (about EUR 265 lower on roughly EUR 1.01 million).",
+    "rpt.v_daily_sales, rpt.v_weekly_store_sales, channel_code and all stg_, bak_, tmp_ and old tables were not used."
+  ]
+}
+```

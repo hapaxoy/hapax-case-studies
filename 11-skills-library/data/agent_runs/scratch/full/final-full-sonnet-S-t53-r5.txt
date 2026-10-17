@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH per AS (SELECT fiscal_year, period_start_date, period_end_date FROM ref_fiscal_calendar WHERE fiscal_period=1 AND fiscal_year IN ('FY2025/26','FY2026/27')), store_sales AS (SELECT p.fiscal_year, s.store_id, sum(f.net_amount) gross_net FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN per p ON f.sale_date BETWEEN p.period_start_date AND p.period_end_date WHERE s.store_id&lt;900 GROUP BY 1,2), store_ret AS (SELECT p.fiscal_year, s.store_id, sum(r.refund_net) ret FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN per p ON r.return_date BETWEEN p.period_start_date AND p.period_end_date WHERE s.store_id&lt;900 GROUP BY 1,2), ns AS (SELECT a.fiscal_year, a.store_id, a.gross_net - coalesce(b.ret,0) net_sales FROM store_sales a LEFT JOIN store_ret b USING(fiscal_year, store_id)), elig AS (SELECT cur.store_id, cur.net_sales cur_ns, pri.net_sales pri_ns FROM ns cur JOIN ns pri ON pri.store_id=cur.store_id AND cur.fiscal_year='FY2026/27' AND pri.fiscal_year='FY2025/26' WHERE NOT EXISTS (SELECT 1 FROM ref_store_closure c, per p WHERE c.store_id=cur.store_id AND c.closure_start_date&lt;=p.period_end_date AND c.closure_end_date&gt;=p.period_start_date) AND NOT EXISTS (SELECT 1 FROM dim_store d WHERE d.store_id=cur.store_id AND d.is_current AND d.close_date IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM dim_store d WHERE d.store_id=cur.store_id AND d.open_date &gt; DATE '2025-04-27')) SELECT 'FY2026/27' AS fiscal_year, 1 AS fiscal_period, round((sum(cur_ns)/sum(pri_ns)-1)*100,2) AS lfl_growth_pct FROM elig",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "lfl_growth_pct"],
+    "rows": [["FY2026/27", 1, 6.7]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 1 of FY2026/27 (2026-05-04 to 2026-05-31, 4 weeks) compared with period 1 of FY2025/26 (2025-04-28 to 2025-05-25, 4 weeks), matched by fiscal period and not by calendar dates",
+    "Like-for-like store base: physical stores only (store_id below 900), trading through the whole of both periods",
+    "Excluded from the like-for-like base: web shop (900), training store (999), stores with a refit closure overlapping either period, closed stores, and stores opened inside the comparison period",
+    "Net sales: EUR excluding VAT, sales lines less refunds booked in the same period (refunds by return date, as in rpt_daily_store_sales)",
+    "Store identity by store_id, not store_key, so the April 2025 region re-mapping versions do not split a store",
+    "Growth = current-period net sales / prior-period net sales - 1, over the same set of stores in both periods"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year, FY2026/27, because the request is dated 9 Oct 2026 and the fiscal year starts in late April or early May. Period 1 is therefore May 2026, compared with period 1 of FY2025/26.",
+    "Like-for-like is read as a store-estate measure. The web shop (a different channel, with its channel coding changed at the platform migration) is excluded.",
+    "Net sales means after returns, as in the team's daily store report. Before returns the same stores grow 6.63%.",
+    "Staff purchases are included, because nothing in the warehouse says to exclude them from sales.",
+    "Stores 136 and 137 (opened Sep and Nov 2024) are kept in the base. They traded for the whole of both periods and had been open more than 12 months by the start of the comparison period.",
+    "The headline is unadjusted for the number of trading days, which is how like-for-like is normally reported."
+  ],
+  "caveats": [
+    "The base period had one fewer trading day. Stores were shut on 1 May 2025 (May Day), and 1 May 2026 falls before period 1 starts. The base therefore has 27 trading days and the current period 28. Per trading day, like-for-like growth is about 2.9% against the headline 6.7%, so roughly 3.7 points of the headline come from the extra day. Ascension Day (14 May) and Whit Sunday fell inside the 2026 period as trading days, while Ascension 2025 fell outside the comparison period.",
+    "FY2025/26 was a 53-week year. The periods are matched by fiscal period and week, which is the correct alignment. Matching by calendar date would shift the comparison by a week.",
+    "Store 129 Savonlinna closed on 2026-01-25 and had no sales in the current period. It is excluded, along with the web shop and the training store 999. Including the web shop would also change the figure, because its channel codes differ between the two periods (WB then, channel_id 2 and 3 now).",
+    "The refits of stores 119 (Sep to Oct 2025) and 125 (starts June 2026) do not overlap either period, so both stay in the base. Store 119 is only recently reopened and 125 closes shortly after the period. Excluding both (and 136 and 137) gives 6.84%, so the result is not sensitive to this.",
+    "Stores 136 and 137 grew about 20% and 26%. Excluding them gives 6.12% on 36 stores. They are included because they met the full-period trading rule, but they were still maturing in the base period.",
+    "The warehouse's old like-for-like lists (tmp_lfl_store_list_2024 and 2025) were not used. They are stale temporary tables and omit stores 136 and 137.",
+    "Checks that found no problem: no duplicate sales or return lines, no non-positive amounts, VAT arithmetic consistent, all stores have a sales line on every trading day, and the sales and returns totals reconcile exactly to rpt_daily_store_sales. Both periods are fully loaded.",
+    "The result covers the 38 stores in the base. The sums are 1,103,969.88 EUR in period 1 of FY2025/26 and 1,177,925.94 EUR in period 1 of FY2026/27."
+  ]
+}
+```

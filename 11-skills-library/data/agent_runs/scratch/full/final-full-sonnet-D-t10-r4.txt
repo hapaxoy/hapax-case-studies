@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH base AS (SELECT f.* FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current WHERE s.store_id = 107 AND s.store_id &lt;&gt; 999 AND cp.category &lt;&gt; 'ZZ Test' AND cp.subcategory = 'Cleaning Products' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') SELECT 'FY2026/27' AS fiscal_year, 5 AS fiscal_period, 107 AS store_id, 'Hyvinkää' AS store_name, 'Cleaning Products' AS subcategory, SUM(quantity) AS units_sold FROM base",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_id", "store_name", "subcategory", "units_sold"],
+    "rows": [["FY2026/27", 5, 107, "Hyvinkää", "Cleaning Products", 136]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2026/27 P05 runs 31 Aug to 27 Sep 2026, fully loaded",
+    "Units sold = quantity on sales lines, dated by sale_date (store sale date)",
+    "Physical store scope: store_id 107 Hyvinkää only, web shop (900) not included",
+    "Store 999 and category ZZ Test filtered out (no effect on this figure)",
+    "As-is product hierarchy: joined to the current product version (is_current) for category and subcategory",
+    "Control total check against rpt_daily_store_sales for store 107, same days",
+    "Versioned dimensions joined through the fact version key, then to the current version on the natural key (no row multiplication)"
+  ],
+  "assumptions": [
+    "'This year' read as the current fiscal year FY2026/27, and 'period 5' as fiscal period 5 of that year (31 Aug to 27 Sep 2026), which is also the last completed period",
+    "'Cleaning Products' read as the subcategory Cleaning Products (under the category Cleaning &amp; Household). It is the only subcategory or category with that name",
+    "'Units sold' read as gross units sold on sales lines, not net of returns",
+    "Staff purchases are included, as in the company net-sales definition",
+    "'Hyvinkää' matched to store 107 (the only Hyvinkää store, one version, current, South region)"
+  ],
+  "caveats": [
+    "No correction was needed. Sales line ids were unique (63 lines, 63 distinct lines), with no duplicate loads, no cancelled or test rows, and the fiscal period was fully loaded",
+    "Control total: all categories for store 107 over the same days gave 1,626 units and 27,297.68 EUR net before returns, matching rpt_daily_store_sales exactly",
+    "There were no Cleaning Products returns booked at Hyvinkää in P5, so net-of-returns units would also be 136",
+    "The as-was and as-is subcategory give the same result (136 units, 63 lines, 560.58 EUR net excluding VAT)",
+    "Sales lines for these units total 560.58 EUR excluding VAT, given for context only"
+  ]
+}
+```

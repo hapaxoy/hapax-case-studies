@@ -1,0 +1,42 @@
+```json
+{
+  "sql": "WITH wk AS (SELECT d.fiscal_year, d.fiscal_week, d.calendar_date FROM dim_date d WHERE d.fiscal_period = 2 AND d.fiscal_year IN ('FY2026/27','FY2025/26')), sales AS (SELECT w.fiscal_year, w.fiscal_week, sum(f.net_amount) AS amt FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN wk w ON w.calendar_date = f.sale_date WHERE s.store_id &lt;&gt; 999 GROUP BY 1, 2), rets AS (SELECT w.fiscal_year, w.fiscal_week, sum(r.refund_net) AS amt FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN wk w ON w.calendar_date = r.return_date WHERE s.store_id &lt;&gt; 999 GROUP BY 1, 2), net AS (SELECT s.fiscal_year, s.fiscal_week, s.amt - coalesce(r.amt, 0) AS net_sales FROM sales s LEFT JOIN rets r ON r.fiscal_year = s.fiscal_year AND r.fiscal_week = s.fiscal_week) SELECT ty.fiscal_year, ty.fiscal_week, round(ty.net_sales, 2) AS net_sales, ly.fiscal_year AS last_year_fiscal_year, round(ly.net_sales, 2) AS net_sales_last_year, round(100 * (ty.net_sales / ly.net_sales - 1), 2) AS growth_pct FROM net ty JOIN net ly ON ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = 'FY2025/26' WHERE ty.fiscal_year = 'FY2026/27' ORDER BY ty.fiscal_week",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_week", "net_sales", "last_year_fiscal_year", "net_sales_last_year", "growth_pct"],
+    "rows": [
+      ["FY2026/27", 5, 346150.56, "FY2025/26", 328453.20, 5.39],
+      ["FY2026/27", 6, 362929.37, "FY2025/26", 331315.01, 9.54],
+      ["FY2026/27", 7, 240007.07, "FY2025/26", 326473.60, -26.48],
+      ["FY2026/27", 8, 346861.28, "FY2025/26", 224694.01, 54.37]
+    ]
+  },
+  "definitions_applied": [
+    "Company net sales = stores plus web shop, EUR excluding VAT, with refunds (refund_net) deducted in the week the refund is booked. This is the same construction as net_sales in rpt_daily_store_sales.",
+    "Fiscal calendar from dim_date and ref_fiscal_calendar. Period 2 of FY2026/27 is 1 to 28 June 2026 (fiscal weeks 5 to 8). Period 2 of FY2025/26 is 26 May to 22 June 2025 (fiscal weeks 5 to 8).",
+    "Last-year comparison is the same fiscal week number in FY2025/26.",
+    "Staff purchases are included. The report table rpt_daily_store_sales includes them.",
+    "Training store 999 is excluded as a pseudo-location. The report table also leaves it out.",
+    "Web shop (store 900) is included. Both web home delivery and click-and-collect lines count.",
+    "Channel identified through store_key and dim_store, because channel_code is NULL on FY2026/27 sales lines (only channel_id is filled)."
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year, FY2026/27, as of the request date of 2026-10-07. 'Period 2' means fiscal period 2 of that year.",
+    "'Net sales' means after returns, excluding VAT. Gross-of-VAT and before-returns figures were not requested.",
+    "'Total company' means all stores plus the web shop, not stores only.",
+    "'The same weeks last year' means the same fiscal week numbers (5 to 8) of FY2025/26, not the same calendar dates.",
+    "Returns are deducted by return date, not by the date of the original sale, matching how the daily report table books refunds.",
+    "Sale dates are taken as stored in sale_date, without re-deriving the Finnish local date from the UTC timestamps."
+  ],
+  "caveats": [
+    "The growth percentages for weeks 7 and 8 are distorted by Midsummer. It fell in FY2026/27 week 7 (15 to 21 June 2026) but in FY2025/26 week 8 (16 to 22 June 2025). Sales in the holiday week are 25 to 30 percent lower. This is why week 7 shows -26.5 percent and week 8 shows +54.4 percent. Comparing this year's week 7 with last year's week 8, which is the same holiday week, gives about +6.8 percent (240,007.07 against 224,694.01).",
+    "FY2025/26 was a 53-week year (it started 28 April 2025, FY2026/27 started 4 May 2026). The same fiscal week is therefore about 7 calendar days later this year than last, which causes the Midsummer shift.",
+    "Correction: channel_code is NULL on all FY2026/27 sales lines, and only channel_id is filled. Filtering on channel_code would have dropped this year's sales or misclassified them, so channels were identified through store_key and store_id.",
+    "Correction: training store 999 has small sales in both years (roughly 215 to 890 EUR a week this year, 500 to 800 EUR a week last year). These are excluded. For FY2026/27 the training-store amount was inferred as the difference between the pseudo-location total and the web shop total, because the channel is NULL. Returns for the training store were checked and there are none.",
+    "Correction: the 'rpt.v_daily_sales' and 'rpt.v_weekly_store_sales' views and the rpt_weekly_sales_by_region table were not used. The views have channel logic that relies on store_id &lt; 900 and channel_code = 'WB', which breaks on the FY2026/27 NULL channel_code and so would understate web sales this year.",
+    "Checked and no correction needed: there are no duplicate sales lines in period 2 of either year. A set of 418 line pairs (836 rows) duplicated by a re-load exists in FY2025/26 fiscal week 21 (September 2025), outside this request. It would inflate any query that spans that week.",
+    "The report table rpt_daily_store_sales gives different daily and weekly web figures from the fact table, by up to about 24,000 EUR in a single week. It agrees with the fact table in total for the period only to within roughly 1,300 EUR. I used the fact tables, whose lines and refunds reconcile with each other. The cause of the difference in the report table was not investigated, so its web figures should not be quoted against these numbers.",
+    "Store closures for refits (ref_store_closure) and store openings or closures in the period were not adjusted for. The figures are total company sales, not like-for-like.",
+    "All queries in the 12-query budget were used. The final SQL was assembled from the parts I ran separately and was not executed as one statement. The figures in the result table were computed by summing the weekly pieces from those queries (sales by store type and week, minus refunds by week)."
+  ]
+}
+```

@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-L-t11-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T11",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "c596f28eaaf0f46bd563fde0cc728bb4a98574a685dcd94a4fee80e3d45e40eb",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:13:57",
+   "statement": "fiscal-calendar/scripts/fiscal.py P8 FY2025/26 --compare --as-of 2026-10-05",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P8 FY2025/26    as of: 2026-10-05    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P08\n  fiscal_weeks                       31-34\n  start_date                         2025-11-24\n  end_date                           2025-12-21\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 31 AND 34)\n\nPrior-year comparator (same fiscal week numbers)\n------------------------------------------------\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P08\n  fiscal_weeks                       31-34\n  start_date                         2024-11-25\n  end_date                           2024-12-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2024-12-22\n  aligned_on                         fiscal week number (CAL-COMPARE)\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 31 AND 34)\n  this_year_filter_without_week_53   (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 31 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:05",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, p.sku, p.category AS cat_was,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, p.sku, p.category, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, cp.category AS cat_is, SUM(n.net_sales) AS net_sales, \n       SUM(CASE WHEN n.cat_was = cp.category THEN 0 ELSE n.net_sales END) AS moved_by_restatement,\n       MIN(d.calendar_date) AS mind, MAX(d.calendar_date) AS maxd\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_period = 8 AND d.fiscal_year IN ('FY2025/26','FY2024/25')\nGROUP BY 1, 2 ORDER BY 2, 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "fiscal_year | cat_is | net_sales | moved_by_restatement | mind | maxd\nFY2024/25 | Bathroom & Plumbing | 55000.04 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Bathroom & Plumbing | 59254.80 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Cleaning & Household | 45102.16 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Cleaning & Household | 50593.74 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Electrical | 162418.96 | 19504.55 | 2024-11-25 | 2024-12-22\nFY2025/26 | Electrical | 171210.97 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Furniture | 68267.10 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Furniture | 67629.27 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Garden | 36765.02 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Garden | 36813.07 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Home Textiles & Decor | 122341.77 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Home Textiles & Decor | 132333.52 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Kitchen & Dining | 125918.47 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Kitchen & Dining | 129039.21 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Paint & Decorating | 70175.91 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Paint & Decorating | 74655.05 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Seasonal | 562581.47 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Seasonal | 586368.86 | 0.00 | 2025-11-24 | 2025-12-21\nFY2024/25 | Tools & Hardware | 124618.07 | 0.00 | 2024-11-25 | 2024-12-22\nFY2025/26 | Tools & Hardware | 127798.11 | 0.00 | 2025-11-24 | 2"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:11",
+   "statement": "SELECT 'sales' AS t, count(*) AS n_rows, count(DISTINCT sales_line_id) AS n_keys, count(DISTINCT (receipt_id, line_no)) AS n_receipt_lines,\n       min(sale_date) AS d0, max(sale_date) AS d1\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-11-18' AND DATE '2025-12-28'\nUNION ALL\nSELECT 'returns', count(*), count(DISTINCT return_line_id), count(DISTINCT sales_line_id), min(return_date), max(return_date)\nFROM fact_return_line WHERE return_date BETWEEN DATE '2024-11-18' AND DATE '2025-12-28'\nUNION ALL\nSELECT 'dispatch_null_or_status', count(*), count(DISTINCT web_order_id), sum(CASE WHEN status IN ('delivered','collected') AND dispatch_ts_utc IS NULL THEN 1 ELSE 0 END), min(order_ts_utc)::DATE, max(order_ts_utc)::DATE\nFROM fact_web_order WHERE order_ts_utc BETWEEN TIMESTAMP '2024-11-01' AND TIMESTAMP '2025-12-31'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "t | n_rows | n_keys | n_receipt_lines | d0 | d1\nsales | 701850 | 701850 | 701432 | 2024-11-18 | 2025-12-28\nreturns | 26356 | 26356 | 26356 | 2024-11-18 | 2025-12-28\ndispatch_null_or_status | 45933 | 45933 | 0 | 2024-11-01 | 2025-12-30\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:17",
+   "statement": "WITH dups AS (\n  SELECT receipt_id, line_no, count(*) AS c FROM fact_sales_line\n  WHERE sale_date BETWEEN DATE '2024-11-18' AND DATE '2025-12-28' GROUP BY 1,2 HAVING count(*) > 1\n)\nSELECT f.sale_date, f.sales_line_id, f.receipt_id, f.line_no, f.store_key, f.product_key, f.channel_code, f.quantity, f.net_amount, f.etl_loaded_at, d.c\nFROM fact_sales_line f JOIN dups d ON d.receipt_id = f.receipt_id AND d.line_no = f.line_no\nORDER BY f.receipt_id, f.line_no, f.sales_line_id\nLIMIT 30\n",
+   "n": 4,
+   "ok": true,
+   "rows": 30,
+   "output_preview": "sale_date | sales_line_id | receipt_id | line_no | store_key | product_key | channel_code | quantity | net_amount | etl_loaded_at | c\n2025-09-15 | 841511 | 10326117 | 1 | 22 | 2323 | ST | 1 | 9.68 | 2025-09-16T01:00:00 | 2\n2025-09-15 | 1510224 | 10326117 | 1 | 22 | 2323 | ST | 1 | 9.68 | 2025-09-23T03:12:00 | 2\n2025-09-15 | 841512 | 10326117 | 2 | 22 | 2017 | ST | 3 | 42.12 | 2025-09-16T01:00:00 | 2\n2025-09-15 | 1510225 | 10326117 | 2 | 22 | 2017 | ST | 3 | 42.12 | 2025-09-23T03:12:00 | 2\n2025-09-15 | 841513 | 10326118 | 1 | 22 | 395 | ST | 1 | 12.37 | 2025-09-16T01:00:00 | 2\n2025-09-15 | 1510226 | 10326118 | 1 | 22 | 395 | ST | 1 | 12.37 | 2025-09-23T03:12:00 | 2\n2025-09-15 | 841514 | 10326118 | 2 | 22 | 3763 | ST | 1 | 20.10 | 2025-09-16T01:00:00 | 2\n2025-09-15 | 1510227 | 10326118 | 2 | 22 | 3763 | ST | 1 | 20.10 | 2025-09-23T03:12:00 | 2\n2025-09-15 | 841519 | 10326121 | 1 | 22 | 3014 | ST | 1 | 22.55 | 2025-09-16T01:00:00 | 2\n2025-09-15 | 1510228 | 10326121 | 1 | 22 | 3014 | ST | 1 | 22.55 | 2025-09-23T03:12:00 | 2\n2025-09-15 | 841520 | 10326121 | 2 | 22 | 1446 | ST | 1 | 81.30 | 2025-09-16T01:00:00 | 2\n2025-09-15 | 1510229 | 10326121 | 2 | 22 | 1446 | ST | 1 | 81.30 | 2025-09-23T03:12:00 | 2\n2025-09-15 | 841615 | 10326153 | 1 | 22 | 2167 | ST | 2 | 6.64 | 2025-09-16T01:00:00 | 2\n2025-09-15 | 1510230 | 10326153 | 1 | 22 | 2167 | ST | 2 | 6.64 | 2025-09-23T03:12:00 | 2\n2025-09-15 | 841616 | 10326153 | 2 | 22 | 939 | ST | 1 | 28.90 | 2025-09-16T01:00:00 | 2\n2025-09-15 | 151"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:19",
+   "statement": "WITH dups AS (\n  SELECT receipt_id, line_no FROM fact_sales_line\n  WHERE sale_date BETWEEN DATE '2024-11-18' AND DATE '2025-12-28' GROUP BY 1,2 HAVING count(*) > 1\n)\nSELECT d.fiscal_year, d.fiscal_period, p.category, s.store_id, count(*) AS n, sum(f.net_amount) AS net\nFROM fact_sales_line f JOIN dups x ON x.receipt_id = f.receipt_id AND x.line_no = f.line_no\nJOIN dim_date d ON d.calendar_date = f.sale_date\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_store s ON s.store_key = f.store_key\nGROUP BY ALL ORDER BY 1,2,3,4 LIMIT 60\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "fiscal_year | fiscal_period | category | store_id | n | net\nFY2025/26 | 5 | Bathroom & Plumbing | 116 | 38 | 1621.38\nFY2025/26 | 5 | Cleaning & Household | 116 | 130 | 1923.00\nFY2025/26 | 5 | Electrical | 116 | 128 | 2398.02\nFY2025/26 | 5 | Furniture | 116 | 20 | 2011.44\nFY2025/26 | 5 | Garden | 116 | 152 | 3417.96\nFY2025/26 | 5 | Home Textiles & Decor | 116 | 52 | 1605.38\nFY2025/26 | 5 | Kitchen & Dining | 116 | 26 | 656.32\nFY2025/26 | 5 | Paint & Decorating | 116 | 68 | 2627.28\nFY2025/26 | 5 | Seasonal | 116 | 30 | 1091.96\nFY2025/26 | 5 | Tools & Hardware | 116 | 192 | 3428.32\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:27",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nmine AS (\n  SELECT d.fiscal_year, n.business_date, n.store_id, SUM(n.net_sales) AS mine\n  FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date\n  WHERE d.fiscal_period = 8 AND d.fiscal_year IN ('FY2025/26','FY2024/25') GROUP BY ALL\n),\nctl AS (\n  SELECT d.fiscal_year, r.business_date, r.store_id, r.net_sales AS ctl\n  FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\n  WHERE d.fiscal_period = 8 AND d.fiscal_year IN ('FY2025/26','FY2024/25') AND r.store_id <> 999\n)\nSELECT COALESCE(m.fiscal_year, c.fiscal_year) AS fy, count(*) AS cells, sum(COALESCE(m.mine,0)) AS mine, sum(COALESCE(c.ctl,0)) AS ctl,\n       sum(CASE WHEN abs(COALESCE(m.mine,0)-COALESCE(c.ctl,0)) > 0.05 THEN 1 ELSE 0 END) AS mismatched_cells\nFROM mine m FULL JOIN ctl c ON c.business_date = m.business_date AND c.store_id = m.store_id AND c.fiscal_year = m.fiscal_year\nGROUP BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fy | cells | mine | ctl | mismatched_cells\nFY2025/26 | 1081 | 1435696.60 | 1435696.60 | 0\nFY2024/25 | 1081 | 1373188.97 | 1373188.97 | 0\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:36",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, p.sku, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, p.sku, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nby_year AS (\n    SELECT cp.category, d.fiscal_year, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d ON d.calendar_date = n.business_date\n    JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\n    WHERE d.fiscal_period = 8 AND d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n      AND cp.category IN ('Garden', 'Electrical')\n    GROUP BY 1, 2\n)\nSELECT ty.category, 8 AS fiscal_period,\n       py.net_sales AS net_sales_fy2024_25, ty.net_sales AS net_sales_fy2025_26,\n       ROUND(100.0 * (ty.net_sales / py.net_sales - 1), 2) AS growth_pct\nFROM by_year ty JOIN by_year py ON py.category = ty.category AND py.fiscal_year = 'FY2024/25'\nWHERE ty.fiscal_year = 'FY2025/26'\nORDER BY ty.category\n",
+   "n": 7,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | fiscal_period | net_sales_fy2024_25 | net_sales_fy2025_26 | growth_pct\nElectrical | 8 | 162418.96 | 171210.97 | 5.41\nGarden | 8 | 36765.02 | 36813.07 | 0.13\n(2 rows)"
+  }
+ ]
+}

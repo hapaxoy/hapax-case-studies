@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH p AS (SELECT fiscal_year, fiscal_period, period_start_date s, period_end_date e FROM ref_fiscal_calendar WHERE fiscal_period_label='FY2026/27 P05'), sales AS (SELECT sum(f.net_amount) gross_net FROM fact_sales_line f JOIN dim_store st ON st.store_key=f.store_key, p WHERE f.sale_date BETWEEN p.s AND p.e AND st.store_id <> 999), rets AS (SELECT sum(r.refund_net) ret FROM fact_return_line r JOIN dim_store st ON st.store_key=r.store_key, p WHERE r.return_date BETWEEN p.s AND p.e AND st.store_id <> 999) SELECT p.fiscal_year, p.fiscal_period, sales.gross_net - rets.ret AS net_sales_eur FROM p, sales, rets",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "net_sales_eur"],
+    "rows": [["FY2026/27", 5, 1107414.30]]
+  },
+  "definitions_applied": [
+    "Net sales = line value in EUR excluding VAT (net_amount), after line discounts, minus refunds excluding VAT (refund_net); this matches rpt_daily_store_sales.net_sales",
+    "Whole company = all physical stores plus the web shop (store 900), home delivery and click-and-collect",
+    "Returns are deducted on the date the refund was booked (return_date), web returns included",
+    "Fiscal calendar from ref_fiscal_calendar: FY2026/27 P05 runs 2026-08-31 to 2026-09-27 and is flagged fully_loaded",
+    "Channel taken from channel_id, not channel_code"
+  ],
+  "assumptions": [
+    "'Last month' is read as the last complete fiscal period before the request date of 9 October 2026. That is FY2026/27 P05, 2026-08-31 to 2026-09-27. The current period, P06, started on 28 September, is not fully loaded and is still running.",
+    "Staff purchases are included in net sales, as in rpt_daily_store_sales. They come to 12,842.22 EUR net, all in physical stores.",
+    "Net sales are in EUR excluding VAT. Net sales are reported after returns."
+  ],
+  "caveats": [
+    "Correction: the training store (store_id 999, 'Training' format, head office) was excluded. It has 2,690.92 EUR of test sales in the period, and it is not a real trading location.",
+    "Correction: web sales are identified by channel_id (2 = home delivery, 3 = click-and-collect). In recent data channel_code is NULL, so the view rpt.v_daily_sales, which filters on channel_code = 'WB', would drop all web sales (193,492.09 EUR net in the period). I did not use that view.",
+    "Composition of the result (EUR excluding VAT): physical stores 983,903.11 before returns, web shop 193,492.09, total 1,177,395.20 before returns, less 69,980.90 of refunds (51,593.92 stores, 18,386.98 web), giving 1,107,414.30.",
+    "Cancelled web orders have no sales lines in the warehouse, so they add nothing.",
+    "rpt_daily_store_sales matches my store figures exactly. For the web shop it is built on dispatch date, not order date, and shows 195,624.31 against my 193,492.09 for the period (a difference of 2,132.22). The report's company total is 1,109,546.52. I used the order date (sale_date) in fact_sales_line, which is the fiscal-calendar basis for the other channels.",
+    "If 'last month' means calendar September 2026 (1 to 30 September), net sales on the same basis are 1,174,613.10 EUR (1,248,875.34 sales less 74,262.24 refunds). That range runs into P06, which is not fully loaded.",
+    "Checks that came up clean: no duplicate sales lines, no orphan store keys, VAT and gross amounts consistent on all period lines, every period return links to a sales line, daily sales present for all 7 days of each week, and 39 to 40 trading locations each week. The closed store 129 (Savonlinna, closed 25 January 2026) has no sales in the period."
+  ]
+}
+```

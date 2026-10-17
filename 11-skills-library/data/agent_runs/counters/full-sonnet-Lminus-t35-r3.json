@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-Lminus-t35-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T35",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "e947c28cca3d01b8076276ca6cbffadae4378a65da29bda8251073e08f23ce54",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:14:53",
+   "statement": "SELECT 'cal' k, fiscal_year a, CAST(fiscal_period AS VARCHAR) b, CAST(period_start_date AS VARCHAR) c, CAST(period_end_date AS VARCHAR) d, CAST(fully_loaded AS VARCHAR) e FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=5\nUNION ALL\nSELECT 'store', CAST(store_key AS VARCHAR), CAST(store_id AS VARCHAR), store_name, city, CAST(valid_from AS VARCHAR)||'..'||CAST(valid_to AS VARCHAR)||' '||region FROM dim_store WHERE store_name ILIKE '%Pit%' OR city ILIKE '%Pit%' OR store_id=102\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "k | a | b | c | d | e\ncal | FY2026/27 | 5 | 2026-08-31 | 2026-09-27 | true\nstore | 3 | 102 | Helsinki Pitäjänmäki | Helsinki | 2000-01-01..2025-04-27 South\nstore | 4 | 102 | Helsinki Pitäjänmäki | Helsinki | 2025-04-28..9999-12-31 Capital Region\nstore | 15 | 110 | Turku Kupittaa | Turku | 2000-01-01..9999-12-31 South\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:15:01",
+   "statement": "WITH sold AS (\n  SELECT p.sku, SUM(f.quantity) AS units, COUNT(*) AS n_lines, COUNT(DISTINCT f.sales_line_id) AS n_distinct_lines, SUM(CASE WHEN f.staff_purchase_flag THEN f.quantity ELSE 0 END) AS staff_units\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND p.category <> 'ZZ Test'\n  GROUP BY p.sku\n), ret AS (\n  SELECT p.sku, SUM(r.quantity_returned) AS returned_units\n  FROM fact_return_line r\n  JOIN dim_store s ON s.store_key = r.store_key\n  JOIN dim_product p ON p.product_key = r.product_key\n  WHERE s.store_id = 102 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND p.category <> 'ZZ Test'\n  GROUP BY p.sku\n)\nSELECT sold.sku, cp.product_name, cp.category, sold.units, sold.n_lines, sold.n_distinct_lines, sold.staff_units, COALESCE(ret.returned_units,0) AS returned_units\nFROM sold JOIN dim_product cp ON cp.sku = sold.sku AND cp.is_current\nLEFT JOIN ret ON ret.sku = sold.sku\nORDER BY sold.units DESC LIMIT 8\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "sku | product_name | category | units | n_lines | n_distinct_lines | staff_units | returned_units\n101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | 52 | 14 | 14 | 0 | 0\n101778 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | 44 | 13 | 13 | 0 | 0\n102244 | Batteries & Bulbs Havu Pro 791 | Electrical | 42 | 19 | 19 | 2 | 1\n103670 | Storage Boxes Vesikko 753 | Cleaning & Household | 30 | 17 | 17 | 0 | 0\n102233 | Batteries & Bulbs Havu Pro 384 | Electrical | 30 | 12 | 12 | 0 | 0\n103545 | Cleaning Products Poutaranta Home 928 | Cleaning & Household | 29 | 15 | 15 | 0 | 0\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | 29 | 14 | 14 | 0 | 1\n102213 | Batteries & Bulbs Kuusela 444 | Electrical | 29 | 12 | 12 | 0 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:15:06",
+   "statement": "WITH l AS (\n  SELECT f.*, p.category FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT (SELECT COUNT(*) FROM l) AS n_lines,\n       (SELECT COUNT(*) FROM (SELECT receipt_id, line_no FROM l GROUP BY 1,2 HAVING COUNT(*)>1)) AS dup_keys,\n       (SELECT SUM(quantity) FROM l) AS units_all,\n       (SELECT SUM(quantity) FROM l WHERE category='ZZ Test') AS units_test,\n       (SELECT SUM(units_sold) FROM rpt_daily_store_sales WHERE store_id=102 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') AS rpt_units,\n       (SELECT MIN(sale_date)||' '||MAX(sale_date) FROM l) AS date_range,\n       (SELECT COUNT(DISTINCT sale_date) FROM l) AS days\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n_lines | dup_keys | units_all | units_test | rpt_units | date_range | days\n2121 | 0 | 3740 | NULL | 3740 | 2026-08-31 2026-09-27 | 28\n(1 row)"
+  }
+ ]
+}

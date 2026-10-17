@@ -1,0 +1,35 @@
+Perfect! All validation checks passed. Now let me format the final answer. The request asked for "Return rate by Garden subcategory" so I should only return the subcategory names and return rates. Let me prepare the final JSON response:
+
+```json
+{
+  "sql": "WITH sales_data AS (\n  SELECT \n    fsl.sales_line_id,\n    p.subcategory,\n    fsl.net_amount,\n    d.fiscal_week\n  FROM fact_sales_line AS fsl\n  INNER JOIN dim_product AS p ON fsl.product_key = p.product_key\n  INNER JOIN dim_store AS s ON fsl.store_key = s.store_key\n  INNER JOIN dim_date AS d ON fsl.sale_date = d.calendar_date\n  WHERE p.category = 'Garden'\n    AND p.category != 'ZZ Test'\n    AND s.store_id != 999\n    AND d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_week BETWEEN 1 AND 13\n),\nsales_with_returns AS (\n  SELECT \n    sd.subcategory,\n    sd.fiscal_week,\n    sd.net_amount,\n    COALESCE(SUM(frl.refund_net), 0) AS refund_net\n  FROM sales_data AS sd\n  LEFT JOIN fact_return_line AS frl ON sd.sales_line_id = frl.sales_line_id\n  GROUP BY sd.subcategory, sd.fiscal_week, sd.sales_line_id, sd.net_amount\n)\nSELECT \n  subcategory,\n  CASE \n    WHEN SUM(net_amount) = 0 THEN 0\n    ELSE (SUM(refund_net) / SUM(net_amount)) * 100\n  END AS return_rate_percent\nFROM sales_with_returns\nGROUP BY subcategory\nORDER BY subcategory",
+  "result": {
+    "columns": ["subcategory", "return_rate_percent"],
+    "rows": [
+      ["Barbecue &amp; Grills", 7.26],
+      ["Edible Plants &amp; Seeds", 0.96],
+      ["Garden Furniture", 12.87],
+      ["Garden Tools", 5.35],
+      ["Outdoor Lighting", 7.16],
+      ["Plants &amp; Flowers", 2.74],
+      ["Pots &amp; Planters", 3.86],
+      ["Soil &amp; Fertiliser", 1.58]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: refund_net divided by sold net, grouped by fiscal week of original sale",
+    "Net sales: excluding VAT, after returns, excluding store 999 and ZZ Test category",
+    "Sale-week cohort: returns counted in the week the item was sold, not the return date"
+  ],
+  "assumptions": [
+    "Last year means FY2025/26 (the fiscal year previous to the current FY2026/27)",
+    "Q1 means fiscal quarters 1-3 (fiscal periods P1-P3, fiscal weeks 1-13)",
+    "Garden subcategories are those with category = 'Garden' in dim_product"
+  ],
+  "caveats": [
+    "Return rates are calculated from the fiscal week of the original sale, not the return date, per the sale-week cohort definition",
+    "The dataset includes both store and web channel sales",
+    "Return amounts are in EUR and reflect full or partial refunds; return counts are aggregated to the subcategory level"
+  ]
+}
+```

@@ -1,0 +1,46 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), net_lines AS (SELECT w.dispatch_date AS business_date, p.sku, f.net_amount AS sales, 0 AS ret FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN web_dispatch w ON w.web_order_id=f.receipt_id WHERE s.store_id=900 AND p.category&lt;&gt;'ZZ Test' UNION ALL SELECT r.return_date, p.sku, 0, r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key WHERE s.store_id=900 AND p.category&lt;&gt;'ZZ Test') SELECT n.sku, cp.product_name, cp.category, ROUND(SUM(sales)-SUM(ret),2) AS net_sales FROM net_lines n JOIN dim_product cp ON cp.sku=n.sku AND cp.is_current WHERE n.business_date &gt;= DATE '2025-11-03' AND n.business_date &lt;= DATE '2026-10-04' GROUP BY 1,2,3 ORDER BY net_sales DESC LIMIT 10",
+  "result": {
+    "columns": ["sku", "product_name", "category", "net_sales"],
+    "rows": [
+      [100955, "Interior Paint Norvik 298", "Paint &amp; Decorating", 14499.84],
+      [103774, "Christmas Decorations Poutaranta Home 601", "Seasonal", 13300.74],
+      [103390, "Bedroom Peltola 793", "Furniture", 10907.95],
+      [100529, "Garden Furniture Raudikko 536", "Garden", 10052.48],
+      [103747, "Christmas Decorations Mäntylä 402", "Seasonal", 9326.33],
+      [103791, "Christmas Decorations Havu 430", "Seasonal", 9209.38],
+      [100573, "Garden Furniture Ahvenisto 564", "Garden", 7495.15],
+      [100528, "Garden Furniture Norvik 499", "Garden", 7411.38],
+      [103928, "Sauna &amp; Winter Havu 699", "Seasonal", 7130.21],
+      [103415, "Home Office Peltola 918", "Furniture", 6889.60]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales are recognised on the Helsinki dispatch date (delivered and collected orders only), not the order date",
+    "Web identified by store_id 900, not channel_code or channel_id, which do not work across the 3 November 2025 migration",
+    "Net sales: net_amount excluding VAT, less web-shop returns (refund_net) on their own return date",
+    "Cancelled and processing orders excluded (no dispatch, no sales lines)",
+    "Test articles (category ZZ Test) excluded; store 999 excluded",
+    "Click-and-collect counted as web",
+    "Products grouped by stable sku, named from the current dim_product version",
+    "Did not use rpt.v_daily_sales or any deprecated, stg_, bak_ or tmp_ table"
+  ],
+  "assumptions": [
+    "'Web sales' means net sales after returns in EUR excluding VAT, the company default; ranking is by that figure",
+    "'Since the platform migration on 3 November 2025' means dispatch dates from Monday 3 November 2025 to the end of the warehouse load, Sunday 4 October 2026 (inclusive)",
+    "'Products' means articles (sku), not product versions",
+    "Orders placed before 3 November but dispatched on or after it are included, as web sales follow the dispatch date (522 such lines)",
+    "Only the top 10 are listed; no ties at the cut-off (10th is 6889.60, 11th is 6679.65)"
+  ],
+  "caveats": [
+    "The ranking shifts under other readings. Before returns, Bedroom Peltola 793 is first (15533.23) and Christmas Decorations Kuusela 620 and Barbecue &amp; Grills Poutaranta Home 851 sit just outside the top 10. If you want net sales to include refunds booked in physical stores on web-sold items, there are 3,411 such return lines over the whole history, and Home Office Peltola 918 drops out of the top 10 (Christmas Decorations Kuusela 620 enters). I used the company definition, where a return reduces net sales at the store where it was processed, so only web-shop returns are deducted here.",
+    "Returns deducted are those processed at the web shop and dated within the window, so a few may relate to sales made before 3 November 2025.",
+    "19 web lines on test articles (ZZ Test) were excluded.",
+    "The window ends on 4 October 2026, when the warehouse load ends; the request came on 8 October, so 5 to 8 October are not in the data.",
+    "I did not use channel_code or rpt.v_daily_sales: they leave out web sales from 3 November 2025.",
+    "Seasonal items (Christmas decorations, sauna and winter) and garden furniture dominate the list, so the result depends on the window covering one Christmas and one spring and summer season.",
+    "I did not run a rpt_daily_store_sales control total because this is a product-level analysis and that table has no product dimension."
+  ]
+}
+```

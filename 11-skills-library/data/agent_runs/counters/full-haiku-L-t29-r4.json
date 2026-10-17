@@ -1,0 +1,49 @@
+{
+ "run_id": "full-haiku-L-t29-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T29",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "11b615cfe39392744f3ae168ec7a674bc403f95c23e969847e78d65072679dda",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:08:04",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 FY2024/25",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P05\n  fiscal_weeks                       18-21\n  start_date                         2024-08-26\n  end_date                           2024-09-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2024-09-22\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 18 AND 21)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:08:11",
+   "statement": "SELECT\n  f.vat_rate,\n  ROUND(SUM(f.gross_amount - f.net_amount), 2) AS vat_charged\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND f.channel_code = 'ST'\nGROUP BY f.vat_rate\nORDER BY f.vat_rate\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_rate | vat_charged\n0.1000 | 150.67\n0.1400 | 817.88\n0.2400 | 54280.59\n0.2550 | 180526.58\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:08:18",
+   "statement": "-- Check for data issues and verify the VAT calculation\nSELECT\n  'Total VAT by rate' AS check_type,\n  COUNT(*) AS line_count,\n  SUM(gross_amount) AS total_gross,\n  SUM(net_amount) AS total_net,\n  ROUND(SUM(gross_amount - net_amount), 2) AS total_vat\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND f.channel_code = 'ST'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "check_type | line_count | total_gross | total_net | total_vat\nTotal VAT by rate | 37745 | 1177234.89 | 941459.17 | 235775.72\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:08:23",
+   "statement": "-- Check products with 25.5% VAT rate\nSELECT DISTINCT\n  p.vat_class,\n  f.vat_rate,\n  COUNT(*) AS line_count\nFROM fact_sales_line f\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND f.channel_code = 'ST'\nGROUP BY p.vat_class, f.vat_rate\nORDER BY f.vat_rate\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_class | vat_rate | line_count\nreduced10 | 0.1000 | 48\nreduced14 | 0.1400 | 1197\nstandard | 0.2400 | 8399\nstandard | 0.2550 | 28101\n(4 rows)"
+  }
+ ]
+}

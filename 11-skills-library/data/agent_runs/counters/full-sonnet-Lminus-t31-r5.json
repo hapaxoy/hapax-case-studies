@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-Lminus-t31-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "b893e7eefe62c68e6188aa1268c44b30725d7282ad01fe86ed8a300c5f5b8a6f",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:51",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_period = 8 ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2024/25 | 8 | 2024-11-25 | 2024-12-22 | 4 | 31 | 34 | true\nFY2025/26 | 8 | 2025-11-24 | 2025-12-21 | 4 | 31 | 34 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:57",
+   "statement": "WITH as_of AS (SELECT DATE '2025-12-21' AS e),\nactive AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key CROSS JOIN as_of\n  WHERE f.sale_date > e - 364 AND f.sale_date <= e)\nSELECT cur.tier, COUNT(*) n, COUNT(DISTINCT a.member_id) nd\nFROM active a CROSS JOIN as_of JOIN dim_member cur ON cur.member_id=a.member_id AND e BETWEEN cur.valid_from AND cur.valid_to\nGROUP BY ALL ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | n | nd\nBasic | 14654 | 14654\nGold | 3901 | 3901\nSilver | 10971 | 10971\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:58",
+   "statement": "SELECT min(sale_date), max(sale_date), count(*), count(DISTINCT sales_line_id), count(*) FILTER (WHERE member_key IS NULL) nonmember,\n count(*) FILTER (WHERE member_key IS NOT NULL AND member_key NOT IN (SELECT member_key FROM dim_member)) orphan,\n min(etl_loaded_at), max(etl_loaded_at)\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-12-23' AND DATE '2025-12-21'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min(sale_date) | max(sale_date) | count_star() | count(DISTINCT sales_line_id) | nonmember | orphan | min(etl_loaded_at) | max(etl_loaded_at)\n2024-12-23 | 2025-12-21 | 617345 | 617345 | 289163 | 0 | 2024-12-24T01:00:00 | 2025-12-22T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:05",
+   "statement": "WITH w AS (SELECT DATE '2024-12-22' AS s, DATE '2025-12-21' AS e),\nl AS (\n  SELECT f.sales_line_id, m.member_id, s.store_id, p.category, f.channel_code, f.receipt_id, f.net_amount, f.quantity, f.staff_purchase_flag, f.sale_date\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key\n  JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key, w\n  WHERE f.sale_date > s AND f.sale_date <= e)\nSELECT 'all' k, count(DISTINCT member_id) FROM l\nUNION ALL SELECT 'excl 999/ZZ', count(DISTINCT member_id) FROM l WHERE store_id<>999 AND category<>'ZZ Test'\nUNION ALL SELECT 'only 999/ZZ lines members', count(DISTINCT member_id) FROM l WHERE (store_id=999 OR category='ZZ Test')\nUNION ALL SELECT 'nonpositive', count(DISTINCT member_id) FROM l WHERE net_amount<=0 OR quantity<=0\nUNION ALL SELECT 'staff', count(DISTINCT member_id) FROM l WHERE staff_purchase_flag\nUNION ALL SELECT 'web cancelled', count(DISTINCT member_id) FROM l JOIN fact_web_order o ON o.web_order_id=l.receipt_id WHERE o.status='cancelled'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "k | count(DISTINCT member_id)\nall | 29526\nexcl 999/ZZ | 29526\nonly 999/ZZ lines members | 0\nnonpositive | 0\nstaff | 1761\nweb cancelled | 0\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:07",
+   "statement": "SELECT count(*) versions, count(DISTINCT member_id) members,\n (SELECT count(*) FROM (SELECT member_id FROM dim_member WHERE DATE '2025-12-21' BETWEEN valid_from AND valid_to GROUP BY 1 HAVING count(*)>1)) multi_at_asof,\n (SELECT count(DISTINCT member_id) FROM dim_member WHERE DATE '2025-12-21' BETWEEN valid_from AND valid_to) valid_at_asof,\n (SELECT count(DISTINCT member_id) FROM dim_member WHERE join_date <= DATE '2025-12-21') joined_by_asof,\n (SELECT count(*) FROM dim_member WHERE tier NOT IN ('Basic','Silver','Gold') OR tier IS NULL) badtier\nFROM dim_member\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "versions | members | multi_at_asof | valid_at_asof | joined_by_asof | badtier\n89314 | 60000 | 0 | 48675 | 48675 | 0\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "WITH targeted AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = (SELECT campaign_id FROM dim_campaign WHERE campaign_name = 'Spring Garden Launch 2026')), web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), spend AS (SELECT SUM(f.net_amount) AS net_spend FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key JOIN targeted t ON t.member_id = m.member_id JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND CASE WHEN s.store_id = 900 THEN w.dispatch_date ELSE f.sale_date END BETWEEN DATE '2026-05-04' AND DATE '2026-05-24') SELECT 'Spring Garden Launch 2026' AS campaign_name, (SELECT COUNT(*) FROM targeted) AS members_contacted, ROUND(net_spend, 2) AS net_spend_eur_excl_vat_before_returns FROM spend",
+  "result": {
+    "columns": ["campaign_name", "members_contacted", "net_spend_eur_excl_vat_before_returns"],
+    "rows": [["Spring Garden Launch 2026", 15001, 190687.59]]
+  },
+  "definitions_applied": [
+    "Contacted member: a member with at least one row in fact_campaign_exposure for the campaign, counted once by distinct member_id",
+    "Member versions: exposure and sales lines carry member_key (the version at the date), so both were resolved to member_id through dim_member",
+    "Spend: net sales before returns, EUR excluding VAT, on lines linked to the contacted members",
+    "Web sales dated on the Helsinki dispatch date, only for delivered or collected orders",
+    "Store 999 (training store) and category ZZ Test left out",
+    "Staff purchases included",
+    "Store lines dated by sale_date (Helsinki business date)",
+    "Warehouse tables used: fact_campaign_exposure, dim_member, fact_sales_line, fact_web_order, dim_store, dim_product, dim_campaign. No deprecated, bak_, stg_ or tmp_ tables"
+  ],
+  "assumptions": [
+    "'Spring Garden Launch 2026' is campaign_id 19 in dim_campaign (window 4 to 24 May 2026, email+sms); the 2024 and 2025 launches and Garden Clearance 2025 are different campaigns",
+    "'Contacted' means a contact was made to the member, whether or not it was delivered. A delivered-only count is 14,814 members",
+    "'Spend' is read as net sales before returns, excluding VAT, which is the basis the company uses for campaign analysis. Including VAT, the same lines come to EUR 238,805.59. Returns are not deducted",
+    "The spend window is exactly 4 to 24 May 2026 inclusive, as written in the request, and is not extended by the usual 7 days used in uplift analysis",
+    "Spend covers all purchases by contacted members in any channel (stores and web), not only garden products",
+    "Web orders count when dispatched in the window, even if placed earlier. Click-and-collect counts from the date it was ready for collection"
+  ],
+  "caveats": [
+    "Web orders placed in the window but dispatched after 24 May, and orders still processing or cancelled, are not counted. Orders placed before 4 May and dispatched inside the window are counted",
+    "Web orders dispatched outside the window by these members, placed in or near it, were left out (1,179 lines, about EUR 33,554). Dating them by order date instead would give a different total",
+    "Spend is before returns. Refunds for returns made by these members were not deducted",
+    "Purchases include the contacted members' spend regardless of whether the campaign caused it. This is total spend, not uplift. The 1,597 holdout members were never contacted and are excluded",
+    "The mailing list size in dim_campaign (16,624 less 1,597 holdout = 15,027) is 26 higher than the 15,001 members with exposure rows. I used the exposure table. I did not find the reason for the 26 difference",
+    "Of the 15,001 members, 2,605 made a purchase in the window; the others count as zero spend",
+    "The warehouse has sales to 4 October 2026, so the May 2026 window is fully loaded"
+  ]
+}
+```

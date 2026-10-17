@@ -1,0 +1,103 @@
+{
+ "run_id": "full-haiku-S-t06-r1",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T06",
+ "budget": 12,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "089fdbb4a28d6b1bcd3107b647018816393b3cb5852668cff279f3a6a850eec2",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:17",
+   "statement": "SELECT DISTINCT fiscal_year\nFROM dim_date\nORDER BY fiscal_year DESC\nLIMIT 10\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:21",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2025/26'\nORDER BY fiscal_period\n",
+   "n": 2,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2025/26 | 1 | FY2025/26 P01 | 2025-04-28 | 2025-05-25\nFY2025/26 | 2 | FY2025/26 P02 | 2025-05-26 | 2025-06-22\nFY2025/26 | 3 | FY2025/26 P03 | 2025-06-23 | 2025-07-27\nFY2025/26 | 4 | FY2025/26 P04 | 2025-07-28 | 2025-08-24\nFY2025/26 | 5 | FY2025/26 P05 | 2025-08-25 | 2025-09-21\nFY2025/26 | 6 | FY2025/26 P06 | 2025-09-22 | 2025-10-26\nFY2025/26 | 7 | FY2025/26 P07 | 2025-10-27 | 2025-11-23\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21\nFY2025/26 | 9 | FY2025/26 P09 | 2025-12-22 | 2026-01-25\nFY2025/26 | 10 | FY2025/26 P10 | 2026-01-26 | 2026-02-22\nFY2025/26 | 11 | FY2025/26 P11 | 2026-02-23 | 2026-03-22\nFY2025/26 | 12 | FY2025/26 P12 | 2026-03-23 | 2026-05-03\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:25",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nORDER BY format\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:31",
+   "statement": "SELECT \n  ds.format,\n  COUNT(DISTINCT fsl.sales_line_id) as total_lines_sold,\n  COUNT(DISTINCT frl.sales_line_id) as lines_returned,\n  SUM(fsl.quantity) as units_sold,\n  COALESCE(SUM(frl.quantity_returned), 0) as units_returned\nFROM fact_sales_line fsl\nJOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nJOIN dim_store ds ON fsl.store_key = ds.store_key\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nWHERE dd.fiscal_year = 'FY2025/26' \n  AND dd.fiscal_period = 2\nGROUP BY ds.format\nORDER BY ds.format\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | total_lines_sold | lines_returned | units_sold | units_returned\nLarge | 16624 | 536 | 27468 | 652\nMedium | 22644 | 736 | 36996 | 901\nSmall | 7349 | 242 | 12232 | 292\nTraining | 126 | 0 | 195 | 0\nWeb | 6351 | 478 | 9968 | 575\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:36",
+   "statement": "SELECT \n  ds.format,\n  SUM(fsl.quantity) as units_sold,\n  COALESCE(SUM(frl.quantity_returned), 0) as units_returned,\n  ROUND(100.0 * COALESCE(SUM(frl.quantity_returned), 0) / SUM(fsl.quantity), 2) as return_rate_pct\nFROM fact_sales_line fsl\nJOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nJOIN dim_store ds ON fsl.store_key = ds.store_key\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nWHERE dd.fiscal_year = 'FY2025/26' \n  AND dd.fiscal_period = 2\nGROUP BY ds.format\nORDER BY ds.format\n",
+   "n": 5,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | units_sold | units_returned | return_rate_pct\nLarge | 27468 | 652 | 2.37\nMedium | 36996 | 901 | 2.44\nSmall | 12232 | 292 | 2.39\nTraining | 195 | 0 | 0.0\nWeb | 9968 | 575 | 5.77\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:40",
+   "statement": "SELECT DISTINCT store_id, store_name, format, city, is_current\nFROM dim_store\nWHERE format = 'Training'\nORDER BY store_id\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | format | city | is_current\n999 | Training store | Training | Tampere | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:45",
+   "statement": "SELECT \n  ds.format,\n  fsl.channel_code,\n  COUNT(*) as line_count\nFROM fact_sales_line fsl\nJOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nJOIN dim_store ds ON fsl.store_key = ds.store_key\nWHERE dd.fiscal_year = 'FY2025/26' \n  AND dd.fiscal_period = 2\nGROUP BY ds.format, fsl.channel_code\nORDER BY ds.format, fsl.channel_code\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | channel_code | line_count\nLarge | ST | 16624\nMedium | ST | 22644\nSmall | ST | 7349\nTraining | ST | 126\nWeb | WB | 6351\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:51",
+   "statement": "SELECT \n  'Sales with missing store' as check_type,\n  COUNT(*) as count\nFROM fact_sales_line fsl\nJOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nWHERE fsl.store_key IS NULL\n  AND dd.fiscal_year = 'FY2025/26' \n  AND dd.fiscal_period = 2\nUNION ALL\nSELECT \n  'Sales with negative qty' as check_type,\n  COUNT(*) as count\nFROM fact_sales_line fsl\nJOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nWHERE fsl.quantity < 0\n  AND dd.fiscal_year = 'FY2025/26' \n  AND dd.fiscal_period = 2\nUNION ALL\nSELECT \n  'Returns with negative qty' as check_type,\n  COUNT(*) as count\nFROM fact_return_line frl\nWHERE frl.quantity_returned < 0\n  AND frl.sales_line_id IN (\n    SELECT sales_line_id FROM fact_sales_line fsl\n    JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n    WHERE dd.fiscal_year = 'FY2025/26' AND dd.fiscal_period = 2\n  )\n",
+   "n": 8,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "check_type | count\nSales with missing store | 0\nSales with negative qty | 0\nReturns with negative qty | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:40:54",
+   "statement": "SELECT fully_loaded\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2025/26' AND fiscal_period = 2\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fully_loaded\ntrue\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:41:01",
+   "statement": "SELECT \n  ds.format,\n  ROUND(100.0 * COALESCE(SUM(frl.quantity_returned), 0) / SUM(fsl.quantity), 2) as return_rate_pct\nFROM fact_sales_line fsl\nJOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nJOIN dim_store ds ON fsl.store_key = ds.store_key\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nWHERE dd.fiscal_year = 'FY2025/26' \n  AND dd.fiscal_period = 2\nGROUP BY ds.format\nORDER BY ds.format\n",
+   "n": 10,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | return_rate_pct\nLarge | 2.37\nMedium | 2.44\nSmall | 2.39\nTraining | 0.0\nWeb | 5.77\n(5 rows)"
+  }
+ ]
+}

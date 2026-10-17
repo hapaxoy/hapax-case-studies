@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH sold_lines AS (SELECT f.sales_line_id, cp.subcategory, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND cp.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2025/26' AND d.fiscal_quarter = 1 AND cp.category = 'Garden' AND cp.subcategory &lt;&gt; 'Outdoor Lighting'), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT 'FY2025/26' AS fiscal_year, 1 AS fiscal_quarter, l.subcategory, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct FROM sold_lines l LEFT JOIN refunds r USING (sales_line_id) GROUP BY l.subcategory ORDER BY return_rate_pct DESC",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_quarter", "subcategory", "return_rate_pct"],
+    "rows": [
+      ["FY2025/26", 1, "Garden Furniture", 12.87],
+      ["FY2025/26", 1, "Barbecue &amp; Grills", 7.26],
+      ["FY2025/26", 1, "Garden Tools", 5.35],
+      ["FY2025/26", 1, "Pots &amp; Planters", 3.86],
+      ["FY2025/26", 1, "Plants &amp; Flowers", 2.74],
+      ["FY2025/26", 1, "Soil &amp; Fertiliser", 1.58],
+      ["FY2025/26", 1, "Edible Plants &amp; Seeds", 0.96]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate = returned net (refund_net) divided by sold net (net_amount), excluding VAT",
+    "Sale-week cohort: lines selected by the fiscal period of the original sale date, with refunds matched through sales_line_id whenever and wherever they were booked (web and store lines both included)",
+    "Fiscal calendar: Q1 = P1 to P3 = fiscal weeks 1 to 13 (28 Apr 2025 to 27 Jul 2025)",
+    "Store 999 and category ZZ Test excluded",
+    "As-is product hierarchy: current product version (dim_product.is_current) for category and subcategory",
+    "Staff purchases included (as in net sales)"
+  ],
+  "assumptions": [
+    "'Last year' read as FY2025/26, the fiscal year just ended (the request was received on 6 Oct 2026, in FY2026/27), as in earlier accepted requests such as REQ-D14 and REQ-D16",
+    "'Q1' read as fiscal Q1 of FY2025/26, which is P1 to P3",
+    "'Goods sold' includes both store and web sales (store 900), with web refunds following the line",
+    "Category and subcategory are as-is (current hierarchy), because the request did not ask for as-was",
+    "One row per Garden subcategory, with no total row, as the request asked for a breakdown by subcategory"
+  ],
+  "caveats": [
+    "Correction, Outdoor Lighting: the outdoor lighting subcategory moved from Garden to Electrical on 27 Oct 2025. Five articles (SKUs 100870, 100877, 100879, 100916, 100917) were delisted before the move and never got a new product version, so dim_product still shows them in Garden / Outdoor Lighting. I treated outdoor lighting as Electrical in full, as the company's as-is rule says, and left these five out of Garden. They had 19 lines and EUR 375.00 net sold in Q1 and no returns, so including them would add an Outdoor Lighting row at 0.00% and would barely move any other figure. The 65 articles that did move (1,445 lines, EUR 50,442.94 sold, 7.22% returned) are also in Electrical, not Garden.",
+    "As-was would differ: on the hierarchy of the time, Outdoor Lighting was still part of Garden in Q1 FY2025/26 and would appear as a Garden subcategory with a 7.22% return rate for the moved articles. Pekka should say if he wants that view.",
+    "The Q1 cohort is complete. The last sale was 27 Jul 2025 and the data is loaded through 4 Oct 2026. The last return booked against these sales is 22 Aug 2025, inside the 30-day return window.",
+    "Store 999 (training store) lines were excluded. No ZZ Test articles appear in Garden.",
+    "Checks run: no duplicate sales line ids and no duplicate current product versions. No returns without a matching sale. No refund above the sold value or returned quantity above the quantity sold. No cancelled web orders among the Garden lines. The rpt_daily_store_sales control total does not apply to a category-level return rate, so it was not used."
+  ]
+}
+```

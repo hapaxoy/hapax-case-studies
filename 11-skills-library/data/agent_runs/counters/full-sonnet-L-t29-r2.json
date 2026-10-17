@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t29-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T29",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "6485de7f237e4a62e3d023565539a9f746e24502501de176774496ad3a9aac5b",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:26:15",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 FY2024/25",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P05\n  fiscal_weeks                       18-21\n  start_date                         2024-08-26\n  end_date                           2024-09-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2024-09-22\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 18 AND 21)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:21",
+   "statement": "SELECT f.vat_rate, p.vat_class, (f.sale_date >= DATE '2024-09-01') AS after_change, s.store_id >= 900 AS nonstore, f.channel_code,\n count(*) n, sum(f.net_amount) net, sum(f.gross_amount) gross, sum(f.gross_amount - f.net_amount) vat, sum(round(f.net_amount*f.vat_rate,2)) calc_vat,\n min(f.sale_date) mn, max(f.sale_date) mx, count(DISTINCT f.sales_line_id) dl\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND s.store_id <> 999 AND p.category <> 'ZZ Test'\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 2,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "vat_rate | vat_class | after_change | nonstore | channel_code | n | net | gross | vat | calc_vat | mn | mx | dl\n0.1000 | reduced10 | false | false | ST | 11 | 280.85 | 308.95 | 28.10 | 28.10 | 2024-08-26 | 2024-08-31 | 11\n0.1000 | reduced10 | false | true | WB | 2 | 35.49 | 39.04 | 3.55 | 3.55 | 2024-08-26 | 2024-08-28 | 2\n0.1000 | reduced10 | true | false | ST | 37 | 1225.20 | 1347.77 | 122.57 | 122.57 | 2024-09-01 | 2024-09-21 | 37\n0.1000 | reduced10 | true | true | WB | 7 | 162.82 | 179.11 | 16.29 | 16.29 | 2024-09-03 | 2024-09-21 | 7\n0.1400 | reduced14 | false | false | ST | 394 | 1893.58 | 2158.94 | 265.36 | 265.36 | 2024-08-26 | 2024-08-31 | 394\n0.1400 | reduced14 | false | true | WB | 42 | 190.86 | 217.57 | 26.71 | 26.71 | 2024-08-26 | 2024-08-31 | 42\n0.1400 | reduced14 | true | false | ST | 802 | 3942.38 | 4494.64 | 552.26 | 552.26 | 2024-09-01 | 2024-09-22 | 802\n0.1400 | reduced14 | true | true | WB | 99 | 442.49 | 504.43 | 61.94 | 61.94 | 2024-09-01 | 2024-09-22 | 99\n0.2400 | standard | false | false | ST | 8357 | 225441.92 | 279547.12 | 54105.20 | 54105.20 | 2024-08-26 | 2024-08-31 | 8357\n0.2400 | standard | false | true | WB | 821 | 28251.39 | 35031.77 | 6780.38 | 6780.38 | 2024-08-26 | 2024-08-31 | 821\n0.2550 | standard | true | false | ST | 28004 | 705945.31 | 885962.54 | 180017.23 | 180017.23 | 2024-09-01 | 2024-09-22 | 28004\n0.2550 | standard | true | true | WB | 3103 | 93946.21 | 117902.73 | 23956.52 | 23956.52 | 2024-09-01 | 2024-09-22 | 3103\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:28",
+   "statement": "WITH l AS (\n SELECT f.* FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND s.store_id < 900 AND p.category <> 'ZZ Test'),\nr AS (\n SELECT r.* FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\n WHERE r.return_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND s.store_id < 900 AND p.category <> 'ZZ Test')\nSELECT 'lines' k, count(*) n, count(DISTINCT sales_line_id) d, sum(net_amount) net, sum(gross_amount-net_amount) vat, sum(CASE WHEN CAST(timezone('Europe/Helsinki', sale_ts_utc AT TIME ZONE 'UTC') AS DATE) <> sale_date THEN 1 ELSE 0 END) datemismatch FROM l\nUNION ALL SELECT 'returns', count(*), count(DISTINCT return_line_id), sum(refund_net), sum(refund_gross-refund_net), 0 FROM r\nUNION ALL SELECT 'rpt', sum(receipts), 0, sum(net_sales_before_returns), sum(returns_net), count(DISTINCT business_date) FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND store_id<900\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "k | n | d | net | vat | datemismatch\nlines | 37605 | 37605 | 938729.24 | 235090.72 | 0\nreturns | 1364 | 1364 | 44960.38 | 11135.97 | 0\nrpt | 16368 | 0 | 938729.24 | 44960.38 | 28\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:36",
+   "statement": "WITH s AS (\n SELECT f.vat_rate, sum(f.gross_amount - f.net_amount) AS vat_charged\n FROM fact_sales_line f\n JOIN dim_store st ON st.store_key = f.store_key\n JOIN dim_product p ON p.product_key = f.product_key\n WHERE f.sale_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22'\n   AND st.store_id < 900 AND p.category <> 'ZZ Test'\n GROUP BY 1),\nr AS (\n SELECT x.vat_rate, sum(x.refund_gross - x.refund_net) AS vat_refunded\n FROM fact_return_line x\n JOIN dim_store st ON st.store_key = x.store_key\n JOIN dim_product p ON p.product_key = x.product_key\n WHERE x.return_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22'\n   AND st.store_id < 900 AND p.category <> 'ZZ Test'\n GROUP BY 1)\nSELECT 'FY2024/25' AS fiscal_year, 5 AS fiscal_period, CAST(s.vat_rate*100 AS DECIMAL(5,1)) AS vat_rate_pct, s.vat_charged, r.vat_refunded\nFROM s LEFT JOIN r USING (vat_rate) ORDER BY s.vat_rate\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | vat_rate_pct | vat_charged | vat_refunded\nFY2024/25 | 5 | 10.0 | 150.67 | 1.20\nFY2024/25 | 5 | 14.0 | 817.62 | 10.48\nFY2024/25 | 5 | 24.0 | 54105.20 | 5094.72\nFY2024/25 | 5 | 25.5 | 180017.23 | 6029.57\n(4 rows)"
+  }
+ ]
+}

@@ -1,0 +1,34 @@
+Perfect! The totals match the control table exactly, confirming the query is correct. Now I'll prepare the final answer with the required JSON format:
+
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: stores on the sale date, web on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n),\nq3_sales AS (\n    SELECT d.fiscal_year,\n           n.store_id,\n           cs.region,\n           SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d  ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    WHERE d.fiscal_week BETWEEN 27 AND 39\n      AND d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    GROUP BY d.fiscal_year, n.store_id, cs.region\n),\nregional_sales AS (\n    SELECT fiscal_year,\n           CASE WHEN store_id = 900 THEN 'Online' ELSE region END AS region,\n           SUM(net_sales) AS net_sales\n    FROM q3_sales\n    GROUP BY fiscal_year, CASE WHEN store_id = 900 THEN 'Online' ELSE region END\n)\nSELECT region,\n       MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) AS last_year_q3,\n       MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END) AS prior_year_q3,\n       ROUND(100.0 * (MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) / \n                      MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END) - 1), 1) AS growth_pct\nFROM regional_sales\nGROUP BY region\nORDER BY CASE WHEN region = 'Online' THEN 1 ELSE 0 END, region",
+  "result": {
+    "columns": ["region", "last_year_q3", "prior_year_q3", "growth_pct"],
+    "rows": [
+      ["Capital Region", 527026.01, 525151.30, 0.4],
+      ["East", 597583.01, 588069.69, 1.6],
+      ["North", 413618.24, 387519.62, 6.7],
+      ["South", 729021.20, 710020.17, 2.7],
+      ["West", 997953.07, 952479.50, 4.8],
+      ["Online", 580450.93, 447645.43, 29.7]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Returns reduce net sales on their return date, not the original sale date",
+    "Web shop sales recognized on dispatch date (Helsinki time), not order date",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "As-is reporting: current store regions as of transaction date",
+    "Web shop shown as own 'Online' region"
+  ],
+  "assumptions": [
+    "Q3 last year interpreted as Q3 FY2025/26 (fiscal weeks 27-39, 27 Oct 2025 – 25 Jan 2026)",
+    "Q3 the year before interpreted as Q3 FY2024/25 (fiscal weeks 27-39, 28 Oct 2024 – 26 Jan 2025)",
+    "Growth percentage = (current_year / prior_year − 1) × 100, rounded to one decimal place"
+  ],
+  "caveats": [
+    "None. Totals validated against rpt_daily_store_sales for both periods: FY2025/26 Q3 = 3,845,652.46; FY2024/25 Q3 = 3,610,885.71"
+  ]
+}
+```

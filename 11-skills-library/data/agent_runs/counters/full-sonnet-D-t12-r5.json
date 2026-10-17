@@ -1,0 +1,103 @@
+{
+ "run_id": "full-sonnet-D-t12-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T12",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "9b3a7e6027ffa381beef7465c41433887b8d958fc8ebdf2b322d65a3ccaea216",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:25",
+   "statement": "SELECT p.fiscal_period_label, p.period_start_date, p.period_end_date, p.weeks_in_period, p.first_fiscal_week, p.last_fiscal_week, p.fully_loaded,\n (SELECT list(DISTINCT region) FROM dim_store) regions\nFROM ref_fiscal_calendar p WHERE fiscal_year='FY2025/26' AND fiscal_period=11\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded | regions\nFY2025/26 P11 | 2026-02-23 | 2026-03-22 | 4 | 44 | 47 | true | ['Online', 'South', 'Head office', 'East', 'North', 'West', 'Capital Region']\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:26",
+   "statement": "SELECT d.fiscal_week, f.week_ending_date, count(*) n, count(DISTINCT (f.store_key, f.product_key)) dist_keys, count(DISTINCT f.etl_loaded_at) loads, min(f.etl_loaded_at), max(f.etl_loaded_at), sum(f.closing_value) v\nFROM fact_stock_week f JOIN dim_date d ON d.calendar_date=f.week_ending_date\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=11\nGROUP BY 1,2 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_week | week_ending_date | n | dist_keys | loads | min(f.etl_loaded_at) | max(f.etl_loaded_at) | v\n44 | 2026-03-01 | 27263 | 27263 | 1 | 2026-03-02T01:00:00 | 2026-03-02T01:00:00 | 2886467.17\n45 | 2026-03-08 | 34600 | 27161 | 2 | 2026-03-09T01:00:00 | 2026-03-10T02:45:00 | 3690640.42\n46 | 2026-03-15 | 27161 | 27161 | 1 | 2026-03-16T01:00:00 | 2026-03-16T01:00:00 | 2873439.95\n47 | 2026-03-22 | 27161 | 27161 | 1 | 2026-03-23T01:00:00 | 2026-03-23T01:00:00 | 2866942.16\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:32",
+   "statement": "WITH w AS (SELECT * FROM fact_stock_week WHERE week_ending_date='2026-03-08'),\ndups AS (SELECT store_key, product_key FROM w GROUP BY 1,2 HAVING count(*)>1)\nSELECT etl_loaded_at, count(*) n, count(DISTINCT (store_key,product_key)) k, sum(closing_value) v, sum(closing_units) u,\n sum(CASE WHEN (store_key,product_key) IN (SELECT store_key,product_key FROM dups) THEN 1 ELSE 0 END) in_dups\nFROM w GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "etl_loaded_at | n | k | v | u | in_dups\n2026-03-09T01:00:00 | 27161 | 27161 | 2876999.22 | 209430 | 7439\n2026-03-10T02:45:00 | 7439 | 7439 | 813641.20 | 59280 | 7439\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:34",
+   "statement": "WITH a AS (SELECT store_key, product_key FROM fact_stock_week WHERE week_ending_date='2026-03-01'),\nb AS (SELECT store_key, product_key FROM fact_stock_week WHERE week_ending_date='2026-03-15')\nSELECT (SELECT count(*) FROM (SELECT * FROM a EXCEPT SELECT * FROM b)) only_in_44,\n       (SELECT count(*) FROM (SELECT * FROM b EXCEPT SELECT * FROM a)) only_in_46\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "only_in_44 | only_in_46\n102 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:38",
+   "statement": "SELECT count(*) pairs, sum(CASE WHEN a.closing_units=b.closing_units AND a.closing_value=b.closing_value AND a.receipts_units=b.receipts_units AND a.adjustment_units=b.adjustment_units THEN 1 ELSE 0 END) identical\nFROM fact_stock_week a JOIN fact_stock_week b ON a.store_key=b.store_key AND a.product_key=b.product_key AND a.week_ending_date=b.week_ending_date AND a.etl_loaded_at<b.etl_loaded_at\nWHERE a.week_ending_date='2026-03-08'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "pairs | identical\n7439 | 7439\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:40",
+   "statement": "WITH a AS (SELECT store_key, product_key FROM fact_stock_week WHERE week_ending_date='2026-03-01'),\nb AS (SELECT store_key, product_key FROM fact_stock_week WHERE week_ending_date='2026-03-15'),\nx AS (SELECT * FROM a EXCEPT SELECT * FROM b)\nSELECT s.store_id, s.store_name, s.region, p.category, count(*) n\nFROM x JOIN dim_store s ON s.store_key=x.store_key JOIN dim_product p ON p.product_key=x.product_key GROUP BY ALL ORDER BY n DESC LIMIT 20\n",
+   "n": 6,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "store_id | store_name | region | category | n\n136 | Tampere Lamminpää | West | Garden | 3\n118 | Nokia | West | Garden | 3\n125 | Kuopio | East | Tools & Hardware | 2\n104 | Vantaa Tammisto | Capital Region | Garden | 2\n121 | Vaasa | West | Tools & Hardware | 2\n104 | Vantaa Tammisto | Capital Region | Tools & Hardware | 2\n131 | Oulu Kaakkuri | North | Tools & Hardware | 2\n115 | Tampere Hervanta | West | Tools & Hardware | 2\n109 | Hämeenlinna | South | Garden | 2\n114 | Kouvola | South | Garden | 2\n119 | Pori | West | Home Textiles & Decor | 2\n108 | Lahti | South | Garden | 2\n126 | Joensuu | East | Tools & Hardware | 2\n120 | Rauma | West | Tools & Hardware | 2\n125 | Kuopio | East | Garden | 2\n101 | Helsinki Vuosaari | Capital Region | Garden | 2\n109 | Hämeenlinna | South | Tools & Hardware | 2\n102 | Helsinki Pitäjänmäki | Capital Region | Garden | 2\n116 | Tampere Lielahti | West | Tools & Hardware | 2\n110 | Turku Kupittaa | South | Tools & Hardware | 2\n(20 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:47",
+   "statement": "WITH stock AS (\n  -- one row per store version x product version x week (week 45 was loaded twice, identical rows)\n  SELECT DISTINCT f.store_key, f.product_key, f.week_ending_date, f.closing_units, f.closing_value\n  FROM fact_stock_week f\n),\nwk AS (\n  SELECT cp.category, d.fiscal_year, d.fiscal_period, d.fiscal_week, SUM(k.closing_value) AS week_value, COUNT(*) n\n  FROM stock k\n  JOIN dim_date d ON d.calendar_date = k.week_ending_date\n  JOIN dim_store s ON s.store_key = k.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key = k.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 11\n    AND s.store_id < 900 AND s.store_id <> 999 AND cs.region = 'West'\n    AND cp.category <> 'ZZ Test' AND p.category <> 'ZZ Test'\n  GROUP BY ALL\n)\nSELECT category, fiscal_year, fiscal_period, ROUND(AVG(week_value),2) avg_stock_value, count(*) weeks, min(week_value), max(week_value), sum(n)\nFROM wk GROUP BY ALL ORDER BY category\n",
+   "n": 7,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"weeks\"\n\nLINE 19: ...period, ROUND(AVG(week_value),2) avg_stock_value, count(*) weeks, min(week_value), max(week_value), sum(n)\n                                                                       ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:48",
+   "statement": "SELECT s.store_id, s.store_name, s.region, s.valid_from, s.valid_to, s.is_current, s.close_date, count(*) over (partition by s.store_id) versions\nFROM dim_store s WHERE s.store_id IN (SELECT store_id FROM dim_store WHERE is_current AND region='West') OR s.store_id>=900 ORDER BY s.store_id, s.valid_from\n",
+   "n": 8,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "store_id | store_name | region | valid_from | valid_to | is_current | close_date | versions\n115 | Tampere Hervanta | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n116 | Tampere Lielahti | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n117 | Tampere Kaleva | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n118 | Nokia | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n119 | Pori | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n120 | Rauma | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n121 | Vaasa | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n122 | Seinäjoki | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n123 | Kokkola | West | 2000-01-01 | 9999-12-31 | true | NULL | 1\n136 | Tampere Lamminpää | West | 2024-09-02 | 9999-12-31 | true | NULL | 1\n900 | Tuomimetsä web shop | Online | 2000-01-01 | 9999-12-31 | true | NULL | 1\n999 | Training store | Head office | 2000-01-01 | 9999-12-31 | true | NULL | 1\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:53",
+   "statement": "WITH stock AS (\n  SELECT DISTINCT f.store_key, f.product_key, f.week_ending_date, f.closing_units, f.closing_value\n  FROM fact_stock_week f\n),\nwk AS (\n  SELECT cp.category, d.fiscal_year, d.fiscal_period, d.fiscal_week, SUM(k.closing_value) AS week_value, COUNT(*) n\n  FROM stock k\n  JOIN dim_date d ON d.calendar_date = k.week_ending_date\n  JOIN dim_store s ON s.store_key = k.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key = k.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 11\n    AND s.store_id < 900 AND s.store_id <> 999 AND cs.region = 'West'\n    AND cp.category <> 'ZZ Test' AND p.category <> 'ZZ Test'\n  GROUP BY ALL\n)\nSELECT category, fiscal_year, fiscal_period, ROUND(AVG(week_value),2) AS avg_stock_value, count(*) AS n_weeks, min(week_value) AS minv, max(week_value) AS maxv, sum(n) AS rows_used\nFROM wk GROUP BY ALL ORDER BY category\n",
+   "n": 9,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | fiscal_year | fiscal_period | avg_stock_value | n_weeks | minv | maxv | rows_used\nBathroom & Plumbing | FY2025/26 | 11 | 75701.53 | 4 | 74757.58 | 76494.19 | 1819\nCleaning & Household | FY2025/26 | 11 | 24179.52 | 4 | 23819.75 | 24458.65 | 2622\nElectrical | FY2025/26 | 11 | 68684.23 | 4 | 67641.91 | 70007.07 | 3804\nFurniture | FY2025/26 | 11 | 139710.73 | 4 | 138066.79 | 140479.91 | 1025\nGarden | FY2025/26 | 11 | 157755.23 | 4 | 156140.34 | 159061.51 | 6609\nHome Textiles & Decor | FY2025/26 | 11 | 43663.29 | 4 | 43219.88 | 43869.76 | 2854\nKitchen & Dining | FY2025/26 | 11 | 56414.75 | 4 | 55504.41 | 57431.52 | 2320\nPaint & Decorating | FY2025/26 | 11 | 80430.48 | 4 | 79214.26 | 81205.90 | 2850\nSeasonal | FY2025/26 | 11 | 64998.54 | 4 | 63790.11 | 65894.90 | 1972\nTools & Hardware | FY2025/26 | 11 | 101986.72 | 4 | 101198.68 | 102733.97 | 3919\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:00",
+   "statement": "SELECT count(*) n, sum(CASE WHEN f.closing_units<0 THEN 1 ELSE 0 END) neg_units, sum(CASE WHEN f.closing_value<0 THEN 1 ELSE 0 END) neg_val,\n sum(CASE WHEN abs(f.closing_value - f.closing_units*p.standard_unit_cost)>0.02 THEN 1 ELSE 0 END) value_mismatch,\n sum(CASE WHEN f.closing_units=0 THEN 1 ELSE 0 END) zero_units, max(f.closing_units) maxu, max(f.closing_value) maxv,\n sum(CASE WHEN f.week_ending_date NOT BETWEEN p.valid_from AND p.valid_to THEN 1 ELSE 0 END) prod_out_of_validity,\n sum(CASE WHEN f.week_ending_date NOT BETWEEN s.valid_from AND s.valid_to THEN 1 ELSE 0 END) store_out_of_validity\nFROM (SELECT DISTINCT * EXCLUDE (etl_loaded_at) FROM fact_stock_week) f\nJOIN dim_product p ON p.product_key=f.product_key JOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_date d ON d.calendar_date=f.week_ending_date\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=11 AND s.store_id IN (SELECT store_id FROM dim_store WHERE region='West' AND is_current)\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | neg_units | neg_val | value_mismatch | zero_units | maxu | maxv | prod_out_of_validity | store_out_of_validity\n29794 | 0 | 0 | 0 | 38 | 212 | 3169.20 | 0 | 0\n(1 row)"
+  }
+ ]
+}

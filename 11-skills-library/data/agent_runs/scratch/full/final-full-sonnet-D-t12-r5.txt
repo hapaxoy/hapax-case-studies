@@ -1,0 +1,46 @@
+```json
+{
+  "sql": "WITH stock AS (SELECT DISTINCT f.store_key, f.product_key, f.week_ending_date, f.closing_units, f.closing_value FROM fact_stock_week f), wk AS (SELECT cp.category, d.fiscal_year, d.fiscal_period, d.fiscal_week, SUM(k.closing_value) AS week_value FROM stock k JOIN dim_date d ON d.calendar_date = k.week_ending_date JOIN dim_store s ON s.store_key = k.store_key JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current JOIN dim_product p ON p.product_key = k.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 11 AND s.store_id &lt; 900 AND s.store_id &lt;&gt; 999 AND cs.region = 'West' AND cp.category &lt;&gt; 'ZZ Test' AND p.category &lt;&gt; 'ZZ Test' GROUP BY ALL) SELECT category, fiscal_year, fiscal_period, ROUND(AVG(week_value), 2) AS avg_stock_value FROM wk GROUP BY ALL ORDER BY category",
+  "result": {
+    "columns": ["category", "fiscal_year", "fiscal_period", "avg_stock_value"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", "FY2025/26", 11, 75701.53],
+      ["Cleaning &amp; Household", "FY2025/26", 11, 24179.52],
+      ["Electrical", "FY2025/26", 11, 68684.23],
+      ["Furniture", "FY2025/26", 11, 139710.73],
+      ["Garden", "FY2025/26", 11, 157755.23],
+      ["Home Textiles &amp; Decor", "FY2025/26", 11, 43663.29],
+      ["Kitchen &amp; Dining", "FY2025/26", 11, 56414.75],
+      ["Paint &amp; Decorating", "FY2025/26", 11, 80430.48],
+      ["Seasonal", "FY2025/26", 11, 64998.54],
+      ["Tools &amp; Hardware", "FY2025/26", 11, 101986.72]
+    ]
+  },
+  "definitions_applied": [
+    "Closing stock is a weekly snapshot: summed across stores and products within each week first, then averaged over the weeks of the period (never summed across weeks)",
+    "Stock value is closing_value, which is stock at standard cost in EUR",
+    "Fiscal calendar: FY2025/26 P11 is 23 Feb to 22 Mar 2026, fiscal weeks 44 to 47, four weeks, fully loaded",
+    "As-is reporting: region taken from the current dim_store version (is_current) and category from the current dim_product version (is_current)",
+    "Stock by store covers physical stores only (store_id below 900), so the web shop is out, and the warehouse is not in this table",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Grain of fact_stock_week: one row per store_key, product_key and week_ending_date",
+    "Distinct natural keys: joins to versioned dimensions use the version key from the fact, then is_current for as-is"
+  ],
+  "assumptions": [
+    "'Last year' read as FY2025/26. The request was received on 5 Oct 2026, in FY2026/27, and past requests from May 2026 onward (FY2026/27) read 'last year' as FY2025/26 (REQ-D04, D08, D28, D35)",
+    "'Period 11' read as fiscal period 11 of FY2025/26, not a calendar month",
+    "'Average stock value' read as the average of the four weekly closing stock values at standard cost, which are the Sunday snapshots on 1, 8, 15 and 22 March 2026",
+    "'West' read as the West region as-is, meaning the current region assignment. This is the ten stores 115 to 123 and 136 (Tampere Hervanta, Tampere Lielahti, Tampere Kaleva, Nokia, Pori, Rauma, Vaasa, Seinäjoki, Kokkola, Tampere Lamminpää). Stores that moved out of South to Capital Region or East to South are not West as-is",
+    "Category is the current product category (as-is). This matters for outdoor lighting, which sits in Electrical for all history, and in P11 its product versions are already Electrical either way",
+    "The split is by category only, with one row per category and no total row, as the request did not ask for a total"
+  ],
+  "caveats": [
+    "Correction: the week ending 8 March 2026 (fiscal week 45) was loaded twice. 7,439 store x product rows appear a second time, loaded on 10 March at 02:45 after the original load on 9 March at 01:00, and the duplicates carry identical units and values. I kept one row per store, product and week. Summing the raw table would have overstated that week's stock by about 813,641 EUR company-wide and inflated the West averages",
+    "Week 44 has 102 more store x product rows than weeks 45 to 47, which looks like a normal change in ranging between weeks. I left those rows in as genuine snapshot rows",
+    "closing_value equals closing_units times the standard unit cost on every row checked for the West stores in P11, and no row has negative stock. Stock is valued at standard cost, not at selling price or purchase cost",
+    "Only the articles each store ranges (carries) have rows in fact_stock_week, so zero-stock lines (38 rows in the West in P11) are included at value 0 and absent articles are not",
+    "The control-total check against rpt_daily_store_sales does not apply, because that table holds sales rather than stock",
+    "The warehouse is loaded through 4 Oct 2026, and P11 FY2025/26 is fully loaded, so the period is complete"
+  ]
+}
+```

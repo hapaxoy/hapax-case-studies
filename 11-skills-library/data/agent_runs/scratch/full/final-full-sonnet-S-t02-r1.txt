@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, 4 AS fiscal_period, 'Garden Furniture' AS subcategory, SUM(r.quantity_returned) AS units_returned FROM fact_return_line AS r JOIN dim_product AS p ON p.product_key = r.product_key JOIN ref_fiscal_calendar AS d ON d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 WHERE p.subcategory = 'Garden Furniture' AND r.return_date BETWEEN d.period_start_date AND d.period_end_date GROUP BY d.fiscal_year",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "subcategory", "units_returned"],
+    "rows": [["FY2026/27", 4, "Garden Furniture", 92]]
+  },
+  "definitions_applied": [
+    "Fiscal period 4 of FY2026/27 = 2026-08-03 to 2026-08-30 (4 weeks, ref_fiscal_calendar; matches dim_date)",
+    "Garden Furniture = dim_product subcategory 'Garden Furniture' (category Garden)",
+    "Returned units = SUM(quantity_returned) on fact_return_line, dated by return_date",
+    "Product version taken from the return line's product_key (version at the return date)"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year, FY2026/27, as the request date is 2026-10-05 and that year started 2026-06-29. Period 4 is the one that ended 2026-08-30, and it is fully loaded.",
+    "'Period' means the company's 4-4-5 style fiscal period, not a calendar month or a quarter.",
+    "'Handed back and booked as returned' means units on booked return lines, counted by the date of the return, not the date of the original sale.",
+    "Web returns are included. Of the 92 units, 34 were booked at the web shop and 58 at physical stores. Both are booked returns, and the request did not limit the channel.",
+    "All return reason codes are included (changed mind, defective, damaged in transit, not as described, wrong size or fit). The request did not exclude any.",
+    "Only the fact tables were used. The staging, backup and tmp tables were ignored."
+  ],
+  "caveats": [
+    "No correction to the figure was needed. I checked for duplicate return lines (none), the staging return table (all 141 rows are already in the fact table, so nothing is double-counted), orphan product keys (none), return lines with no matching sale (none), returns dated before the sale (none), returns larger than the quantity sold (none), and return timestamps that fall on a different date than return_date (none).",
+    "Garden Furniture has no category or subcategory changes across its product versions. The October 2025 move of Outdoor Lighting from Garden to Electrical does not affect it. The figure is the same whether the product version at the return date or the current version is used.",
+    "All 92 units come from 92 separate return lines (one unit per line). The units are 37 changed mind, 20 defective, 14 not as described, 14 wrong size or fit and 7 damaged in transit.",
+    "Of the 34 web-shop units, the originating web orders include some collected via click-and-collect. I did not separate these from home delivery. If you want in-store returns only, the figure is 58.",
+    "The sales lines carry channel_id and a null channel_code for recent data, so I did not use channel_code to split web from store. The store/web split above comes from the return line's store (the web shop is a pseudo-location)."
+  ]
+}
+```

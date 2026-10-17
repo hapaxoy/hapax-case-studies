@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH sales_data AS (\n  SELECT \n    dp.category,\n    SUM(fsl.net_amount) AS sales_net_amount,\n    SUM(fsl.standard_cost) AS sales_standard_cost\n  FROM fact_sales_line fsl\n  JOIN dim_product dp ON fsl.product_key = dp.product_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26' \n    AND dd.fiscal_period = 6\n    AND dp.category IN ('Garden', 'Electrical')\n    AND fsl.staff_purchase_flag = FALSE\n  GROUP BY dp.category\n),\nreturns_data AS (\n  SELECT \n    dp.category,\n    SUM(frl.refund_net) AS returns_refund_net,\n    SUM(frl.standard_cost_returned) AS returns_standard_cost\n  FROM fact_return_line frl\n  JOIN dim_product dp ON frl.product_key = dp.product_key\n  JOIN dim_date dd ON frl.return_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26' \n    AND dd.fiscal_period = 6\n    AND dp.category IN ('Garden', 'Electrical')\n  GROUP BY dp.category\n),\ncombined AS (\n  SELECT \n    sd.category,\n    sd.sales_net_amount - COALESCE(rd.returns_refund_net, 0) AS net_sales,\n    sd.sales_standard_cost - COALESCE(rd.returns_standard_cost, 0) AS net_cost\n  FROM sales_data sd\n  LEFT JOIN returns_data rd ON sd.category = rd.category\n)\nSELECT \n  category,\n  ROUND(net_sales, 2) AS net_sales,\n  ROUND((net_sales - net_cost) / net_sales * 100, 2) AS gross_margin_pct\nFROM combined\nORDER BY category",
+  "result": {
+    "columns": ["category", "net_sales", "gross_margin_pct"],
+    "rows": [
+      ["Electrical", 183261.50, 41.77],
+      ["Garden", 146031.01, 39.61]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: sales net amount minus customer refunds, after line discounts and returns; excludes staff purchases",
+    "Gross margin percentage: (net sales minus standard cost of goods sold) divided by net sales, expressed as a percentage",
+    "Standard cost of goods sold: standard unit cost of units sold minus standard cost of units returned",
+    "Fiscal period 6: the period falling between 2025-09-22 and 2025-10-26 in the fiscal calendar"
+  ],
+  "assumptions": [
+    "Last year: fiscal year FY2025/26 (the most recent complete fiscal year relative to the request date 2026-10-08)",
+    "Period 6: fiscal period 6 within FY2025/26",
+    "Gross margin is calculated from standard cost, which is the company's standard costing method per dim_product",
+    "Staff purchases are excluded (staff_purchase_flag = FALSE) as they are typically non-comparable to retail sales",
+    "Returns are linked to original sales via sales_line_id with no orphan returns found"
+  ],
+  "caveats": [
+    "Gross margin uses standard cost, not actual cost. Actual cost may differ due to price variance, mix effects, or write-offs not reflected in standard cost.",
+    "The calculation includes all returns posted during period 6, regardless of the original sale date; most returns in period 6 likely relate to sales in earlier periods.",
+    "No stores were closed during period 6 that would exclude them from the category sales (no refits or planned closures in dim_store or ref_store_closure)."
+  ]
+}
+```

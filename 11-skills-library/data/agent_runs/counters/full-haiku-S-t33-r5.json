@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t33-r5",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T33",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "f1d1187d069ede995222e4ffcab46d8da62b2f25e0a59505a73c88405c659807",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:26",
+   "statement": "SELECT DISTINCT fiscal_year FROM ref_fiscal_calendar ORDER BY fiscal_year DESC LIMIT 5\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:29",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, first_fiscal_week, last_fiscal_week, weeks_in_period\nFROM ref_fiscal_calendar \nWHERE fiscal_period = 2 AND fiscal_year IN ('FY2026/27', 'FY2025/26')\nORDER BY fiscal_year DESC\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | first_fiscal_week | last_fiscal_week | weeks_in_period\nFY2026/27 | 2 | FY2026/27 P02 | 2026-06-01 | 2026-06-28 | 5 | 8 | 4\nFY2025/26 | 2 | FY2025/26 P02 | 2025-05-26 | 2025-06-22 | 5 | 8 | 4\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:35",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  d.fiscal_week,\n  d.fiscal_week_start_date,\n  SUM(fsl.net_amount) AS net_sales\nFROM fact_sales_line fsl\nINNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2026/27', 'FY2025/26')\n  AND d.fiscal_period = 2\nGROUP BY d.fiscal_year, d.fiscal_period, d.fiscal_week, d.fiscal_week_start_date\nORDER BY d.fiscal_year DESC, d.fiscal_week\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_week | fiscal_week_start_date | net_sales\nFY2026/27 | 2 | 5 | 2026-06-01 | 365962.75\nFY2026/27 | 2 | 6 | 2026-06-08 | 382516.31\nFY2026/27 | 2 | 7 | 2026-06-15 | 259057.20\nFY2026/27 | 2 | 8 | 2026-06-22 | 365236.21\nFY2025/26 | 2 | 5 | 2025-05-26 | 346403.47\nFY2025/26 | 2 | 6 | 2025-06-02 | 350196.76\nFY2025/26 | 2 | 7 | 2025-06-09 | 346946.78\nFY2025/26 | 2 | 8 | 2025-06-16 | 243145.07\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:00:43",
+   "statement": "WITH period2_sales AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    d.fiscal_week,\n    d.fiscal_week_start_date,\n    SUM(fsl.net_amount) AS net_sales\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE d.fiscal_year IN ('FY2026/27', 'FY2025/26')\n    AND d.fiscal_period = 2\n  GROUP BY d.fiscal_year, d.fiscal_period, d.fiscal_week, d.fiscal_week_start_date\n)\nSELECT \n  ps_current.fiscal_week,\n  ps_current.fiscal_week_start_date,\n  ROUND(ps_current.net_sales, 2) AS net_sales_fy2026_27,\n  ROUND(ps_prior.net_sales, 2) AS net_sales_fy2025_26,\n  ROUND(((ps_current.net_sales - ps_prior.net_sales) / ps_prior.net_sales) * 100, 2) AS growth_pct\nFROM period2_sales ps_current\nLEFT JOIN period2_sales ps_prior \n  ON ps_current.fiscal_week = ps_prior.fiscal_week \n  AND ps_prior.fiscal_year = 'FY2025/26'\nWHERE ps_current.fiscal_year = 'FY2026/27'\nORDER BY ps_current.fiscal_week\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_week | fiscal_week_start_date | net_sales_fy2026_27 | net_sales_fy2025_26 | growth_pct\n5 | 2026-06-01 | 365962.75 | 346403.47 | 5.65\n6 | 2026-06-08 | 382516.31 | 350196.76 | 9.23\n7 | 2026-06-15 | 259057.20 | 346946.78 | -25.33\n8 | 2026-06-22 | 365236.21 | 243145.07 | 50.21\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:01",
+   "statement": "SELECT \n  fiscal_year,\n  fiscal_week,\n  fiscal_week_start_date,\n  fiscal_week_end_date,\n  COUNT(DISTINCT calendar_date) AS days_in_week\nFROM dim_date\nWHERE fiscal_year IN ('FY2026/27', 'FY2025/26')\n  AND fiscal_period = 2\nGROUP BY fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date\nORDER BY fiscal_year DESC, fiscal_week\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | fiscal_week_start_date | fiscal_week_end_date | days_in_week\nFY2026/27 | 5 | 2026-06-01 | 2026-06-07 | 7\nFY2026/27 | 6 | 2026-06-08 | 2026-06-14 | 7\nFY2026/27 | 7 | 2026-06-15 | 2026-06-21 | 7\nFY2026/27 | 8 | 2026-06-22 | 2026-06-28 | 7\nFY2025/26 | 5 | 2025-05-26 | 2025-06-01 | 7\nFY2025/26 | 6 | 2025-06-02 | 2025-06-08 | 7\nFY2025/26 | 7 | 2025-06-09 | 2025-06-15 | 7\nFY2025/26 | 8 | 2025-06-16 | 2025-06-22 | 7\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:09",
+   "statement": "WITH period2_sales AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    d.fiscal_week,\n    d.fiscal_week_start_date,\n    SUM(rpt.net_sales) AS net_sales\n  FROM rpt_daily_store_sales rpt\n  INNER JOIN dim_date d ON rpt.business_date = d.calendar_date\n  WHERE d.fiscal_year IN ('FY2026/27', 'FY2025/26')\n    AND d.fiscal_period = 2\n  GROUP BY d.fiscal_year, d.fiscal_period, d.fiscal_week, d.fiscal_week_start_date\n)\nSELECT \n  ps_current.fiscal_week,\n  ps_current.fiscal_week_start_date,\n  ROUND(ps_current.net_sales, 2) AS net_sales_fy2026_27,\n  ROUND(ps_prior.net_sales, 2) AS net_sales_fy2025_26,\n  ROUND(((ps_current.net_sales - ps_prior.net_sales) / ps_prior.net_sales) * 100, 2) AS growth_pct\nFROM period2_sales ps_current\nLEFT JOIN period2_sales ps_prior \n  ON ps_current.fiscal_week = ps_prior.fiscal_week \n  AND ps_prior.fiscal_year = 'FY2025/26'\nWHERE ps_current.fiscal_year = 'FY2026/27'\nORDER BY ps_current.fiscal_week\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_week | fiscal_week_start_date | net_sales_fy2026_27 | net_sales_fy2025_26 | growth_pct\n5 | 2026-06-01 | 341054.61 | 330868.04 | 3.08\n6 | 2026-06-08 | 362249.20 | 329334.78 | 9.99\n7 | 2026-06-15 | 220623.76 | 325472.70 | -32.21\n8 | 2026-06-22 | 370720.07 | 210207.18 | 76.36\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:16",
+   "statement": "WITH period2_by_channel AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    fsl.channel_code,\n    SUM(fsl.net_amount) AS net_amount\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE d.fiscal_year IN ('FY2026/27', 'FY2025/26')\n    AND d.fiscal_period = 2\n  GROUP BY d.fiscal_year, d.fiscal_week, fsl.channel_code\n)\nSELECT fiscal_year, fiscal_week, channel_code, ROUND(net_amount, 2) as net_amount\nFROM period2_by_channel\nORDER BY fiscal_year DESC, fiscal_week, channel_code\n",
+   "n": 7,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "fiscal_year | fiscal_week | channel_code | net_amount\nFY2026/27 | 5 | NULL | 365962.75\nFY2026/27 | 6 | NULL | 382516.31\nFY2026/27 | 7 | NULL | 259057.20\nFY2026/27 | 8 | NULL | 365236.21\nFY2025/26 | 5 | ST | 303621.13\nFY2025/26 | 5 | WB | 42782.34\nFY2025/26 | 6 | ST | 308527.77\nFY2025/26 | 6 | WB | 41668.99\nFY2025/26 | 7 | ST | 297733.97\nFY2025/26 | 7 | WB | 49212.81\nFY2025/26 | 8 | ST | 193706.90\nFY2025/26 | 8 | WB | 49438.17\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:22",
+   "statement": "SELECT \n  d.calendar_date,\n  d.fiscal_week,\n  COUNT(DISTINCT fsl.sales_line_id) AS sales_lines,\n  SUM(fsl.net_amount) AS fsl_net_amount,\n  rpt.net_sales AS rpt_net_sales\nFROM dim_date d\nLEFT JOIN fact_sales_line fsl ON d.calendar_date = fsl.sale_date\nLEFT JOIN rpt_daily_store_sales rpt ON d.calendar_date = rpt.business_date\nWHERE d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_period = 2\n  AND d.fiscal_week = 5\nGROUP BY d.calendar_date, d.fiscal_week, rpt.net_sales\nORDER BY d.calendar_date\n",
+   "n": 8,
+   "ok": true,
+   "rows": 200,
+   "output_preview": "calendar_date | fiscal_week | sales_lines | fsl_net_amount | rpt_net_sales\n2026-06-01 | 5 | 1814 | 44717.59 | 780.39\n2026-06-01 | 5 | 1814 | 44717.59 | 1086.40\n2026-06-01 | 5 | 1814 | 44717.59 | 2015.44\n2026-06-01 | 5 | 1814 | 44717.59 | 1518.92\n2026-06-01 | 5 | 1814 | 44717.59 | 481.45\n2026-06-01 | 5 | 1814 | 44717.59 | 3071.66\n2026-06-01 | 5 | 1814 | 44717.59 | 876.52\n2026-06-01 | 5 | 1814 | 44717.59 | 336.86\n2026-06-01 | 5 | 1814 | 44717.59 | 229.40\n2026-06-01 | 5 | 1814 | 44717.59 | 444.23\n2026-06-01 | 5 | 1814 | 44717.59 | 1564.14\n2026-06-01 | 5 | 1814 | 44717.59 | 713.21\n2026-06-01 | 5 | 1814 | 44717.59 | 401.46\n2026-06-01 | 5 | 1814 | 44717.59 | 853.55\n2026-06-01 | 5 | 1814 | 44717.59 | 847.91\n2026-06-01 | 5 | 1814 | 44717.59 | 522.45\n2026-06-01 | 5 | 1814 | 44717.59 | 458.21\n2026-06-01 | 5 | 1814 | 44717.59 | 1189.75\n2026-06-01 | 5 | 1814 | 44717.59 | 13001.14\n2026-06-01 | 5 | 1814 | 44717.59 | 351.94\n2026-06-01 | 5 | 1814 | 44717.59 | 118.61\n2026-06-01 | 5 | 1814 | 44717.59 | 1634.31\n2026-06-01 | 5 | 1814 | 44717.59 | 1035.93\n2026-06-01 | 5 | 1814 | 44717.59 | 955.12\n2026-06-01 | 5 | 1814 | 44717.59 | 1621.15\n2026-06-01 | 5 | 1814 | 44717.59 | 613.82\n2026-06-01 | 5 | 1814 | 44717.59 | 1187.98\n2026-06-01 | 5 | 1814 | 44717.59 | 174.61\n2026-06-01 | 5 | 1814 | 44717.59 | 394.08\n2026-06-01 | 5 | 1814 | 44717.59 | 1116.23\n2026-06-01 | 5 | 1814 | 44717.59 | 1324.13\n2026-06-01 | 5 | 1814 | 44717.59 | 1003.00\n2026-06-01 | 5 | 1814 | 44717.59 | 842.43\n2026-06-01 | 5 | 1814 | "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:01:30",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_week,\n  SUM(rpt.net_sales) AS net_sales_sum\nFROM rpt_daily_store_sales rpt\nINNER JOIN dim_date d ON rpt.business_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_period = 2\n  AND d.fiscal_week = 5\nGROUP BY d.fiscal_year, d.fiscal_week\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_week | net_sales_sum\nFY2026/27 | 5 | 341054.61\n(1 row)"
+  }
+ ]
+}

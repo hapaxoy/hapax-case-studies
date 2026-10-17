@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, cs.format AS store_format, COUNT(DISTINCT f.receipt_id) AS receipts, ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id &lt; 900 AND NOT f.staff_purchase_flag AND p.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 GROUP BY cs.format ORDER BY cs.format",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_format", "receipts", "atv"],
+    "rows": [
+      ["FY2026/27", 4, "Large", 6508, 60.67],
+      ["FY2026/27", 4, "Medium", 8641, 60.27],
+      ["FY2026/27", 4, "Small", 2598, 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV = net sales before returns (net_amount, excluding VAT) divided by the number of distinct sales receipts",
+    "ATV is a store measure: physical stores only (store_id below 900), so no web orders and no web shop (900)",
+    "Staff purchases excluded (staff_purchase_flag)",
+    "Store 999 (training) excluded",
+    "Test articles (category ZZ Test) excluded",
+    "Lines dated by sale_date (the Helsinki business date)",
+    "Fiscal period 4 taken from dim_date (fiscal_year and fiscal_period)",
+    "Store format taken from the current store version (as-is). Format is the same in every version of a store.",
+    "Receipts counted as distinct receipt_id and summed per format; no receipt appears in more than one format"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year, FY2026/27 (the request was received 6 Oct 2026).",
+    "'Period 4' means fiscal period 4 of that year, 3 Aug to 30 Aug 2026 (fiscal weeks 14 to 17). It is complete and fully loaded.",
+    "Formats are reported as the warehouse holds them (Large, Medium, Small). The schema comment (Hyper, Standard, Express) is out of date.",
+    "ATV is shown per format only. No chain-wide total row was added because the request did not ask for one.",
+    "ATV is rounded to 2 decimals, in EUR excluding VAT."
+  ],
+  "caveats": [
+    "Training and web formats are not shown. The training store (999) is excluded from sales work and web orders are outside the ATV definition.",
+    "Staff-purchase receipts (about 280 in the period) and ZZ Test lines are excluded, so these figures are lower in receipt count than the raw receipt totals in rpt_daily_store_sales.",
+    "Control check: before the staff exclusion, my store-day receipt counts and net sales before returns matched rpt_daily_store_sales exactly. The check covered 1,064 store-days, with 18,027 receipts and EUR 1,062,266.72 net sales before returns. The staff-purchase filter is the only difference from that control total.",
+    "No duplicate sales lines, no missing store-days and no extra store-days were found in the period. No data corrections were needed.",
+    "ATV is excluding VAT, so it is not comparable with till-receipt totals that include VAT."
+  ]
+}
+```

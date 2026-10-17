@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t31-r4",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "88ccdfc435725497caa5fb7a6ef7ff37485cef32921b8ae2e8fc09134da5a129",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:21:08",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_period = 8 ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2024/25 | 8 | 2024-11-25 | 2024-12-22 | 4 | 31 | 34 | true\nFY2025/26 | 8 | 2025-11-24 | 2025-12-21 | 4 | 31 | 34 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:21:15",
+   "statement": "WITH active AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n),\nver AS (\n    SELECT a.member_id, count(*) AS n_ver, min(cur.tier) AS tier\n    FROM active a JOIN dim_member cur ON cur.member_id = a.member_id\n      AND DATE '2025-12-21' BETWEEN cur.valid_from AND cur.valid_to\n    GROUP BY a.member_id\n)\nSELECT 'active' AS k, count(*) AS n, NULL AS tier FROM active\nUNION ALL SELECT 'with_version', count(*), NULL FROM ver\nUNION ALL SELECT 'multi_version', count(*), NULL FROM ver WHERE n_ver > 1\nUNION ALL SELECT 'tier', count(*), tier FROM ver GROUP BY tier\nUNION ALL SELECT 'null_member_key_join_miss', count(*), NULL FROM fact_sales_line f WHERE f.member_key IS NOT NULL AND f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21' AND NOT EXISTS (SELECT 1 FROM dim_member m WHERE m.member_key=f.member_key)\n",
+   "n": 2,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "k | n | tier\nactive | 29526 | NULL\nwith_version | 29526 | NULL\nmulti_version | 0 | NULL\ntier | 10971 | Silver\ntier | 3901 | Gold\ntier | 14654 | Basic\nnull_member_key_join_miss | 0 | NULL\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:21:22",
+   "statement": "WITH lines AS (\n    SELECT m.member_id, f.sale_date, f.receipt_id, f.channel_code, s.store_id, p.category, f.staff_purchase_flag, f.quantity, f.net_amount, w.status, m.join_date\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN fact_web_order w ON w.web_order_id = f.receipt_id AND s.store_id = 900\n    WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n),\nper AS (\n    SELECT member_id,\n      max(CASE WHEN store_id <> 999 AND category <> 'ZZ Test' AND coalesce(status,'x') <> 'cancelled' THEN 1 ELSE 0 END) AS clean,\n      max(CASE WHEN store_id = 999 THEN 1 ELSE 0 END) AS s999,\n      max(CASE WHEN category = 'ZZ Test' THEN 1 ELSE 0 END) AS zz,\n      max(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS canc,\n      max(CASE WHEN quantity <= 0 OR net_amount <= 0 THEN 1 ELSE 0 END) AS nonpos,\n      max(CASE WHEN sale_date < join_date THEN 1 ELSE 0 END) AS before_join\n    FROM lines GROUP BY member_id\n)\nSELECT count(*) AS members, sum(clean) AS clean_members, sum(s999) AS any_999, sum(zz) AS any_zz, sum(canc) AS any_cancelled, sum(nonpos) AS any_nonpos, sum(before_join) AS before_join,\n  sum(CASE WHEN clean=0 THEN 1 ELSE 0 END) AS only_nonclean\nFROM per\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members | clean_members | any_999 | any_zz | any_cancelled | any_nonpos | before_join | only_nonclean\n29526 | 29526 | 0 | 0 | 0 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:22:03",
+   "statement": "WITH as_of AS (\n    SELECT DISTINCT fiscal_year, fiscal_period, period_end_date AS as_of_end\n    FROM ref_fiscal_calendar\n    WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 8\n),\nactive AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    CROSS JOIN as_of\n    WHERE f.sale_date > as_of.as_of_end - 364\n      AND f.sale_date <= as_of.as_of_end\n)\nSELECT as_of.fiscal_year, as_of.fiscal_period, cur.tier, COUNT(*) AS active_members\nFROM active a\nCROSS JOIN as_of\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nGROUP BY as_of.fiscal_year, as_of.fiscal_period, cur.tier\nORDER BY CASE cur.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 WHEN 'Gold' THEN 3 END\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | tier | active_members\nFY2025/26 | 8 | Basic | 14654\nFY2025/26 | 8 | Silver | 10971\nFY2025/26 | 8 | Gold | 3901\n(3 rows)"
+  }
+ ]
+}

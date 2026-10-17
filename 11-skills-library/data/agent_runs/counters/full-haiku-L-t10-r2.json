@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-L-t10-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T10",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "58bceb0ae2f5d36da25a8a86082f2ad0efc982905aa1474705bf42c63c2be087",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:20:56",
+   "statement": "fiscal-calendar/scripts/fiscal.py period 5 this year",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'period 5 this year'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:20:59",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 FY2025/26",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P05\n  fiscal_weeks                       18-21\n  start_date                         2025-08-25\n  end_date                           2025-09-21\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-09-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 18 AND 21)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:21:04",
+   "statement": "-- Check store names to find Hyvinkää\nSELECT DISTINCT store_id, store_name, is_current\nFROM dim_store\nWHERE store_name LIKE '%Hyvink%' AND is_current = TRUE\nORDER BY store_name\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | is_current\n107 | Hyvinkää | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:21:07",
+   "statement": "-- Find Cleaning Products category\nSELECT DISTINCT category\nFROM dim_product\nWHERE category LIKE '%Clean%' AND is_current = TRUE\nORDER BY category\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "category\nCleaning & Household\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:21:11",
+   "statement": "-- Get store_key for Hyvinkää during P5 dates (2025-08-25 to 2025-09-21)\nSELECT store_key, store_id, store_name, valid_from, valid_to\nFROM dim_store\nWHERE store_id = 107 AND '2025-08-25' >= valid_from AND '2025-09-21' <= valid_to\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | valid_from | valid_to\n12 | 107 | Hyvinkää | 2000-01-01 | 9999-12-31\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:21:15",
+   "statement": "-- Get units sold of Cleaning & Household products at Hyvinkää in P5\nSELECT \n  SUM(f.quantity) AS units_sold\nFROM fact_sales_line f\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_store s ON f.store_key = s.store_key\nWHERE s.store_id = 107\n  AND p.category = 'Cleaning & Household'\n  AND f.sale_date BETWEEN '2025-08-25' AND '2025-09-21'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "units_sold\n202\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:21:24",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 7,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n  [WARN] Sales lines used without a filter on category 'ZZ Test' (REG-TEST-SKU, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 1 rows, 1 columns: units_sold\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  units_sold\n  202\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

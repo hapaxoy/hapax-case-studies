@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-D-t29-r3",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T29",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "c1f70fc7c198f18bc6b1615846f528a420cef916d9a11554d8ab34e1f1d8939b",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:12",
+   "statement": "SELECT fiscal_year, fiscal_period, min(calendar_date), max(calendar_date), count(*) FROM dim_date WHERE fiscal_year='FY2024/25' AND fiscal_period=5 GROUP BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | min(calendar_date) | max(calendar_date) | count_star()\nFY2024/25 | 5 | 2024-08-26 | 2024-09-22 | 28\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:15",
+   "statement": "SELECT f.vat_rate, p.vat_class, count(*) n, count(DISTINCT f.sales_line_id) nd, sum(f.net_amount) net, sum(f.gross_amount) gross, sum(f.gross_amount-f.net_amount) vat, sum(f.net_amount*f.vat_rate) calc_vat\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE d.fiscal_year='FY2024/25' AND d.fiscal_period=5 AND s.store_id<900 AND s.store_id<>999 AND p.category<>'ZZ Test'\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_rate | vat_class | n | nd | net | gross | vat | calc_vat\n0.1000 | reduced10 | 48 | 48 | 1506.05 | 1656.72 | 150.67 | 150.605000\n0.1400 | reduced14 | 1196 | 1196 | 5835.96 | 6653.58 | 817.62 | 817.034400\n0.2400 | standard | 8357 | 8357 | 225441.92 | 279547.12 | 54105.20 | 54106.060800\n0.2550 | standard | 28004 | 28004 | 705945.31 | 885962.54 | 180017.23 | 180016.054050\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:21",
+   "statement": "SELECT count(*) n, count(DISTINCT sales_line_id) ids, count(DISTINCT (receipt_id, line_no)) rl, count(DISTINCT etl_loaded_at) loads, min(etl_loaded_at), max(etl_loaded_at),\n sum(CASE WHEN sale_date<DATE '2024-09-01' AND vat_rate=0.255 THEN 1 ELSE 0 END) early255,\n sum(CASE WHEN sale_date>=DATE '2024-09-01' AND vat_rate=0.24 THEN 1 ELSE 0 END) late24,\n sum(CASE WHEN abs(gross_amount-net_amount*(1+vat_rate))>0.02 THEN 1 ELSE 0 END) badgross,\n sum(CASE WHEN channel_code='WB' THEN 1 ELSE 0 END) wb, sum(CASE WHEN net_amount<0 THEN 1 ELSE 0 END) neg, sum(CASE WHEN staff_purchase_flag THEN 1 ELSE 0 END) staff\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND s.store_id<900 AND s.store_id<>999 AND p.category<>'ZZ Test'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | ids | rl | loads | min(etl_loaded_at) | max(etl_loaded_at) | early255 | late24 | badgross | wb | neg | staff\n37605 | 37605 | 37605 | 28 | 2024-08-27T01:00:00 | 2024-09-23T01:00:00 | 0 | 0 | 0 | 0 | 0 | 621\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:23",
+   "statement": "SELECT p.vat_class, f.vat_rate, f.sale_date >= DATE '2024-09-01' AS after_change, count(*) n, sum(f.net_amount) net\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND s.store_id<900 AND s.store_id<>999 AND p.category<>'ZZ Test'\nGROUP BY 1,2,3 ORDER BY 1,2,3\n",
+   "n": 4,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "vat_class | vat_rate | after_change | n | net\nreduced10 | 0.1000 | false | 11 | 280.85\nreduced10 | 0.1000 | true | 37 | 1225.20\nreduced14 | 0.1400 | false | 394 | 1893.58\nreduced14 | 0.1400 | true | 802 | 3942.38\nstandard | 0.2400 | false | 8357 | 225441.92\nstandard | 0.2550 | true | 28004 | 705945.31\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:29",
+   "statement": "WITH l AS (SELECT s.store_id, f.sale_date, sum(f.net_amount) n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND s.store_id<900 AND s.store_id<>999 AND p.category<>'ZZ Test' GROUP BY 1,2),\nr AS (SELECT store_id, business_date, net_sales_before_returns b, returns_net FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND store_id<900)\nSELECT count(*) rows_, sum(l.n) lines_net, sum(r.b) rpt_net, sum(CASE WHEN abs(coalesce(l.n,0)-coalesce(r.b,0))>0.01 THEN 1 ELSE 0 END) mismatch_rows, sum(r.returns_net) rpt_returns\nFROM l FULL JOIN r ON l.store_id=r.store_id AND l.sale_date=r.business_date\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_ | lines_net | rpt_net | mismatch_rows | rpt_returns\n1056 | 938729.24 | 938729.24 | 0 | 44960.38\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:31",
+   "statement": "SELECT f.vat_rate, count(*) n, sum(r.refund_net) refund_net, sum(r.refund_gross) refund_gross, sum(r.refund_gross-r.refund_net) refund_vat\nFROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\nWHERE r.return_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND s.store_id<900 AND s.store_id<>999 AND p.category<>'ZZ Test'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_rate | n | refund_net | refund_gross | refund_vat\n0.1000 | 1 | 12.00 | 13.20 | 1.20\n0.1400 | 22 | 74.66 | 85.14 | 10.48\n0.2400 | 595 | 21228.36 | 26323.08 | 5094.72\n0.2550 | 746 | 23645.36 | 29674.93 | 6029.57\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:32",
+   "statement": "SELECT s.store_id, p.category='ZZ Test' AS test, count(*) n, sum(f.net_amount) net, sum(f.gross_amount-f.net_amount) vat\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-26' AND DATE '2024-09-22' AND (s.store_id>=900 OR p.category='ZZ Test') GROUP BY 1,2\n",
+   "n": 7,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "store_id | test | n | net | vat\n999 | true | 36 | 119.35 | 29.70\n900 | false | 4074 | 123029.26 | 30845.39\n900 | true | 1 | 3.00 | 0.77\n999 | false | 104 | 2610.58 | 655.30\n(4 rows)"
+  }
+ ]
+}

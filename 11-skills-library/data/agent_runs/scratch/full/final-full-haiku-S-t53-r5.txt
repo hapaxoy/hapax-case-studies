@@ -1,0 +1,25 @@
+```json
+{
+  "sql": "WITH lfl_stores AS (\n  SELECT DISTINCT store_id\n  FROM dim_store\n  WHERE valid_from &lt;= DATE '2025-04-28'\n    AND valid_to &gt;= DATE '2025-05-25'\n    AND valid_from &lt;= DATE '2026-05-04'\n    AND valid_to &gt;= DATE '2026-05-31'\n),\nfy25_26_p1 AS (\n  SELECT SUM(COALESCE(f.net_amount, 0)) - SUM(COALESCE(r.refund_net, 0)) as net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  INNER JOIN lfl_stores lfl ON s.store_id = lfl.store_id\n  LEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\n    AND r.return_date &gt;= DATE '2025-04-28'\n    AND r.return_date &lt;= DATE '2025-05-25'\n  WHERE f.sale_date &gt;= DATE '2025-04-28'\n    AND f.sale_date &lt;= DATE '2025-05-25'\n    AND s.store_id &lt; 900\n),\nfy26_27_p1 AS (\n  SELECT SUM(COALESCE(f.net_amount, 0)) - SUM(COALESCE(r.refund_net, 0)) as net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  INNER JOIN lfl_stores lfl ON s.store_id = lfl.store_id\n  LEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\n    AND r.return_date &gt;= DATE '2026-05-04'\n    AND r.return_date &lt;= DATE '2026-05-31'\n  WHERE f.sale_date &gt;= DATE '2026-05-04'\n    AND f.sale_date &lt;= DATE '2026-05-31'\n    AND s.store_id &lt; 900\n)\nSELECT \n  ROUND(((fy26.net_sales - fy25.net_sales) / fy25.net_sales * 100), 2) as lfl_growth_pct\nFROM fy25_26_p1 fy25, fy26_27_p1 fy26",
+  "result": {
+    "columns": ["lfl_growth_pct"],
+    "rows": [[5.69]]
+  },
+  "definitions_applied": [
+    "Like-for-like (LFL) stores: physical stores open throughout both fiscal periods being compared",
+    "Net sales: gross sales less returns, excluding VAT, after line discounts",
+    "Physical store sales: store_id &lt; 900 to exclude web channel and pseudo-locations",
+    "Period 1: fiscal period 1 per the ref_fiscal_calendar"
+  ],
+  "assumptions": [
+    "\"This year\" means fiscal year FY2026/27, the most recent complete fiscal year in the warehouse",
+    "Comparison is FY2026/27 P01 (2026-05-04 to 2026-05-31) against FY2025/26 P01 (2025-04-28 to 2025-05-25)",
+    "All 41 physical stores were open throughout both periods, making all stores like-for-like"
+  ],
+  "caveats": [
+    "Like-for-like growth is calculated on physical store sales only (channel_code = 'ST' and store_id &lt; 900); web sales are excluded",
+    "Returns are matched to their original sales lines; returns booked after the period end are excluded from period calculations",
+    "No adjustments for store closures, seasonal trading patterns, or other operational factors"
+  ]
+}
+```

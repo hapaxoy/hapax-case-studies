@@ -1,0 +1,42 @@
+```json
+{
+  "sql": "SELECT p.subcategory, ROUND(100.0 * SUM(r.refund_net) / SUM(f.net_amount), 2) AS return_rate_pct FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key JOIN dim_store s ON s.store_key = f.store_key LEFT JOIN fact_return_line r ON r.sales_line_id = f.sales_line_id WHERE f.sale_date BETWEEN DATE '2025-04-28' AND DATE '2025-07-27' AND p.category = 'Garden' AND s.store_id &lt;&gt; 999 GROUP BY p.subcategory ORDER BY p.subcategory",
+  "result": {
+    "columns": ["subcategory", "return_rate_pct"],
+    "rows": [
+      ["Barbecue &amp; Grills", 7.26],
+      ["Edible Plants &amp; Seeds", 0.96],
+      ["Garden Furniture", 12.87],
+      ["Garden Tools", 5.35],
+      ["Outdoor Lighting", 7.16],
+      ["Plants &amp; Flowers", 2.74],
+      ["Pots &amp; Planters", 3.86],
+      ["Soil &amp; Fertiliser", 1.58]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: Q1 of FY2025/26 runs 2025-04-28 to 2025-07-27 (13 weeks, from ref_fiscal_calendar)",
+    "Return rate by sale cohort: refunds are tied to the original sales line (fact_return_line.sales_line_id), so returns booked after the quarter count against the Q1 sale",
+    "Return rate on value: refund_net divided by net_amount, both in EUR excluding VAT",
+    "Product hierarchy as at the sale date: fact_sales_line.product_key points to the product version in force on that day",
+    "Training store (store_id 999) excluded as a pseudo-location, not a trading store",
+    "Web shop (store_id 900) sales and returns included, as web lines are goods sold",
+    "Returns are one row per sales line, so there is no double counting"
+  ],
+  "assumptions": [
+    "'Last year' is read as the last completed fiscal year, FY2025/26, because today (2026-10-06) falls in FY2026/27. 'Q1' is read as fiscal Q1 (28 Apr to 27 Jul 2025). If Pekka meant calendar Q1 2025 (Jan to Mar), the answer would differ.",
+    "'Return rate' is read as returned value divided by sold value (net of VAT). A unit-based rate is very close: Barbecue 6.47, Edible Plants 0.99, Garden Furniture 12.69, Garden Tools 5.19, Outdoor Lighting 7.23, Plants &amp; Flowers 2.72, Pots &amp; Planters 3.89, Soil &amp; Fertiliser 1.71.",
+    "Staff purchases (about 1.5% of Garden lines) are kept in, since they are real goods sold and real returns. Taking them out moves each rate by 0.1 percentage points or less.",
+    "Each row's subcategory is the one assigned to the article on the sale date, using the product-version key stored on the sales line.",
+    "Sales and returns are measured at the 'Garden' category level, with all web and store channels combined."
+  ],
+  "caveats": [
+    "Correction: the 136 Garden sales lines (net EUR 2,496) booked to the 'Training store' (store_id 999) were excluded. They had no returns. It changes Barbecue &amp; Grills from 7.25 to 7.26 and Garden Furniture from 12.85 to 12.87.",
+    "Reclassification: Outdoor Lighting was a Garden subcategory until 2025-10-26 and has been Electrical since 2025-10-27 (73 articles). I kept it in Garden because that is where these goods sat when they were sold in Q1 2025. If Pekka wants today's Garden range only, drop that row. The seven remaining subcategories do not change. The Outdoor Lighting figure is 7.16% (net sales EUR 50,870, refunds EUR 3,640).",
+    "The test articles in category 'ZZ Test' (92 sales lines in the period) are not Garden and are not in the result.",
+    "Returns are measured up to 2026-10-04. The longest gap between a Garden Q1 sale and its return was 34 days, so the Q1 2025 cohort is fully matured and further returns are not expected.",
+    "The staging tables (stg_*), backup tables (bak_*) and old dimension tables (*_old) were not used. The staging tables hold only 3 to 4 October 2026 loads, which duplicate rows already in the fact tables.",
+    "Garden Furniture (12.87%) is the clear outlier, followed by Barbecue &amp; Grills and Outdoor Lighting (about 7%). Edible Plants &amp; Seeds (0.96%) and Soil &amp; Fertiliser (1.58%) are the lowest, partly because many lines are multi-unit and low value."
+  ]
+}
+```

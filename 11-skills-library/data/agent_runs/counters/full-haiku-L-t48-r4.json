@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-L-t48-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T48",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "f0a96f9252ecef0cc18e01c1bba33e3cf1e2700acdb83e9ed107b8825031039a",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:24:06",
+   "statement": "fiscal-calendar/scripts/fiscal.py period 3 this year",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'period 3 this year'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:24:09",
+   "statement": "fiscal-calendar/scripts/fiscal.py P3 FY2025/26",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P3 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P03\n  fiscal_weeks                       9-13\n  start_date                         2025-06-23\n  end_date                           2025-07-27\n  weeks                              5\n  days                               35\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-07-27\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 9 AND 13)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:14",
+   "statement": "SELECT p.category, fs.week_ending_date,\n       SUM(fs.closing_units) AS closing_units,\n       SUM(fs.closing_value) AS closing_value\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key = fs.store_key\nJOIN dim_product p ON p.product_key = fs.product_key\nJOIN dim_date d ON d.calendar_date = fs.week_ending_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 9 AND 13\n  AND s.store_id < 900\n  AND p.category = 'Paint & Decorating'\n  AND p.category <> 'ZZ Test'\nGROUP BY p.category, fs.week_ending_date\nORDER BY fs.week_ending_date\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "category | week_ending_date | closing_units | closing_value\nPaint & Decorating | 2025-06-29 | 18961 | 351610.44\nPaint & Decorating | 2025-07-06 | 18882 | 349013.39\nPaint & Decorating | 2025-07-13 | 18967 | 348283.98\nPaint & Decorating | 2025-07-20 | 19022 | 348599.20\nPaint & Decorating | 2025-07-27 | 19265 | 351509.31\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:19",
+   "statement": "WITH weekly_stock AS (\n  SELECT fs.week_ending_date,\n         SUM(fs.closing_value) AS weekly_closing_value\n  FROM fact_stock_week fs\n  JOIN dim_store s ON s.store_key = fs.store_key\n  JOIN dim_product p ON p.product_key = fs.product_key\n  JOIN dim_date d ON d.calendar_date = fs.week_ending_date\n  WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 9 AND 13\n    AND s.store_id < 900\n    AND p.category = 'Paint & Decorating'\n    AND p.category <> 'ZZ Test'\n  GROUP BY fs.week_ending_date\n)\nSELECT ROUND(AVG(weekly_closing_value), 2) AS avg_stock_value_eur,\n       COUNT(*) AS weeks_in_period\nFROM weekly_stock\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "avg_stock_value_eur | weeks_in_period\n349803.26 | 5\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:22",
+   "statement": "SELECT DISTINCT category FROM dim_product WHERE category LIKE '%Paint%' OR category LIKE '%Decorat%'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "category\nPaint & Decorating\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:26",
+   "statement": "-- Verify the data we're aggregating\nSELECT fs.week_ending_date,\n       COUNT(DISTINCT fs.store_key) AS stores_with_stock,\n       COUNT(DISTINCT fs.product_key) AS products_in_stock,\n       COUNT(*) AS rows\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key = fs.store_key\nJOIN dim_product p ON p.product_key = fs.product_key\nJOIN dim_date d ON d.calendar_date = fs.week_ending_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 9 AND 13\n  AND s.store_id < 900\n  AND p.category = 'Paint & Decorating'\nGROUP BY fs.week_ending_date\nORDER BY fs.week_ending_date\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | stores_with_stock | products_in_stock | rows\n2025-06-29 | 39 | 352 | 2683\n2025-07-06 | 39 | 352 | 2683\n2025-07-13 | 39 | 352 | 2683\n2025-07-20 | 39 | 352 | 2683\n2025-07-27 | 39 | 352 | 2683\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:31",
+   "statement": "-- Final query: Average stock value at cost for Paint & Decorating, P3 FY2025/26, whole chain\nWITH weekly_stock AS (\n  SELECT fs.week_ending_date,\n         SUM(fs.closing_value) AS weekly_closing_value\n  FROM fact_stock_week fs\n  JOIN dim_store s ON s.store_key = fs.store_key\n  JOIN dim_product p ON p.product_key = fs.product_key\n  JOIN dim_date d ON d.calendar_date = fs.week_ending_date\n  WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 9 AND 13\n    AND s.store_id < 900\n    AND p.category = 'Paint & Decorating'\n  GROUP BY fs.week_ending_date\n)\nSELECT ROUND(AVG(weekly_closing_value), 2) AS average_stock_value\nFROM weekly_stock\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "average_stock_value\n349803.26\n(1 row)"
+  }
+ ]
+}

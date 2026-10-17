@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-Lminus-t06-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T06",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "93e3a23eaf9d93c17e9fffc835af6d8989d0f32b2de1a63e7b7270c52c467266",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:05",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, fully_loaded, (SELECT max(calendar_date) FROM dim_date) AS maxdate\nFROM ref_fiscal_calendar WHERE fiscal_period = 2 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | fully_loaded | maxdate\nFY2024/25 | 2 | 2024-05-27 | 2024-06-23 | 4 | true | 2026-10-04\nFY2025/26 | 2 | 2025-05-26 | 2025-06-22 | 4 | true | 2026-10-04\nFY2026/27 | 2 | 2026-06-01 | 2026-06-28 | 4 | true | 2026-10-04\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:13",
+   "statement": "WITH base AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.net_amount, s.store_id, s.format, p.category\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product p ON p.product_key=f.product_key\n  JOIN dim_date d ON d.calendar_date=f.sale_date\n  WHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=2\n)\nSELECT 'rows' k, count(*)::VARCHAR v FROM base\nUNION ALL SELECT 'distinct sales_line_id', count(DISTINCT sales_line_id)::VARCHAR FROM base\nUNION ALL SELECT 'distinct receipt+line', count(DISTINCT (receipt_id, line_no))::VARCHAR FROM base\nUNION ALL SELECT 'store999 rows', count(*)::VARCHAR FROM base WHERE store_id=999\nUNION ALL SELECT 'ZZ rows', count(*)::VARCHAR FROM base WHERE category='ZZ Test'\nUNION ALL SELECT 'format:'||coalesce(format,'NULL')||' store<900 '||(store_id<900)::VARCHAR, count(*)::VARCHAR FROM base GROUP BY format, (store_id<900)\nUNION ALL SELECT 'returns total rows', count(*)::VARCHAR FROM fact_return_line\nUNION ALL SELECT 'returns distinct id', count(DISTINCT return_line_id)::VARCHAR FROM fact_return_line\nUNION ALL SELECT 'returns per sales_line >1', count(*)::VARCHAR FROM (SELECT sales_line_id FROM fact_return_line GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'returns orphan', count(*)::VARCHAR FROM fact_return_line r LEFT JOIN fact_sales_line f USING (sales_line_id) WHERE f.sales_line_id IS NULL\n",
+   "n": 2,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "k | v\nrows | 53094\ndistinct sales_line_id | 53094\ndistinct receipt+line | 53094\nstore999 rows | 126\nZZ rows | 21\nformat:Medium store<900 true | 22644\nformat:Web store<900 false | 6351\nformat:Training store<900 false | 126\nformat:Small store<900 true | 7349\nformat:Large store<900 true | 16624\nreturns total rows | 57144\nreturns distinct id | 57144\nreturns per sales_line >1 | 0\nreturns orphan | 0\n(14 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:22",
+   "statement": "WITH sold AS (\n  SELECT f.sales_line_id, f.net_amount, f.quantity, s.store_id, s.format AS fmt_asof_sale, cs.format AS fmt_current\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key=f.product_key\n  JOIN dim_date d ON d.calendar_date=f.sale_date\n  WHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=2 AND s.store_id<>999 AND p.category<>'ZZ Test'\n), r AS (SELECT sales_line_id, sum(refund_net) refund_net, sum(quantity_returned) qr, max(return_date) lastret FROM fact_return_line GROUP BY 1)\nSELECT 'fmt mismatch lines' k, count(*)::VARCHAR v FROM sold WHERE fmt_asof_sale<>fmt_current\nUNION ALL SELECT 'refund>net lines', count(*)::VARCHAR FROM sold JOIN r USING(sales_line_id) WHERE r.refund_net>sold.net_amount+0.005\nUNION ALL SELECT 'qty returned>sold', count(*)::VARCHAR FROM sold JOIN r USING(sales_line_id) WHERE r.qr>sold.quantity\nUNION ALL SELECT 'neg/zero net lines', count(*)::VARCHAR FROM sold WHERE net_amount<=0\nUNION ALL SELECT 'lines with returns', count(*)::VARCHAR FROM sold JOIN r USING(sales_line_id)\nUNION ALL SELECT 'latest return date', max(lastret)::VARCHAR FROM sold JOIN r USING(sales_line_id)\nUNION ALL SELECT 'sum sold', sum(net_amount)::VARCHAR FROM sold\nUNION ALL SELECT 'sum refund', sum(refund_net)::VARCHAR FROM sold JOIN r USING(sales_line_id)\nUNION ALL SELECT 'refund<0', count(*)::VARCHAR FROM fact_return_line WHERE refund_net<=0\n",
+   "n": 3,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "k | v\nfmt mismatch lines | 0\nrefund>net lines | 0\nqty returned>sold | 0\nneg/zero net lines | 0\nlines with returns | 1992\nlatest return date | 2025-07-23\nsum sold | 1284466.05\nsum refund | 71445.06\nrefund<0 | 0\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:29",
+   "statement": "SELECT w.status, count(DISTINCT w.web_order_id) orders, count(*) lines, sum(f.net_amount) net,\n       count(r.sales_line_id) lines_returned, sum(r.refund_net) refund,\n       min(f.sale_date) mn, max(f.sale_date) mx\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_date d ON d.calendar_date=f.sale_date\nLEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id\nLEFT JOIN fact_return_line r ON r.sales_line_id=f.sales_line_id\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=2 AND s.store_id=900\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "status | orders | lines | net | lines_returned | refund | mn | mx\ncollected | 852 | 1669 | 49083.36 | 117 | 5113.83 | 2025-05-26 | 2025-06-22\ndelivered | 2318 | 4682 | 134018.95 | 361 | 17274.46 | 2025-05-26 | 2025-06-22\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:37",
+   "statement": "WITH sold_lines AS (\n    SELECT f.sales_line_id, cs.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_date d    ON d.calendar_date = f.sale_date\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct,\n       SUM(l.net_amount) AS sold_net, COALESCE(SUM(r.refund_net), 0) AS returned_net\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "format | return_rate_pct | sold_net | returned_net\nLarge | 4.42 | 400763.11 | 17707.57\nMedium | 4.53 | 552936.25 | 25030.11\nSmall | 4.28 | 147668.20 | 6319.09\nWeb | 12.23 | 183098.49 | 22388.29\n(4 rows)"
+  }
+ ]
+}

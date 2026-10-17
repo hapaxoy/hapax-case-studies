@@ -1,0 +1,31 @@
+{
+ "run_id": "full-haiku-L-t46-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T46",
+ "budget": 12,
+ "used": 2,
+ "refused": 0,
+ "packet_sha256": "e5b8a11e7745bd4cf076a2e5cb73482f5bcf6b2e5f9201bc5bf95f603a9f7448",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:21:04",
+   "statement": "WITH sales AS (\n    SELECT \n        p.sku,\n        SUM(f.net_amount) AS total_sales\n    FROM fact_sales_line f\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN fact_web_order wo ON wo.web_order_id = f.receipt_id\n    WHERE s.store_id = 900\n      AND p.category != 'ZZ Test'\n      AND CAST(timezone('Europe/Helsinki', wo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) >= DATE '2025-11-03'\n    GROUP BY p.sku\n),\nreturns AS (\n    SELECT \n        p.sku,\n        SUM(r.refund_net) AS total_returns\n    FROM fact_return_line r\n    JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN fact_web_order wo ON wo.web_order_id = f.receipt_id\n    WHERE s.store_id = 900\n      AND p.category != 'ZZ Test'\n      AND CAST(timezone('Europe/Helsinki', wo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) >= DATE '2025-11-03'\n    GROUP BY p.sku\n)\nSELECT \n    s.sku,\n    cp.product_name,\n    s.total_sales - COALESCE(r.total_returns, 0) AS web_net_sales\nFROM sales s\nLEFT JOIN returns r ON r.sku = s.sku\nJOIN dim_product cp ON cp.sku = s.sku AND cp.is_current\nORDER BY web_net_sales DESC\nLIMIT 10;\n",
+   "n": 1,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "sku | product_name | web_net_sales\n100955 | Interior Paint Norvik 298 | 14415.82\n103774 | Christmas Decorations Poutaranta Home 601 | 13216.31\n103390 | Bedroom Peltola 793 | 10137.07\n100529 | Garden Furniture Raudikko 536 | 10104.50\n103747 | Christmas Decorations Mäntylä 402 | 9207.01\n103791 | Christmas Decorations Havu 430 | 9049.06\n100573 | Garden Furniture Ahvenisto 564 | 6957.22\n103928 | Sauna & Winter Havu 699 | 6957.04\n103861 | Christmas Decorations Kuusela 620 | 6679.65\n100528 | Garden Furniture Norvik 499 | 6610.15\n(10 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:21:19",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain sku --start 2025-11-03 --end 2026-10-04",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 10 rows, 3 columns: sku, product_name, web_net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (sku): 10 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-11-03 to 2026-10-04 (336 days; fiscal: FY2025/26 P08, FY2025/26 P11, FY2026/27 P03, FY2026/27 P06, FY2026/27 P02, FY2025/26 P10, FY2025/26 P07, FY2025/26 P09, FY2026/27 P05, FY2026/27 P01, FY2026/27 P04, FY2025/26 P12).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 12 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  sku | product_name | web_net_sales\n  100955 | Interior Paint Norvik 298 | 14415.82\n  103774 | Christmas Decorations Poutaranta Home 601 | 13216.31\n  103390 | Bedroom Peltola 793 | 10137.07\n  100529 | Garden Furniture Raudikko 536 | 10104.50\n  103747 | Christmas Decorations M�ntyl� 402 | 9207.01\n  103791 | Christmas "
+  }
+ ]
+}

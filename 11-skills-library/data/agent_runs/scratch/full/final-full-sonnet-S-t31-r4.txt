@@ -1,0 +1,31 @@
+```json
+{
+  "sql": "SELECT m.tier, count(DISTINCT m.member_id) AS active_members FROM dim_member AS m WHERE m.valid_from <= DATE '2025-12-21' AND m.valid_to >= DATE '2025-12-21' AND EXISTS (SELECT 1 FROM fact_sales_line AS f JOIN dim_member AS v ON v.member_key = f.member_key WHERE v.member_id = m.member_id AND f.sale_date BETWEEN DATE '2024-12-22' AND DATE '2025-12-21') GROUP BY m.tier ORDER BY CASE m.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 ELSE 3 END",
+  "result": {
+    "columns": ["tier", "active_members"],
+    "rows": [["Basic", 14668], ["Silver", 10986], ["Gold", 3903]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 8 of FY2025/26 runs 2025-11-24 to 2025-12-21 (ref_fiscal_calendar), so 'end of period 8' is 2025-12-21",
+    "Slowly changing member dimension: tier taken from the dim_member version valid on 2025-12-21 (valid_from <= date <= valid_to), not the current tier",
+    "Members counted by member_id (the stable loyalty number), not member_key (which is one per version)",
+    "Sales lines linked to members through member_key, then mapped to member_id so purchases made under any version of the member count",
+    "Loyalty tiers shown in the order Basic, Silver, Gold"
+  ],
+  "assumptions": [
+    "'Last year' read as the previous fiscal year, FY2025/26, because the request date (2026-10-07) falls in FY2026/27 P06. Period 8 of FY2026/27 has not happened yet.",
+    "'Active' member read as a member with at least one purchase (a fact_sales_line row linked to the member, store or web) in the 12 months up to and including the as-of date, i.e. 2024-12-22 to 2025-12-21. The warehouse documents no definition of 'active', so this is my choice.",
+    "Staff purchases are counted as purchase activity. Excluding them would change the counts only slightly, to Basic 14604, Silver 10967 and Gold 3901.",
+    "Returns are not netted off. Every member line in the window has a positive net amount, and a purchase that was later returned still counts as activity.",
+    "Only members who had joined on or before 2025-12-21 are included, which follows from the version validity test."
+  ],
+  "caveats": [
+    "Because 'active' is not defined in the warehouse, the figures depend on my 12-month purchase rule. A different rule, such as 6 months, 24 months or a consent-based definition, would give different numbers.",
+    "Of the 48,675 members on the loyalty list at 2025-12-21 (Basic 29,304, Silver 15,035, Gold 4,336), 29,657 count as active under this rule. The rest had no purchase in the 12 months.",
+    "I used the tier valid on 2025-12-21. Using the current tier from dim_member (is_current) would put members in the wrong tier, because 25,526 of the 60,000 members have more than one version.",
+    "No data defects affected the result. dim_member has no overlapping versions and no gaps at the as-of date. stg_member_updates matches dim_member exactly. Every sales member_key resolves to a dim_member row valid on the sale date. The period is fully loaded.",
+    "fact_sales_line has 418 duplicate (receipt_id, line_no) pairs. They do not affect distinct member counts.",
+    "Sales before 2024-04-29 are not in the warehouse. This does not affect the 12-month window used here."
+  ]
+}
+```

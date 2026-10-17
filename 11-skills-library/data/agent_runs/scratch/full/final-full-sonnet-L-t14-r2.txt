@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH sales_dedup AS (SELECT * FROM fact_sales_line QUALIFY row_number() OVER (PARTITION BY receipt_id, line_no ORDER BY etl_loaded_at, sales_line_id) = 1), net_lines AS (SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_amount FROM sales_dedup f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test') SELECT RANK() OVER (ORDER BY SUM(n.net_amount) DESC) AS rank, 'FY2025/26' AS fiscal_year, n.store_id, cs.store_name, ROUND(SUM(n.net_amount), 2) AS net_sales FROM net_lines n JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current WHERE n.business_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03' GROUP BY n.store_id, cs.store_name ORDER BY rank LIMIT 10",
+  "result": {
+    "columns": ["rank", "fiscal_year", "store_id", "store_name", "net_sales"],
+    "rows": [
+      [1, "FY2025/26", 115, "Tampere Hervanta", 804120.83],
+      [2, "FY2025/26", 102, "Helsinki Pitäjänmäki", 679651.94],
+      [3, "FY2025/26", 131, "Oulu Kaakkuri", 555975.03],
+      [4, "FY2025/26", 108, "Lahti", 543956.58],
+      [5, "FY2025/26", 110, "Turku Kupittaa", 539965.78],
+      [6, "FY2025/26", 104, "Vantaa Tammisto", 531924.70],
+      [7, "FY2025/26", 125, "Kuopio", 512757.62],
+      [8, "FY2025/26", 116, "Tampere Lielahti", 506894.85],
+      [9, "FY2025/26", 117, "Tampere Kaleva", 474881.34],
+      [10, "FY2025/26", 118, "Nokia", 415258.62]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns, with each return deducted on its own return date",
+    "Store scope: physical stores only (store_id below 900), so the web shop (900) is out; store 999 is out",
+    "Test articles (category ZZ Test) excluded",
+    "Staff purchases included",
+    "Versioned dimensions: stores identified by stable store_id, names from the current dim_store version",
+    "Fiscal year FY2025/26 (28 April 2025 to 3 May 2026), including week 53 because no comparison is made",
+    "Control total: store totals checked against rpt_daily_store_sales for the same days"
+  ],
+  "assumptions": [
+    "'Biggest' is not defined in the metric dictionary. I read it as highest net sales (the company's main size measure), not floor area. I did not ask the queue, so this is my reading.",
+    "No period was given. I used the last completed fiscal year, FY2025/26, as a full-year view. All 10 stores traded for the whole year apart from refit weeks, and the new stores were open all year.",
+    "Ranking is on total net sales for the year, not net sales per trading day, because the request is about size rather than the league table of daily performance.",
+    "Savonlinna (closed 25 January 2026) is not in the top 10, so the closure does not affect the list. Pori and Kuopio refit closures reduce those stores' totals; Kuopio's refit week 15 June 2026 falls outside FY2025/26."
+  ],
+  "caveats": [
+    "Correction: Tampere Lielahti (116) had its sales lines loaded twice for 15 to 21 September 2025 (same receipt_id and line_no, different sales_line_id). I kept one copy of each line. That removes 10,390.53 EUR from the store, which is now 506,894.85 and ranks 8th, behind Kuopio. Without the correction it would show 517,285.38 and rank 7th. After the correction every store matches rpt_daily_store_sales exactly. Across the whole table there are 418 duplicate rows (1,510,641 rows against 1,510,223 distinct receipt and line pairs), all handled by the same de-duplication. Data &amp; Analytics should fix the load.",
+    "If 'biggest' meant floor area, the top 10 is different: Pitäjänmäki (8,381 sqm), Turku Kupittaa, Kuopio, Tammisto, Oulu Kaakkuri, Lahti, Tampere Lielahti, Tampere Hervanta, Espoo Lommila and Lappeenranta. Ask if you want that version.",
+    "If you meant the current year instead (FY2026/27 to date, through 4 October 2026, week 22), the order changes. Kuopio drops out because of its 15 June to 26 July 2026 refit, and Nokia and Joensuu come close to the bottom of the list.",
+    "Net sales are excluding VAT. Click-and-collect and other web sales sit under the web shop (store 900) and are not counted for any physical store."
+  ]
+}
+```

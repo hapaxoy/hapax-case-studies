@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "SELECT \n  ROW_NUMBER() OVER (ORDER BY fy25.fiscal_week) AS week_number,\n  ROUND(fy25.net_sales, 2) AS net_sales_fy2025_26,\n  ROUND(fy24.net_sales, 2) AS net_sales_fy2024_25,\n  ROUND((fy25.net_sales - fy24.net_sales) / fy24.net_sales * 100, 1) AS growth_pct\nFROM (\n  SELECT \n    d.fiscal_week,\n    SUM(f.net_amount) AS net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE d.fiscal_period = 2 AND d.fiscal_year = 'FY2025/26'\n  GROUP BY d.fiscal_week\n) fy25\nINNER JOIN (\n  SELECT \n    d.fiscal_week,\n    SUM(f.net_amount) AS net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE d.fiscal_period = 2 AND d.fiscal_year = 'FY2024/25'\n  GROUP BY d.fiscal_week\n) fy24 ON fy25.fiscal_week = fy24.fiscal_week\nORDER BY fy25.fiscal_week",
+  "result": {
+    "columns": ["week_number", "net_sales_fy2025_26", "net_sales_fy2024_25", "growth_pct"],
+    "rows": [
+      [1, 346403.47, 330149.71, 4.9],
+      [2, 350196.76, 326587.92, 7.2],
+      [3, 346946.78, 329352.52, 5.3],
+      [4, 243145.07, 219261.00, 10.9]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net_amount from fact_sales_line (sales net of line discounts, excluding VAT)",
+    "Fiscal period 2: May 26 – June 22, 2025 (FY2025/26); May 27 – June 23, 2024 (FY2024/25)",
+    "Weekly aggregation: One row per fiscal week within period 2 (weeks 5–8 per fiscal calendar)",
+    "Growth: Year-over-year percentage change, calculated as (2025/26 sales – 2024/25 sales) / 2024/25 sales × 100"
+  ],
+  "assumptions": [
+    "Total company sales includes all sales channels (store and web) and all customer types (members and non-members)",
+    "Staff purchases are included in the totals",
+    "Growth percentage rounded to one decimal place",
+    "All sales line data in fact_sales_line is included; no filtering by business units or store types"
+  ],
+  "caveats": [
+    "Week 4 (week ending June 22) includes Midsummer Eve (June 20–21, 2025) and Midsummer Day (June 21–22, 2024), both marked as non-trading days. Physical stores are closed on these dates; the lower sales in week 4 reflect holiday closure. Online and residual sales continue on these dates.",
+    "Growth percentages are calculated on net sales before any return deductions. Refunds in fact_return_line are not netted against sales revenue in this query."
+  ]
+}
+```

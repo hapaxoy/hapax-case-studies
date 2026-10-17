@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, 5 AS fiscal_period, ROUND(f.vat_rate * 100, 2) AS vat_rate_pct, SUM(f.gross_amount - f.net_amount) AS vat_charged_eur FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE f.channel_code = 'ST' AND s.store_id &lt; 900 AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period = 5 GROUP BY d.fiscal_year, f.vat_rate ORDER BY f.vat_rate",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "vat_rate_pct", "vat_charged_eur"],
+    "rows": [
+      ["FY2024/25", 5, 10.0, 150.67],
+      ["FY2024/25", 5, 14.0, 817.62],
+      ["FY2024/25", 5, 24.0, 54105.20],
+      ["FY2024/25", 5, 25.5, 180017.23]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal period 5 of FY2024/25 = 2024-08-26 to 2024-09-22 (4 weeks, fiscal weeks 18-21), from ref_fiscal_calendar; marked fully loaded",
+    "Stores = channel_code ST, excluding pseudo-locations (store_id 900 web shop, 999 training store)",
+    "VAT charged = gross_amount minus net_amount on the sales lines, grouped by the vat_rate on the line",
+    "Store identified through dim_store.store_key (the store version on the sale date), not store_id directly"
+  ],
+  "assumptions": [
+    "VAT charged is read as VAT on sales as rung up, before returns; refunds are not netted off",
+    "Staff purchases are included, since VAT is charged on them like any other sale",
+    "Web orders, including click-and-collect orders collected in stores, are excluded because the request asks for stores",
+    "Sales are placed in the period by sale_date, which matches the local (Helsinki) date of the sale timestamp on every line",
+    "Rates are shown as percentages (25.5 means 25.5%)"
+  ],
+  "caveats": [
+    "The standard VAT rate changed during the period: 24% applied on sales dated 26-31 Aug 2024 and 25.5% from 1 Sep 2024. Both rates are in the split, as the lines carry them. Reduced rates of 10% and 14% are unchanged.",
+    "The training store (store_id 999) has 238 sales lines in the period, with about 885 EUR of VAT. They are excluded. It is not a trading store.",
+    "Web shop (store_id 900) lines in the period carry about 30,846 EUR of VAT (19.84 at 10%, 88.65 at 14%, 6,780.38 at 24%, 23,957.29 at 25.5%). They are excluded.",
+    "Staff purchases are included in the figures: 3.59 EUR at 10%, 11.77 at 14%, 691.63 at 24% and 2,666.70 at 25.5%, about 3,374 EUR in total.",
+    "Refunds in stores booked in the period carry VAT of about 11,136 EUR (1.20 at 10%, 10.48 at 14%, 5,094.72 at 24%, 6,029.57 at 25.5%). These are not deducted. If Finance wants VAT net of returns, subtract these figures.",
+    "Data checks on the in-scope lines found no duplicate receipt/line numbers, no VAT amounts out of line with the stated rate, no zero or negative quantities, no sales on non-trading days, and data for all 28 days and 38 stores. No correction was needed beyond excluding the pseudo-locations."
+  ]
+}
+```

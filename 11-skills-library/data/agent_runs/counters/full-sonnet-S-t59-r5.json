@@ -1,0 +1,112 @@
+{
+ "run_id": "full-sonnet-S-t59-r5",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T59",
+ "budget": 12,
+ "used": 11,
+ "refused": 0,
+ "packet_sha256": "76b14400638bbcb8736a8cd403470730c360a1bfaaaef7ba7e58ea9e814dc0f8",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:05:58",
+   "statement": "SELECT status, fulfilment_type, login_state, count(*) n, count(DISTINCT web_order_id) d, min(order_ts_utc), max(order_ts_utc)\nFROM fact_web_order\nWHERE order_ts_utc >= TIMESTAMP '2025-11-27 20:00:00' AND order_ts_utc < TIMESTAMP '2025-11-29 04:00:00'\nGROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "status | fulfilment_type | login_state | n | d | min(order_ts_utc) | max(order_ts_utc)\ncancelled | click_and_collect | logged_in | 4 | 4 | 2025-11-28T11:35:45 | 2025-11-28T19:34:06\ncancelled | home_delivery | guest | 7 | 7 | 2025-11-27T22:06:57 | 2025-11-28T20:18:34\ncancelled | home_delivery | logged_in | 12 | 12 | 2025-11-27T23:14:30 | 2025-11-28T23:39:12\ncollected | click_and_collect | guest | 28 | 28 | 2025-11-27T21:41:11 | 2025-11-28T21:22:26\ncollected | click_and_collect | logged_in | 91 | 91 | 2025-11-27T21:07:02 | 2025-11-29T03:56:16\ndelivered | home_delivery | guest | 86 | 86 | 2025-11-27T20:05:29 | 2025-11-29T02:18:16\ndelivered | home_delivery | logged_in | 224 | 224 | 2025-11-27T20:26:53 | 2025-11-29T02:31:08\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:04",
+   "statement": "SELECT 'fact' src, count(*) n, count(DISTINCT web_order_id) d, min(order_ts_utc) mn, max(order_ts_utc) mx,\n  count(*) FILTER (WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28') day_n,\n  count(DISTINCT web_order_id) FILTER (WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28') day_d,\n  count(DISTINCT web_order_id) FILTER (WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28' AND status<>'cancelled') day_d_nc\nFROM fact_web_order\nUNION ALL\nSELECT 'stg', count(*), count(DISTINCT web_order_id), min(order_ts_utc), max(order_ts_utc),\n  count(*) FILTER (WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28'),\n  count(DISTINCT web_order_id) FILTER (WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28'),\n  count(DISTINCT web_order_id) FILTER (WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28' AND status<>'cancelled')\nFROM stg_web_order_load\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "src | n | d | mn | mx | day_n | day_d | day_d_nc\nfact | 94876 | 94876 | 2024-04-28T21:24:15 | 2026-10-04T20:56:59 | 377 | 377 | 357\nstg | 255 | 255 | 2026-10-03T01:43:52 | 2026-10-04T20:56:59 | 0 | 0 | 0\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:05",
+   "statement": "SELECT CAST(order_ts_utc AS DATE) d, count(*) n, count(DISTINCT web_order_id) dd\nFROM fact_web_order WHERE order_ts_utc >= TIMESTAMP '2025-11-20' AND order_ts_utc < TIMESTAMP '2025-12-06'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 16,
+   "output_preview": "d | n | dd\n2025-11-20 | 121 | 121\n2025-11-21 | 110 | 110\n2025-11-22 | 102 | 102\n2025-11-23 | 136 | 136\n2025-11-24 | 125 | 125\n2025-11-25 | 133 | 133\n2025-11-26 | 132 | 132\n2025-11-27 | 187 | 187\n2025-11-28 | 377 | 377\n2025-11-29 | 126 | 126\n2025-11-30 | 200 | 200\n2025-12-01 | 291 | 291\n2025-12-02 | 155 | 155\n2025-12-03 | 145 | 145\n2025-12-04 | 146 | 146\n2025-12-05 | 138 | 138\n(16 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:11",
+   "statement": "WITH o AS (SELECT * FROM fact_web_order WHERE CAST(order_ts_utc AS DATE)=DATE '2025-11-28'),\nl AS (SELECT receipt_id, count(*) nl, sum(gross_amount) g, min(channel_code) cc FROM fact_sales_line WHERE channel_code='WB' GROUP BY 1)\nSELECT count(*) orders, count(l.receipt_id) with_lines, count(*) FILTER (WHERE l.receipt_id IS NULL) no_lines,\n count(*) FILTER (WHERE o.line_count<>l.nl) linecount_mismatch,\n count(*) FILTER (WHERE abs(o.order_total_gross-l.g)>0.01) total_mismatch,\n count(*) FILTER (WHERE o.order_total_gross<=0 OR o.line_count<=0) zero_orders,\n count(*) FILTER (WHERE o.dispatch_ts_utc < o.order_ts_utc) bad_dispatch,\n count(DISTINCT (o.member_key, o.order_ts_utc, o.order_total_gross)) distinct_sig\nFROM o LEFT JOIN l ON l.receipt_id=o.web_order_id\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | with_lines | no_lines | linecount_mismatch | total_mismatch | zero_orders | bad_dispatch | distinct_sig\n377 | 0 | 377 | 0 | 0 | 0 | 0 | 377\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:13",
+   "statement": "SELECT 'sales_wb_receipts_utc_day' k, count(DISTINCT receipt_id) v FROM fact_sales_line WHERE channel_code='WB' AND CAST(sale_ts_utc AS DATE)=DATE '2025-11-28'\nUNION ALL SELECT 'sales_wb_receipts_sale_date', count(DISTINCT receipt_id) FROM fact_sales_line WHERE channel_code='WB' AND sale_date=DATE '2025-11-28'\nUNION ALL SELECT 'sales_wb_orders_not_in_fact_web_order', count(DISTINCT receipt_id) FROM fact_sales_line s WHERE channel_code='WB' AND CAST(sale_ts_utc AS DATE)=DATE '2025-11-28' AND NOT EXISTS (SELECT 1 FROM fact_web_order o WHERE o.web_order_id=s.receipt_id)\nUNION ALL SELECT 'channel_ids', count(*) FROM dim_channel\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "k | v\nsales_wb_receipts_utc_day | 0\nsales_wb_receipts_sale_date | 0\nsales_wb_orders_not_in_fact_web_order | 0\nchannel_ids | 3\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:17",
+   "statement": "SELECT channel_code, channel_id, count(*) n, count(DISTINCT receipt_id) r, min(sale_date) mn, max(sale_date) mx FROM fact_sales_line GROUP BY ALL ORDER BY 1,2\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "channel_code | channel_id | n | r | mn | mx\nST | NULL | 820084 | 355942 | 2024-04-29 | 2025-11-02\nWB | NULL | 100065 | 50039 | 2024-04-29 | 2025-11-02\nNULL | 1 | 509235 | 221356 | 2025-11-03 | 2026-10-04\nNULL | 2 | 58848 | 29488 | 2025-11-03 | 2026-10-03\nNULL | 3 | 22409 | 11225 | 2025-11-03 | 2026-10-03\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:18",
+   "statement": "SELECT * FROM dim_channel ORDER BY 1\n",
+   "n": 7,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_id | channel_name | channel_group | legacy_channel_code\n1 | Store | store | ST\n2 | Web home delivery | web | WB\n3 | Click and collect | web | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:24",
+   "statement": "SELECT 'web lines by sale_date 11-26..30' k, sale_date::VARCHAR d, channel_code, channel_id, count(*) n, count(DISTINCT receipt_id) r\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-11-26' AND DATE '2025-11-30' AND (channel_code='WB' OR channel_id IN (2,3))\nGROUP BY ALL ORDER BY 2\n",
+   "n": 8,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "k | d | channel_code | channel_id | n | r\nweb lines by sale_date 11-26..30 | 2025-11-26 | NULL | 3 | 65 | 36\nweb lines by sale_date 11-26..30 | 2025-11-26 | NULL | 2 | 182 | 88\nweb lines by sale_date 11-26..30 | 2025-11-27 | NULL | 2 | 195 | 103\nweb lines by sale_date 11-26..30 | 2025-11-27 | NULL | 3 | 60 | 28\nweb lines by sale_date 11-26..30 | 2025-11-28 | NULL | 2 | 544 | 291\nweb lines by sale_date 11-26..30 | 2025-11-28 | NULL | 3 | 227 | 111\nweb lines by sale_date 11-26..30 | 2025-11-29 | NULL | 2 | 172 | 89\nweb lines by sale_date 11-26..30 | 2025-11-29 | NULL | 3 | 72 | 33\nweb lines by sale_date 11-26..30 | 2025-11-30 | NULL | 2 | 219 | 109\nweb lines by sale_date 11-26..30 | 2025-11-30 | NULL | 3 | 61 | 32\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:25",
+   "statement": "SELECT count(*) n, count(s.receipt_id) matched FROM fact_web_order o LEFT JOIN (SELECT DISTINCT receipt_id FROM fact_sales_line) s ON s.receipt_id=o.web_order_id WHERE CAST(o.order_ts_utc AS DATE)=DATE '2025-11-28'\n",
+   "n": 9,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"matched\"\n\nLINE 1: SELECT count(*) n, count(s.receipt_id) matched FROM fact_web_order o LEFT JOIN (SELECT DISTINCT...\n                                               ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:30",
+   "statement": "WITH s AS (SELECT DISTINCT receipt_id, sale_date, CAST(sale_ts_utc AS DATE) utc_day FROM fact_sales_line WHERE channel_id IN (2,3))\nSELECT count(*) AS orders, count(s.receipt_id) AS has_lines,\n count(*) FILTER (WHERE s.utc_day = DATE '2025-11-28') AS lines_utc_28,\n count(*) FILTER (WHERE s.sale_date = DATE '2025-11-28') AS lines_saledate_28\nFROM fact_web_order o LEFT JOIN s ON s.receipt_id=o.web_order_id\nWHERE CAST(o.order_ts_utc AS DATE)=DATE '2025-11-28'\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | has_lines | lines_utc_28 | lines_saledate_28\n377 | 357 | 357 | 350\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:31",
+   "statement": "SELECT count(DISTINCT receipt_id) AS receipts_utc_28, count(DISTINCT receipt_id) FILTER (WHERE sale_date=DATE '2025-11-28') AS receipts_saledate_28\nFROM fact_sales_line WHERE channel_id IN (2,3) AND CAST(sale_ts_utc AS DATE)=DATE '2025-11-28'\n",
+   "n": 11,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "receipts_utc_28 | receipts_saledate_28\n357 | 350\n(1 row)"
+  }
+ ]
+}

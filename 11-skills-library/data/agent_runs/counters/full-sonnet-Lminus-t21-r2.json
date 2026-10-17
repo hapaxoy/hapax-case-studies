@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-Lminus-t21-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T21",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "1dbd2ffb5489e29d7923cc5d3e5a15bbbca639d3a73e7231b8464ea1195f2f28",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:43",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2024/25' AND fiscal_period BETWEEN 4 AND 6 ORDER BY 2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | fully_loaded\nFY2024/25 | 4 | 2024-07-29 | 2024-08-25 | 4 | true\nFY2024/25 | 5 | 2024-08-26 | 2024-09-22 | 4 | true\nFY2024/25 | 6 | 2024-09-23 | 2024-10-27 | 5 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:50",
+   "statement": "WITH web_dispatch AS (\n  SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n  FROM fact_web_order WHERE status IN ('delivered','collected')\n),\nl AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.gross_amount, f.net_amount, f.etl_loaded_at, w.dispatch_date, s.store_id, p.category\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product p ON p.product_key=f.product_key\n  JOIN web_dispatch w ON w.web_order_id=f.receipt_id\n  WHERE s.store_id=900 AND s.store_id<>999 AND p.category<>'ZZ Test'\n    AND w.dispatch_date BETWEEN DATE '2024-07-29' AND DATE '2024-10-27'\n)\nSELECT d.fiscal_period, COUNT(*) AS n, COUNT(DISTINCT sales_line_id) AS d_id, COUNT(DISTINCT (receipt_id, line_no)) AS d_rl, COUNT(DISTINCT receipt_id) AS orders,\n  SUM(gross_amount) AS gross, SUM(net_amount) AS net, MIN(etl_loaded_at) AS min_etl, MAX(etl_loaded_at) AS max_etl\nFROM l JOIN dim_date d ON d.calendar_date=l.dispatch_date\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | n | d_id | d_rl | orders | gross | net | min_etl | max_etl\n4 | 3957 | 3957 | 3957 | 1982 | 156427.22 | 126242.65 | 2024-07-26T01:00:00 | 2024-08-25T01:00:00\n5 | 4053 | 4053 | 4053 | 2038 | 153246.24 | 122660.57 | 2024-08-23T01:00:00 | 2024-09-22T01:00:00\n6 | 5301 | 5301 | 5301 | 2632 | 192906.29 | 153786.32 | 2024-09-20T01:00:00 | 2024-10-27T01:00:00\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:55",
+   "statement": "SELECT d.fiscal_period, SUM(r.net_sales_before_returns) AS ctl_net_before, SUM(r.returns_net) AS ctl_returns, SUM(r.receipts) AS receipts\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\nWHERE r.store_id=900 AND r.business_date BETWEEN DATE '2024-07-29' AND DATE '2024-10-27'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | ctl_net_before | ctl_returns | receipts\n4 | 126242.65 | 11049.62 | 1982\n5 | 122660.57 | 10780.91 | 2038\n6 | 153786.32 | 14167.68 | 2632\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:02",
+   "statement": "WITH o AS (\n  SELECT o.web_order_id, o.status, o.order_total_gross, CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dd,\n         CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) AS od\n  FROM fact_web_order o\n  WHERE (o.dispatch_ts_utc IS NOT NULL AND CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2024-07-29' AND DATE '2024-10-27')\n     OR (CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2024-07-29' AND DATE '2024-10-27')\n),\nls AS (\n  SELECT f.receipt_id, SUM(f.gross_amount) AS g, COUNT(*) AS n, SUM(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS testlines, MIN(s.store_id) AS mn, MAX(s.store_id) AS mx\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.receipt_id IN (SELECT web_order_id FROM o) GROUP BY 1\n)\nSELECT o.status, COUNT(*) AS orders, SUM(CASE WHEN ls.receipt_id IS NULL THEN 1 ELSE 0 END) AS no_lines,\n  SUM(CASE WHEN ls.receipt_id IS NOT NULL AND ABS(ls.g-o.order_total_gross)>0.01 THEN 1 ELSE 0 END) AS total_mismatch,\n  SUM(COALESCE(ls.testlines,0)) AS test_lines, SUM(CASE WHEN ls.mn<>900 OR ls.mx<>900 THEN 1 ELSE 0 END) AS non900,\n  SUM(CASE WHEN o.dd IS NOT NULL AND o.dd<>o.od THEN 1 ELSE 0 END) AS dispatch_ne_order_date\nFROM o LEFT JOIN ls ON ls.receipt_id=o.web_order_id GROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | orders | no_lines | total_mismatch | test_lines | non900 | dispatch_ne_order_date\ncancelled | 257 | 257 | 0 | 0 | 0 | 0\ncollected | 1549 | 0 | 0 | 0 | 0 | 1445\ndelivered | 5262 | 0 | 0 | 2 | 0 | 5121\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:09",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n)\nSELECT d.fiscal_year, d.fiscal_period,\n       SUM(CASE WHEN p.category <> 'ZZ Test' THEN f.gross_amount ELSE 0 END) AS web_sales_incl_vat,\n       SUM(CASE WHEN p.category = 'ZZ Test' THEN f.gross_amount ELSE 0 END) AS test_gross_excluded\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN web_dispatch w ON w.web_order_id = f.receipt_id\nJOIN dim_date d ON d.calendar_date = w.dispatch_date\nWHERE s.store_id = 900\n  AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 4 AND 6\nGROUP BY 1, 2 ORDER BY 2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | web_sales_incl_vat | test_gross_excluded\nFY2024/25 | 4 | 156427.22 | 8.06\nFY2024/25 | 5 | 153246.24 | 3.77\nFY2024/25 | 6 | 192906.29 | 0.00\n(3 rows)"
+  }
+ ]
+}

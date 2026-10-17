@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t13-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T13",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "669762b6dd04d12aa2d523d6ffb552b7e9bd0d6abe8a24a8cd2db9eaefa6e70f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:52:03",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:08",
+   "statement": "SELECT s.format, count(*) AS line_rows, count(DISTINCT (f.receipt_id, f.line_no)) AS distinct_lines,\n count(DISTINCT f.sales_line_id) AS distinct_ids, count(DISTINCT f.receipt_id) AS receipts,\n sum(CASE WHEN f.staff_purchase_flag THEN 1 ELSE 0 END) AS staff_lines,\n sum(CASE WHEN f.net_amount<=0 THEN 1 ELSE 0 END) AS nonpos, count(DISTINCT s.store_id) AS stores,\n min(f.sale_date) AS mind, max(f.sale_date) AS maxd, count(DISTINCT f.etl_loaded_at) AS loads\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND p.category<>'ZZ Test'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | line_rows | distinct_lines | distinct_ids | receipts | staff_lines | nonpos | stores | mind | maxd | loads\nLarge | 15193 | 15193 | 15193 | 6607 | 236 | 0 | 8 | 2026-08-03 | 2026-08-30 | 28\nMedium | 20317 | 20317 | 20317 | 8779 | 330 | 0 | 18 | 2026-08-03 | 2026-08-30 | 28\nSmall | 6011 | 6011 | 6011 | 2641 | 100 | 0 | 12 | 2026-08-03 | 2026-08-30 | 28\nTraining | 71 | 71 | 71 | 32 | 71 | 0 | 1 | 2026-08-03 | 2026-08-28 | 16\nWeb | 6458 | 6458 | 6458 | 3228 | 0 | 0 | 1 | 2026-08-03 | 2026-08-30 | 28\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:15",
+   "statement": "WITH base AS (\n  SELECT f.receipt_id, f.net_amount, f.staff_purchase_flag, s.store_id, s.format AS fmt_then, cs.format AS fmt_now\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key=f.product_key\n  JOIN dim_date d ON d.calendar_date=f.sale_date\n  WHERE s.store_id<900 AND p.category<>'ZZ Test' AND d.fiscal_year='FY2026/27' AND d.fiscal_period=4)\nSELECT 'all_incl_staff' AS k, count(DISTINCT receipt_id) AS r, sum(net_amount) AS n, sum(CASE WHEN fmt_then<>fmt_now THEN 1 ELSE 0 END) AS fmt_changed FROM base\nUNION ALL\nSELECT 'ctrl_rpt', sum(receipts), sum(net_sales_before_returns), NULL FROM rpt_daily_store_sales\n WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id<900\nUNION ALL\nSELECT 'atv_'||fmt_now, count(DISTINCT receipt_id), sum(net_amount), round(sum(net_amount)/count(DISTINCT receipt_id),2) FROM base WHERE NOT staff_purchase_flag GROUP BY fmt_now\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "k | r | n | fmt_changed\nall_incl_staff | 18027 | 1062266.72 | 0.0\nctrl_rpt | 18027 | 1062266.72 | NULL\natv_Medium | 8641 | 520763.45 | 60.27\natv_Large | 6508 | 394865.46 | 60.67\natv_Small | 2598 | 131841.05 | 50.75\n(5 rows)"
+  }
+ ]
+}

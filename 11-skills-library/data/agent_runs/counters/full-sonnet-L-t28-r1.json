@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-L-t28-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T28",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "a047d90cbba72f6d45a76ba376c0ef985b7880180e41a37fcae5a3ecda589dce",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:37:53",
+   "statement": "fiscal-calendar/scripts/fiscal.py last period --as-of 2026-10-07",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: last period    as of: 2026-10-07    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: 'Last period' = the last completed fiscal period (CAL-RELATIVE).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:37:56",
+   "statement": "SELECT week_ending_date, count(*) AS n_rows,\n       count(DISTINCT (store_key, product_key)) AS n_distinct,\n       count(DISTINCT etl_loaded_at) AS loads, min(etl_loaded_at) AS first_load, max(etl_loaded_at) AS last_load,\n       sum(closing_units) AS units\nFROM fact_stock_week\nWHERE week_ending_date BETWEEN DATE '2026-08-30' AND DATE '2026-10-04'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "week_ending_date | n_rows | n_distinct | loads | first_load | last_load | units\n2026-08-30 | 27143 | 27143 | 1 | 2026-08-31T01:00:00 | 2026-08-31T01:00:00 | 213666\n2026-09-06 | 27143 | 27143 | 1 | 2026-09-07T01:00:00 | 2026-09-07T01:00:00 | 212544\n2026-09-13 | 27143 | 27143 | 1 | 2026-09-14T01:00:00 | 2026-09-14T01:00:00 | 212352\n2026-09-20 | 27143 | 27143 | 1 | 2026-09-21T01:00:00 | 2026-09-21T01:00:00 | 211748\n2026-09-27 | 27143 | 27143 | 1 | 2026-09-28T01:00:00 | 2026-09-28T01:00:00 | 211157\n2026-10-04 | 27143 | 27143 | 1 | 2026-10-05T01:00:00 | 2026-10-05T01:00:00 | 210323\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:38:03",
+   "statement": "SELECT count(*) AS n, count(DISTINCT (s.store_id, p.sku)) AS n_nat,\n       count(*) FILTER (WHERE s.store_id >= 900) AS n_900plus,\n       count(*) FILTER (WHERE p.category = 'ZZ Test') AS n_test,\n       count(*) FILTER (WHERE fs.closing_units < 0) AS n_neg,\n       count(*) FILTER (WHERE fs.closing_units IS NULL) AS n_null,\n       count(*) FILTER (WHERE p.is_current = false) AS n_noncurrent_prod,\n       count(DISTINCT p.category) AS n_cat_asof, count(DISTINCT cp.category) AS n_cat_current,\n       count(*) FILTER (WHERE p.category <> cp.category) AS n_cat_changed,\n       count(*) FILTER (WHERE fs.closing_value <> fs.closing_units * p.standard_unit_cost) AS n_value_mismatch,\n       count(*) FILTER (WHERE s.valid_to < DATE '2026-09-27' OR s.valid_from > DATE '2026-09-27') AS n_store_ver_off,\n       count(*) FILTER (WHERE s.close_date IS NOT NULL) AS n_closed_store,\n       count(*) FILTER (WHERE p.delisted_on IS NOT NULL) AS n_delisted\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key = fs.store_key\nJOIN dim_product p ON p.product_key = fs.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE fs.week_ending_date = DATE '2026-09-27'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | n_nat | n_900plus | n_test | n_neg | n_null | n_noncurrent_prod | n_cat_asof | n_cat_current | n_cat_changed | n_value_mismatch | n_store_ver_off | n_closed_store | n_delisted\n27143 | 27143 | 0 | 0 | 0 | 0 | 0 | 10 | 10 | 0 | 0 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:38:12",
+   "statement": "SELECT count(*) AS n, count(DISTINCT sales_line_id) AS n_ids, count(DISTINCT (receipt_id, line_no)) AS n_rl,\n       count(DISTINCT etl_loaded_at) AS loads, min(etl_loaded_at) AS first_load, max(etl_loaded_at) AS last_load,\n       count(*) FILTER (WHERE s.store_id >= 900) AS n_900plus,\n       count(*) FILTER (WHERE s.store_id = 999) AS n_999,\n       count(*) FILTER (WHERE p.category = 'ZZ Test') AS n_test,\n       count(*) FILTER (WHERE f.quantity <= 0) AS n_nonpos_qty,\n       count(*) FILTER (WHERE f.staff_purchase_flag) AS n_staff,\n       min(f.sale_date) AS mind, max(f.sale_date) AS maxd, sum(f.quantity) AS units\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date BETWEEN DATE '2026-08-24' AND DATE '2026-09-20'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | n_ids | n_rl | loads | first_load | last_load | n_900plus | n_999 | n_test | n_nonpos_qty | n_staff | mind | maxd | units\n47032 | 47032 | 47032 | 28 | 2026-08-25T01:00:00 | 2026-09-21T01:00:00 | 6681 | 139 | 40 | 0 | 681 | 2026-08-24 | 2026-09-20 | 80589\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:38:18",
+   "statement": "WITH ranged AS (\n  SELECT DISTINCT s.store_id, p.sku FROM fact_stock_week fs\n  JOIN dim_store s ON s.store_key = fs.store_key JOIN dim_product p ON p.product_key = fs.product_key\n  WHERE fs.week_ending_date = DATE '2026-09-27'\n),\nsold AS (\n  SELECT s.store_id, p.sku, cp.category, f.quantity\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE f.sale_date BETWEEN DATE '2026-08-24' AND DATE '2026-09-20'\n    AND s.store_id < 900 AND p.category <> 'ZZ Test'\n)\nSELECT sold.category, sum(quantity) AS units_all,\n       sum(quantity) FILTER (WHERE r.sku IS NOT NULL) AS units_ranged,\n       sum(quantity) FILTER (WHERE r.sku IS NULL) AS units_not_ranged\nFROM sold LEFT JOIN ranged r ON r.store_id = sold.store_id AND r.sku = sold.sku\nGROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | units_all | units_ranged | units_not_ranged\nBathroom & Plumbing | 4231 | 4231 | NULL\nCleaning & Household | 9574 | 9574 | NULL\nElectrical | 10405 | 10405 | NULL\nFurniture | 672 | 672 | NULL\nGarden | 11005 | 11005 | NULL\nHome Textiles & Decor | 6017 | 6017 | NULL\nKitchen & Dining | 3847 | 3847 | NULL\nPaint & Decorating | 5815 | 5815 | NULL\nSeasonal | 2097 | 2097 | NULL\nTools & Hardware | 15775 | 15775 | NULL\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:38:23",
+   "statement": "WITH params AS (SELECT DATE '2026-09-27' AS week_ending),\nclosing AS (\n    SELECT cp.category, SUM(fs.closing_units) AS closing_units\n    FROM fact_stock_week fs\n    JOIN dim_store s    ON s.store_key = fs.store_key\n    JOIN dim_product p  ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date = params.week_ending\n      AND s.store_id < 900 AND p.category <> 'ZZ Test'\n    GROUP BY 1\n),\nsold AS (\n    SELECT cp.category, SUM(f.quantity) AS units_sold_4w\n    FROM fact_sales_line f\n    JOIN dim_store s    ON s.store_key = f.store_key\n    JOIN dim_product p  ON p.product_key = f.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7\n      AND s.store_id < 900 AND p.category <> 'ZZ Test'\n    GROUP BY 1\n)\nSELECT 'FY2026/27' AS fiscal_year, 5 AS fiscal_period, c.category,\n       c.closing_units, ROUND(s.units_sold_4w / 4.0, 1) AS avg_weekly_units_sold,\n       ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) AS weeks_of_cover\nFROM closing c LEFT JOIN sold s ON s.category = c.category\nORDER BY c.category\n",
+   "n": 6,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "fiscal_year | fiscal_period | category | closing_units | avg_weekly_units_sold | weeks_of_cover\nFY2026/27 | 5 | Bathroom & Plumbing | 12237 | 1057.8 | 11.6\nFY2026/27 | 5 | Cleaning & Household | 18212 | 2393.5 | 7.6\nFY2026/27 | 5 | Electrical | 23887 | 2601.3 | 9.2\nFY2026/27 | 5 | Furniture | 4963 | 168.0 | 29.5\nFY2026/27 | 5 | Garden | 45196 | 2751.3 | 16.4\nFY2026/27 | 5 | Home Textiles & Decor | 18354 | 1504.3 | 12.2\nFY2026/27 | 5 | Kitchen & Dining | 14037 | 961.8 | 14.6\nFY2026/27 | 5 | Paint & Decorating | 18302 | 1453.8 | 12.6\nFY2026/27 | 5 | Seasonal | 25570 | 524.3 | 48.8\nFY2026/27 | 5 | Tools & Hardware | 30399 | 3943.8 | 7.7\n(10 rows)"
+  }
+ ]
+}

@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t57-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T57",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "8924a8f854332e1effe4336bea91cd0b5084678860ee1750091ddbe887ed6eb4",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:32",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE store_name ILIKE '%nokia%' OR city ILIKE '%nokia%' ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n24 | 118 | Nokia | Nokia | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:33",
+   "statement": "SELECT fiscal_period_label, min(calendar_date), max(calendar_date), min(fiscal_week), max(fiscal_week), count(*) FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=5 GROUP BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_period_label | min(calendar_date) | max(calendar_date) | min(fiscal_week) | max(fiscal_week) | count_star()\nFY2026/27 P05 | 2026-08-31 | 2026-09-27 | 18 | 21 | 28\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:39",
+   "statement": "SELECT cp.category, cp.subcategory, sum(f.quantity) AS units, count(*) AS line_rows, count(DISTINCT f.sales_line_id) AS dist_lines, count(DISTINCT (f.receipt_id, f.line_no)) AS dist_rl, sum(CASE WHEN f.staff_purchase_flag THEN f.quantity ELSE 0 END) staff_units\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND cp.category <> 'ZZ Test'\nGROUP BY 1,2 ORDER BY units DESC LIMIT 10\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | subcategory | units | line_rows | dist_lines | dist_rl | staff_units\nTools & Hardware | Fixings & Fasteners | 570 | 189 | 189 | 189 | 10\nElectrical | Indoor Lighting | 152 | 99 | 99 | 99 | 2\nCleaning & Household | Storage Boxes | 139 | 82 | 82 | 82 | 3\nGarden | Plants & Flowers | 136 | 82 | 82 | 82 | 2\nCleaning & Household | Cleaning Products | 136 | 63 | 63 | 63 | 0\nElectrical | Batteries & Bulbs | 125 | 56 | 56 | 56 | 0\nBathroom & Plumbing | Plumbing Parts | 106 | 48 | 48 | 48 | 0\nPaint & Decorating | Interior Paint | 76 | 56 | 56 | 56 | 0\nElectrical | Cables & Plugs | 75 | 55 | 55 | 55 | 2\nKitchen & Dining | Tableware | 74 | 35 | 35 | 35 | 0\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:45",
+   "statement": "WITH l AS (\n SELECT f.* , cp.category, cp.subcategory FROM fact_sales_line f\n JOIN dim_store s ON s.store_key=f.store_key\n JOIN dim_product p ON p.product_key=f.product_key\n JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\n WHERE s.store_id=118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27')\nSELECT (SELECT sum(quantity) FROM l) all_units, (SELECT sum(quantity) FROM l WHERE category='ZZ Test') test_units,\n (SELECT sum(units_sold) FROM rpt_daily_store_sales WHERE store_id=118 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') ctrl_units,\n (SELECT min(quantity) FROM l) minq, (SELECT max(quantity) FROM l) maxq, (SELECT count(*) FROM l WHERE quantity<=0) nonpos,\n (SELECT count(DISTINCT subcategory) FROM l) nsub,\n (SELECT count(*) FROM (SELECT subcategory FROM dim_product WHERE is_current GROUP BY 1 HAVING count(DISTINCT category)>1)) multi_cat_sub\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "all_units | test_units | ctrl_units | minq | maxq | nonpos | nsub | multi_cat_sub\n2245 | NULL | 2245 | 1 | 8 | 0 | 38 | 1\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:47",
+   "statement": "SELECT f.quantity, count(*) n, sum(f.quantity) u FROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE s.store_id=118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND cp.subcategory='Fixings & Fasteners'\nGROUP BY 1 ORDER BY 1 DESC LIMIT 15\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "quantity | n | u\n8 | 1 | 8\n7 | 1 | 7\n6 | 11 | 66\n5 | 12 | 60\n4 | 38 | 152\n3 | 55 | 165\n2 | 41 | 82\n1 | 30 | 30\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:50",
+   "statement": "SELECT subcategory, category, count(DISTINCT sku) skus FROM dim_product WHERE is_current AND subcategory IN (SELECT subcategory FROM dim_product WHERE is_current GROUP BY 1 HAVING count(DISTINCT category)>1) GROUP BY 1,2\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "subcategory | category | skus\nOutdoor Lighting | Garden | 5\nOutdoor Lighting | Electrical | 68\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:40:52",
+   "statement": "SELECT cp.subcategory, sum(f.quantity) AS units_sold\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND cp.category <> 'ZZ Test'\nGROUP BY cp.subcategory ORDER BY units_sold DESC LIMIT 5\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "subcategory | units_sold\nFixings & Fasteners | 570\nIndoor Lighting | 152\nStorage Boxes | 139\nCleaning Products | 136\nPlants & Flowers | 136\n(5 rows)"
+  }
+ ]
+}

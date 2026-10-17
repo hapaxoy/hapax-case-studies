@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-Lminus-t25-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T25",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "817ee916aab77c123c50a77c73e45f94b72ec07dd756d3249bdd51f51713170f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:23:58",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id, valid_from,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS vn,\n         COUNT(*) OVER (PARTITION BY member_id) AS nver\n  FROM dim_member)\nSELECT d.fiscal_year, count(*) AS rows_, count(DISTINCT member_id) AS members,\n       sum(CASE WHEN fv.valid_from <> fv.join_date THEN 1 ELSE 0 END) AS vf_ne_join,\n       min(join_date), max(join_date),\n       sum(CASE WHEN home_store_id>=900 THEN 1 ELSE 0 END) AS online_or_test\nFROM fv JOIN dim_date d ON d.calendar_date = fv.join_date\nWHERE vn=1 AND d.fiscal_year IN ('FY2024/25','FY2025/26','FY2026/27')\nGROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | rows_ | members | vf_ne_join | min(join_date) | max(join_date) | online_or_test\nFY2024/25 | 14640 | 14640 | 0 | 2024-04-29 | 2025-04-27 | 2945\nFY2025/26 | 14854 | 14854 | 0 | 2025-04-28 | 2026-05-03 | 2932\nFY2026/27 | 6538 | 6538 | 0 | 2026-05-04 | 2026-10-04 | 1369\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:03",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS vn\n  FROM dim_member)\nSELECT fv.home_store_id, cs.store_name, cs.city, cs.region, cs.format, cs.open_date, cs.close_date, COUNT(*) AS new_members,\n       min(join_date) AS first_join, max(join_date) AS last_join\nFROM fv JOIN dim_date d ON d.calendar_date = fv.join_date\nLEFT JOIN dim_store cs ON cs.store_id = fv.home_store_id AND cs.is_current\nWHERE vn=1 AND d.fiscal_year='FY2025/26'\nGROUP BY ALL ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "home_store_id | store_name | city | region | format | open_date | close_date | new_members | first_join | last_join\n101 | Helsinki Vuosaari | Helsinki | Capital Region | Medium | NULL | NULL | 351 | 2025-04-28 | 2026-05-03\n102 | Helsinki Pitäjänmäki | Helsinki | Capital Region | Large | NULL | NULL | 597 | 2025-04-28 | 2026-05-03\n103 | Espoo Lommila | Espoo | Capital Region | Medium | NULL | NULL | 281 | 2025-04-28 | 2026-04-29\n104 | Vantaa Tammisto | Vantaa | Capital Region | Large | NULL | NULL | 485 | 2025-04-29 | 2026-05-03\n105 | Kerava | Kerava | Capital Region | Small | NULL | NULL | 147 | 2025-05-08 | 2026-05-01\n106 | Porvoo | Porvoo | South | Small | NULL | NULL | 171 | 2025-05-01 | 2026-05-03\n107 | Hyvinkää | Hyvinkää | South | Medium | NULL | NULL | 287 | 2025-05-03 | 2026-05-03\n108 | Lahti | Lahti | South | Large | NULL | NULL | 500 | 2025-04-28 | 2026-05-02\n109 | Hämeenlinna | Hämeenlinna | South | Medium | NULL | NULL | 295 | 2025-04-28 | 2026-04-30\n110 | Turku Kupittaa | Turku | South | Large | NULL | NULL | 500 | 2025-04-29 | 2026-05-03\n111 | Turku Härmälä | Turku | South | Medium | NULL | NULL | 261 | 2025-05-01 | 2026-04-30\n112 | Raisio | Raisio | South | Small | NULL | NULL | 156 | 2025-05-02 | 2026-05-03\n113 | Salo | Salo | South | Small | NULL | NULL | 133 | 2025-04-28 | 2026-05-01\n114 | Kouvola | Kouvola | South | Medium | NULL | NULL | 249 | 2025-04-29 | 2026-05-02\n115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 696 | 2025-04-28 | 2026-05"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:09",
+   "statement": "SELECT count(*) AS rows_, count(DISTINCT member_key) AS keys, count(DISTINCT member_id) AS ids,\n  (SELECT count(*) FROM (SELECT member_id FROM dim_member GROUP BY 1 HAVING count(DISTINCT join_date)>1)) AS ids_multi_join,\n  (SELECT count(*) FROM (SELECT member_id FROM dim_member GROUP BY 1 HAVING sum(CASE WHEN valid_to=DATE '9999-12-31' THEN 1 ELSE 0 END)<>1)) AS ids_bad_current,\n  (SELECT count(*) FROM (SELECT member_id, home_store_id FROM dim_member GROUP BY 1,2 HAVING count(*)>1)) AS dup_same_store,\n  (SELECT count(*) FROM dim_member m LEFT JOIN dim_store s ON s.store_id=m.home_store_id AND s.is_current WHERE s.store_id IS NULL) AS orphan_store,\n  (SELECT count(*) FROM (SELECT member_id FROM dim_member WHERE join_date>DATE '2026-10-04' OR join_date IS NULL)) AS bad_dates\nFROM dim_member\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_ | keys | ids | ids_multi_join | ids_bad_current | dup_same_store | orphan_store | bad_dates\n89314 | 89314 | 60000 | 0 | 0 | 23276 | 0 | 0\n(1 row)"
+  }
+ ]
+}

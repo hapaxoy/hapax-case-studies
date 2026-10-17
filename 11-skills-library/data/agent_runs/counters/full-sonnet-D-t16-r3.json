@@ -1,0 +1,103 @@
+{
+ "run_id": "full-sonnet-D-t16-r3",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T16",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "bffb8abb51c0e4c8605c19a2d0cec8db5489ca511fccd58d2ae81538b2473a23",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:51:32",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, weeks_in_period, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2025/26' AND fiscal_period IN (9,10)\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | fully_loaded\nFY2025/26 | 9 | FY2025/26 P09 | 2025-12-22 | 2026-01-25 | 5 | true\nFY2025/26 | 10 | FY2025/26 P10 | 2026-01-26 | 2026-02-22 | 4 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:51:37",
+   "statement": "WITH wl AS (\n SELECT f.sales_line_id, f.receipt_id, f.line_no, f.sale_date, f.net_amount, f.etl_loaded_at, s.store_id, p.category\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2025-12-01' AND DATE '2026-03-10' AND s.store_id=900)\nSELECT count(*) n, count(DISTINCT sales_line_id) d_id, count(DISTINCT (receipt_id, line_no)) d_rl, count(DISTINCT etl_loaded_at) loads, sum(CASE WHEN category='ZZ Test' THEN 1 ELSE 0 END) test FROM wl\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d_id | d_rl | loads | test\n22510 | 22510 | 22510 | 100 | 1\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:51:38",
+   "statement": "SELECT fulfilment_type, status, count(*) n, count(DISTINCT web_order_id) d, min(order_ts_utc), max(order_ts_utc), sum(CASE WHEN dispatch_ts_utc IS NULL THEN 1 ELSE 0 END) nodisp FROM fact_web_order WHERE order_ts_utc >= TIMESTAMP '2025-12-01' AND order_ts_utc < TIMESTAMP '2026-03-10' GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fulfilment_type | status | n | d | min(order_ts_utc) | max(order_ts_utc) | nodisp\nclick_and_collect | cancelled | 135 | 135 | 2025-12-01T10:28:41 | 2026-03-08T17:10:14 | 135\nclick_and_collect | collected | 3204 | 3204 | 2025-12-01T04:25:32 | 2026-03-09T20:35:36 | 0\nhome_delivery | cancelled | 345 | 345 | 2025-12-01T04:37:27 | 2026-03-09T17:44:35 | 345\nhome_delivery | delivered | 7924 | 7924 | 2025-12-01T00:11:43 | 2026-03-09T22:42:59 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:51:45",
+   "statement": "WITH o AS (\n  SELECT web_order_id, fulfilment_type, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dd\n  FROM fact_web_order WHERE status IN ('delivered','collected')),\nsl AS (\n  SELECT o.dd AS business_date, o.fulfilment_type, f.net_amount AS amt\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  JOIN o ON o.web_order_id=f.receipt_id\n  WHERE s.store_id=900 AND p.category<>'ZZ Test'\n  UNION ALL\n  SELECT r.return_date, o.fulfilment_type, -r.refund_net\n  FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id\n  JOIN o ON o.web_order_id=f.receipt_id\n  JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\n  WHERE s.store_id=900 AND p.category<>'ZZ Test')\nSELECT d.fiscal_year, d.fiscal_period,\n  round(sum(CASE WHEN fulfilment_type='click_and_collect' THEN amt END),2) cc,\n  round(sum(amt),2) web,\n  round(100.0*sum(CASE WHEN fulfilment_type='click_and_collect' THEN amt END)/sum(amt),2) share\nFROM sl JOIN dim_date d ON d.calendar_date=sl.business_date\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period IN (9,10) GROUP BY 1,2 ORDER BY 2\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"share\"\n\nLINE 18: ... fulfilment_type='click_and_collect' THEN amt END)/sum(amt),2) share\n                                                                           ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:51:48",
+   "statement": "WITH o AS (\n  SELECT web_order_id, fulfilment_type, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dd\n  FROM fact_web_order WHERE status IN ('delivered','collected')),\nsl AS (\n  SELECT o.dd AS business_date, o.fulfilment_type, f.net_amount AS amt, f.receipt_id, p.category, s.store_id\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  LEFT JOIN o ON o.web_order_id=f.receipt_id\n  WHERE f.channel_code='WB' OR s.store_id=900 OR f.sale_date >= DATE '2025-11-03')\nSELECT d.fiscal_period, sl.store_id=900 is900, fulfilment_type IS NULL nofulf, count(*) n, round(sum(amt),2) a\nFROM sl LEFT JOIN dim_date d ON d.calendar_date=sl.business_date\nWHERE sl.business_date BETWEEN DATE '2025-12-22' AND DATE '2026-02-22' OR sl.business_date IS NULL\nGROUP BY 1,2,3 ORDER BY 1,2,3\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | is900 | nofulf | n | a\n9 | true | false | 7898 | 219929.50\n10 | true | false | 4749 | 137569.07\nNULL | false | true | 509235 | 12264987.66\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:51:54",
+   "statement": "WITH o AS (\n  SELECT web_order_id, fulfilment_type, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dd\n  FROM fact_web_order WHERE status IN ('delivered','collected')),\nsl AS (\n  SELECT o.dd AS business_date, o.fulfilment_type, f.net_amount AS amt, 0 AS isret\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  JOIN o ON o.web_order_id=f.receipt_id\n  WHERE s.store_id=900 AND p.category<>'ZZ Test'\n  UNION ALL\n  SELECT r.return_date, o.fulfilment_type, -r.refund_net, 1\n  FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id\n  JOIN o ON o.web_order_id=f.receipt_id\n  JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\n  WHERE s.store_id=900 AND p.category<>'ZZ Test')\nSELECT d.fiscal_year, d.fiscal_period, isret,\n  round(sum(CASE WHEN fulfilment_type='click_and_collect' THEN amt END),2) cc,\n  round(sum(amt),2) web,\n  round(100.0*sum(CASE WHEN fulfilment_type='click_and_collect' THEN amt END)/sum(amt),2) shr\nFROM sl JOIN dim_date d ON d.calendar_date=sl.business_date\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period IN (9,10) GROUP BY ROLLUP(1,2,3) HAVING d.fiscal_year IS NOT NULL ORDER BY 2,3\n",
+   "n": 6,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "fiscal_year | fiscal_period | isret | cc | web | shr\nFY2025/26 | 9 | 0 | 63662.80 | 219929.50 | 28.95\nFY2025/26 | 9 | 1 | -5126.73 | -19720.92 | 26.0\nFY2025/26 | 9 | NULL | 58536.07 | 200208.58 | 29.24\nFY2025/26 | 10 | 0 | 42118.86 | 137569.07 | 30.62\nFY2025/26 | 10 | 1 | -4257.47 | -14437.92 | 29.49\nFY2025/26 | 10 | NULL | 37861.39 | 123131.15 | 30.75\nFY2025/26 | NULL | NULL | 96397.46 | 323339.73 | 29.81\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:52:00",
+   "statement": "SELECT d.fiscal_period, s.store_id=900 AS ret_at_web, o.fulfilment_type, count(*) n, count(DISTINCT r.return_line_id) dr, round(sum(r.refund_net),2) refund\nFROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id\nJOIN dim_store fs ON fs.store_key=f.store_key\nJOIN dim_store s ON s.store_key=r.store_key\nJOIN dim_date d ON d.calendar_date=r.return_date\nLEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period IN (9,10) AND (fs.store_id=900 OR s.store_id=900)\nGROUP BY 1,2,3 ORDER BY 1,2,3\n",
+   "n": 7,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_period | ret_at_web | fulfilment_type | n | dr | refund\n9 | false | click_and_collect | 35 | 35 | 1100.14\n9 | false | home_delivery | 113 | 113 | 4657.68\n9 | true | click_and_collect | 164 | 164 | 5126.73\n9 | true | home_delivery | 399 | 399 | 14594.19\n10 | false | click_and_collect | 31 | 31 | 1655.62\n10 | false | home_delivery | 101 | 101 | 3356.20\n10 | true | click_and_collect | 108 | 108 | 4257.47\n10 | true | home_delivery | 239 | 239 | 10180.45\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:52:02",
+   "statement": "SELECT d.fiscal_period, round(sum(net_sales_before_returns),2) gross_net, round(sum(returns_net),2) ret, round(sum(net_sales),2) ns, count(*) n\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\nWHERE r.store_id=900 AND d.fiscal_year='FY2025/26' AND d.fiscal_period IN (9,10) GROUP BY 1 ORDER BY 1\n",
+   "n": 8,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_period | gross_net | ret | ns | n\n9 | 219929.50 | 19720.92 | 200208.58 | 35\n10 | 137569.07 | 14437.92 | 123131.15 | 28\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:52:07",
+   "statement": "SELECT count(*) n, count(DISTINCT return_line_id) d, count(DISTINCT (sales_line_id, return_date, quantity_returned)) d2 FROM fact_return_line WHERE return_date BETWEEN DATE '2025-12-22' AND DATE '2026-02-22'\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | d2\n3906 | 3906 | 3906\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:52:13",
+   "statement": "WITH web_orders AS (\n  SELECT web_order_id, fulfilment_type,\n         CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n  FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nweb_net AS (\n  SELECT o.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN web_orders o ON o.web_order_id = f.receipt_id\n  WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n  UNION ALL\n  SELECT r.return_date, o.fulfilment_type, -r.refund_net\n  FROM fact_return_line r\n  JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n  JOIN web_orders o ON o.web_order_id = f.receipt_id\n  JOIN dim_store s ON s.store_key = r.store_key\n  JOIN dim_product p ON p.product_key = r.product_key\n  WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period,\n       ROUND(100.0 * SUM(CASE WHEN w.fulfilment_type = 'click_and_collect' THEN w.net_sales END) / SUM(w.net_sales), 1) AS click_collect_share_pct\nFROM web_net w\nJOIN dim_date d ON d.calendar_date = w.business_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (9, 10)\nGROUP BY 1, 2 ORDER BY 2\n",
+   "n": 10,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | click_collect_share_pct\nFY2025/26 | 9 | 29.2\nFY2025/26 | 10 | 30.7\n(2 rows)"
+  }
+ ]
+}

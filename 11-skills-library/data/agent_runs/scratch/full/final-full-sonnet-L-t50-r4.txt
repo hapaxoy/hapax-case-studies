@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), web_lines AS (SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN web_dispatch w ON w.web_order_id = f.receipt_id JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, o.fulfilment_type, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_product p ON p.product_key = f.product_key JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 2) AS click_collect_share_pct FROM web_lines l JOIN dim_date d ON d.calendar_date = l.business_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 6 AND 8 GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 6, 27.85],
+      ["FY2025/26", 7, 25.43],
+      ["FY2025/26", 8, 27.03]
+    ]
+  },
+  "definitions_applied": [
+    "Click-and-collect share = click-and-collect web net sales divided by all web net sales (click-and-collect counts as web)",
+    "Net sales excluding VAT, after returns, with returns taken off on their own return date",
+    "Web sales recognised on the Helsinki dispatch date (UTC dispatch timestamp converted to Europe/Helsinki)",
+    "Cancelled and still-processing orders excluded from web sales (only delivered and collected orders are included)",
+    "Web identified by store_id 900, not channel_code (channel_code is broken from the 3 November 2025 migration)",
+    "Click-and-collect identified by fact_web_order.fulfilment_type, which works on both sides of the migration",
+    "Store 999 and category ZZ Test left out",
+    "Staff purchases included",
+    "Fiscal calendar from dim_date: periods 6 to 8 of FY2025/26 are fiscal weeks 22 to 34, 22 Sep to 21 Dec 2025",
+    "Control total check against rpt_daily_store_sales for store 900"
+  ],
+  "assumptions": [
+    "'Last year' read as FY2025/26, the fiscal year before the current one (FY2026/27) on the request date of 9 October 2026. This follows the accepted reading of earlier 'last year' requests made in FY2026/27.",
+    "'Periods 6 to 8' read as fiscal periods 6, 7 and 8 of that year, all complete and loaded.",
+    "'Sales' read as net sales excluding VAT on the company definition, not gross sales or order counts.",
+    "Shares are shown to two decimals in percent units."
+  ],
+  "caveats": [
+    "No correction to the data was needed. Web net sales per period (175,588.62, 154,977.27 and 225,265.08 EUR) match rpt_daily_store_sales for store 900 exactly in all three periods.",
+    "Click-and-collect net sales were 48,901.47, 39,403.04 and 60,899.16 EUR in periods 6, 7 and 8.",
+    "Refunds on web orders processed in physical stores (for example items returned at a shop) are booked to that store, not to the web shop. They stay in the stores' net sales, not in the web figures, as in the company control total. They are small, roughly a few hundred EUR per store per period, and I did not move them to web.",
+    "The legacy views rpt.v_daily_sales and rpt.v_weekly_store_sales were not used because they omit web sales after 3 November 2025. That date falls inside period 7, so using them would have understated the web totals.",
+    "Period 7 straddles the 3 November 2025 web-platform migration. The figures are unaffected because the fulfilment type comes from fact_web_order, not channel_code or channel_id."
+  ]
+}
+```

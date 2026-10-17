@@ -1,0 +1,31 @@
+{
+ "run_id": "full-sonnet-L-t54-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T54",
+ "budget": 12,
+ "used": 2,
+ "refused": 0,
+ "packet_sha256": "f8ba1db7731470d23ab543c462298f2093945421ebbc2bc84315015a60b664e4",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:48:18",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT 'calendar Sep 2026' AS label, SUM(net_sales) AS total, SUM(CASE WHEN store_id=900 THEN net_sales END) AS web, MIN(business_date) AS mn, MAX(business_date) AS mx, COUNT(*) AS n\nFROM net_lines WHERE business_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-30'\nUNION ALL\nSELECT 'P05', SUM(net_sales), SUM(CASE WHEN store_id=900 THEN net_sales END), MIN(business_date), MAX(business_date), COUNT(*)\nFROM net_lines WHERE business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nUNION ALL\nSELECT 'control Sep', SUM(net_sales), SUM(CASE WHEN store_id=900 THEN net_sales END), MIN(business_date), MAX(business_date), COUNT(*)\nFROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-30'\nUNION ALL\nSELECT 'control P05', SUM(net_sales), SUM(CASE WHEN store_id=900 THEN net_sales END), MIN(business_date), MAX(business_date), COUNT(*)\nFROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "label | total | web | mn | mx | n\ncalendar Sep 2026 | 1179035.98 | 190443.82 | 2026-09-01 | 2026-09-30 | 51722\nP05 | 1109546.52 | 177237.33 | 2026-08-31 | 2026-09-27 | 48721\ncontrol Sep | 1179035.98 | 190443.82 | 2026-09-01 | 2026-09-30 | 1170\ncontrol P05 | 1109546.52 | 177237.33 | 2026-08-31 | 2026-09-27 | 1091\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:48:27",
+   "statement": "SELECT\n (SELECT COUNT(*) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-25' AND DATE '2026-10-04') AS lines,\n (SELECT COUNT(*) FROM (SELECT receipt_id,line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-25' AND DATE '2026-10-04' GROUP BY 1,2 HAVING COUNT(*)>1)) AS dup_receipt_lines,\n (SELECT COUNT(*) FROM (SELECT sales_line_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-25' AND DATE '2026-10-04' GROUP BY 1 HAVING COUNT(*)>1)) AS dup_ids,\n (SELECT COUNT(*) FROM (SELECT return_line_id FROM fact_return_line WHERE return_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-30' GROUP BY 1 HAVING COUNT(*)>1)) AS dup_returns,\n (SELECT COUNT(*) FROM (SELECT web_order_id FROM fact_web_order GROUP BY 1 HAVING COUNT(*)>1)) AS dup_orders,\n (SELECT COUNT(*) FROM fact_sales_line f JOIN fact_web_order w ON w.web_order_id=f.receipt_id WHERE w.status IN ('delivered','collected') AND w.dispatch_ts_utc IS NULL) AS no_dispatch,\n (SELECT COUNT(*) FROM fact_sales_line f LEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=900 AND w.web_order_id IS NULL) AS web_lines_no_order,\n (SELECT SUM(f.net_amount) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE (s.store_id=999 OR p.category='ZZ Test') AND f.sale_date BETWEEN DATE '2026-09-01' AND DATE '2026-09-30') AS excluded_999_zz,\n (SELECT MAX(sale_date) FROM fact_sales_line) AS max_sale\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | dup_receipt_lines | dup_ids | dup_returns | dup_orders | no_dispatch | web_lines_no_order | excluded_999_zz | max_sale\n68235 | 0 | 0 | 0 | 0 | 0 | 0 | 3092.16 | 2026-10-04\n(1 row)"
+  }
+ ]
+}

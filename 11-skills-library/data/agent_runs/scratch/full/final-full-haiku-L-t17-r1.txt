@@ -1,0 +1,35 @@
+Perfect! The query passes all validation checks. Now I'll prepare the final JSON response. Let me format the result table with only the requested columns:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 1 AS first_week, 13 AS last_week\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, cp.subcategory, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_product cp  ON cp.sku = p.sku AND cp.is_current\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id &lt;&gt; 999 \n      AND p.category &lt;&gt; 'ZZ Test'\n      AND cp.category = 'Garden'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_week BETWEEN params.first_week AND params.last_week\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.subcategory,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY return_rate_pct DESC;",
+  "result": {
+    "columns": ["subcategory", "return_rate_pct"],
+    "rows": [
+      ["Garden Furniture", 12.87],
+      ["Barbecue &amp; Grills", 7.26],
+      ["Garden Tools", 5.35],
+      ["Pots &amp; Planters", 3.86],
+      ["Plants &amp; Flowers", 2.74],
+      ["Soil &amp; Fertiliser", 1.58],
+      ["Edible Plants &amp; Seeds", 0.96],
+      ["Outdoor Lighting", 0.0]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: returned net (refund_net) divided by sold net, grouped by the fiscal week of the original sale (sale-week cohort)",
+    "Net sales: net amount excluding VAT, after returns; store 999 and test articles excluded",
+    "As-is reporting: current product category and subcategory hierarchy"
+  ],
+  "assumptions": [
+    "Q1 of last year = Q1 FY2025/26 (fiscal weeks 1-13, 28 April 2025 - 27 July 2025)",
+    "Goods sold refers to sales lines dated in Q1 FY2025/26",
+    "Returns are attributed to the fiscal week of the original sale, not the return date",
+    "As-is hierarchy applied (current product classifications)"
+  ],
+  "caveats": [
+    "Return cohort is complete for all Garden subcategories; the latest sale in Q1 was more than 30 days before the warehouse load date (4 October 2026)",
+    "Outdoor Lighting appears as a Garden subcategory with minimal sales (€375), suggesting these products may not yet have been fully reclassified to Electrical in the current product version"
+  ]
+}
+```

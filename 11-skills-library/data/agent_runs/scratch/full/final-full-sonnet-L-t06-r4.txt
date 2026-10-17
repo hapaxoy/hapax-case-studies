@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH sold_lines AS (SELECT f.sales_line_id, s.format, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT l.format, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct FROM sold_lines l LEFT JOIN refunds r USING (sales_line_id) GROUP BY 1 ORDER BY 1",
+  "result": {
+    "columns": ["format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28],
+      ["Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate = returned net (refund_net) divided by sold net (net_amount, excluding VAT)",
+    "Sale-week cohort: lines are selected by the fiscal period of the original sale date, and refunds are matched back through sales_line_id whenever and wherever they were booked",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included (the only exclusion for staff purchases is in ATV)",
+    "Web shop (store 900) shown as its own format, Web, with refunds following the sold line",
+    "Fiscal calendar from dim_date: FY2025/26 period 2 = fiscal weeks 5-8, 26 May 2025 to 22 June 2025",
+    "Format taken from the store version on the sale date (format is the same in every store version)"
+  ],
+  "assumptions": [
+    "'Last year' read as FY2025/26, the fiscal year before the current FY2026/27, as in accepted requests made in May 2026 (REQ-D04, D08, D28, D35). 'Period 2' means FY2025/26 P02.",
+    "'Store format' includes the web shop as its own format (Web), as in REQ-D02. The value labels in the warehouse are Large, Medium, Small and Web, not the Hyper, Standard and Express named in the column comment.",
+    "Rate is a value rate (returned net EUR over sold net EUR), not a units rate or a count of returned lines.",
+    "Web lines are dated by sale_date (the order date), the way the accepted return-rate queries (REQ-D14 to D16) select the cohort."
+  ],
+  "caveats": [
+    "No corrections to the data were needed. I found no duplicate receipt and line keys, no duplicate return lines, no refund above the amount sold, no returns dated before their sale, no orphan returns and no cancelled web orders in the period.",
+    "Filters removing store 999 and ZZ Test lines made no difference to the period's figures: the physical-store sold net for Large, Medium and Small matches the rpt_daily_store_sales control total (net sales before returns) exactly.",
+    "The cohort is complete: the last sale date (22 June 2025) is far more than 30 days before the load point (4 October 2026). 16 returned lines came back more than 30 days after the sale and are included.",
+    "The Web rate (12.23%) is about three times the store rates, and web returns are booked to the web shop. The warehouse's column comment for dim_store.format ('Hyper, Standard or Express') is out of date."
+  ]
+}
+```

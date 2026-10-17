@@ -1,0 +1,139 @@
+{
+ "run_id": "full-haiku-S-t49-r3",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T49",
+ "budget": 30,
+ "used": 14,
+ "refused": 0,
+ "packet_sha256": "ac6e6903969972a0cdcd62b65eeffbe8bc4f620453ae0119e9b5f697b3e46d7f",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:55:42",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2026/27' AND fiscal_period = 4\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2026/27 | 4 | FY2026/27 P04 | 2026-08-03 | 2026-08-30\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:55:47",
+   "statement": "SELECT \n  s.format,\n  COUNT(DISTINCT f.receipt_id) as receipt_count,\n  SUM(f.net_amount) as total_net_sales,\n  AVG(COALESCE(NULLIF(basket_totals.total_per_receipt, 0), 0)) as avg_basket_value\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN (\n  SELECT receipt_id, SUM(net_amount) as total_per_receipt\n  FROM fact_sales_line\n  WHERE sale_date >= '2026-08-03' AND sale_date <= '2026-08-30'\n  GROUP BY receipt_id\n) basket_totals ON f.receipt_id = basket_totals.receipt_id\nWHERE f.sale_date >= '2026-08-03' AND f.sale_date <= '2026-08-30'\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | receipt_count | total_net_sales | avg_basket_value\nLarge | 6607 | 400409.69 | 75.36948792206937\nMedium | 8779 | 528036.85 | 74.21730078259586\nSmall | 2641 | 133820.18 | 62.79608051904841\nTraining | 55 | 1884.86 | 39.89\nWeb | 3229 | 209105.59 | 80.56352995819786\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:55:51",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY format\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:55:55",
+   "statement": "SELECT DISTINCT s.format, f.channel_code, COUNT(*) as line_count\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2026-08-03' AND f.sale_date <= '2026-08-30'\nGROUP BY s.format, f.channel_code\nORDER BY s.format, f.channel_code\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | channel_code | line_count\nLarge | NULL | 15193\nMedium | NULL | 20317\nSmall | NULL | 6011\nTraining | NULL | 127\nWeb | NULL | 6459\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:55:59",
+   "statement": "SELECT DISTINCT channel_code, COUNT(*) as line_count\nFROM fact_sales_line\nWHERE sale_date >= '2026-08-01' AND sale_date <= '2026-09-30'\nGROUP BY channel_code\nORDER BY channel_code\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "channel_code | line_count\nNULL | 103095\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:03",
+   "statement": "SELECT DISTINCT s.store_id, s.store_name, s.format\nFROM dim_store s\nWHERE s.format = 'Web' AND s.is_current = TRUE\nORDER BY s.store_id\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | format\n900 | Tuomimetsä web shop | Web\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:08",
+   "statement": "WITH period_sales AS (\n  SELECT f.receipt_id, f.store_key, SUM(f.net_amount) as receipt_total\n  FROM fact_sales_line f\n  WHERE f.sale_date >= '2026-08-03' AND f.sale_date <= '2026-08-30'\n  GROUP BY f.receipt_id, f.store_key\n)\nSELECT \n  s.format,\n  COUNT(*) as transaction_count,\n  ROUND(AVG(ps.receipt_total), 2) as avg_basket_value\nFROM period_sales ps\nINNER JOIN dim_store s ON ps.store_key = s.store_key\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | transaction_count | avg_basket_value\nLarge | 6607 | 60.6\nMedium | 8779 | 60.15\nSmall | 2641 | 50.67\nTraining | 55 | 34.27\nWeb | 3229 | 64.76\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:13",
+   "statement": "SELECT COUNT(DISTINCT receipt_id) as unique_receipts\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2026-08-03' AND f.sale_date <= '2026-08-30'\nAND s.format = 'Large'\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "unique_receipts\n6607\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:16",
+   "statement": "SELECT \n  SUM(f.net_amount) as total_net_sales,\n  ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) as avg_per_receipt\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nWHERE f.sale_date >= '2026-08-03' AND f.sale_date <= '2026-08-30'\nAND s.format = 'Large'\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_net_sales | avg_per_receipt\n400409.69 | 60.6\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:24",
+   "statement": "WITH period_sales AS (\n  SELECT f.receipt_id, f.store_key, SUM(f.gross_amount) as receipt_total\n  FROM fact_sales_line f\n  WHERE f.sale_date >= '2026-08-03' AND f.sale_date <= '2026-08-30'\n  GROUP BY f.receipt_id, f.store_key\n)\nSELECT \n  s.format,\n  COUNT(*) as transaction_count,\n  ROUND(AVG(ps.receipt_total), 2) as avg_basket_value\nFROM period_sales ps\nINNER JOIN dim_store s ON ps.store_key = s.store_key\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 10,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | transaction_count | avg_basket_value\nLarge | 6607 | 75.98\nMedium | 8779 | 75.42\nSmall | 2641 | 63.52\nTraining | 55 | 42.99\nWeb | 3229 | 81.2\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:34",
+   "statement": "-- Verify the period dates and check for any other issues\nSELECT \n  MIN(sale_date) as period_start,\n  MAX(sale_date) as period_end,\n  COUNT(DISTINCT receipt_id) as total_receipts,\n  COUNT(*) as total_lines\nFROM fact_sales_line\nWHERE sale_date >= '2026-08-03' AND sale_date <= '2026-08-30'\n",
+   "n": 11,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "period_start | period_end | total_receipts | total_lines\n2026-08-03 | 2026-08-30 | 21311 | 48107\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:39",
+   "statement": "-- Check if there are any NULL net_amount values that might affect the average\nSELECT COUNT(*) as null_count\nFROM fact_sales_line\nWHERE net_amount IS NULL\nAND sale_date >= '2026-08-03' AND sale_date <= '2026-08-30'\n",
+   "n": 12,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "null_count\n0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:43",
+   "statement": "-- Check for negative amounts (possible returns recorded in sales table)\nSELECT COUNT(*) as negative_count, MIN(net_amount) as min_amount\nFROM fact_sales_line\nWHERE net_amount < 0\nAND sale_date >= '2026-08-03' AND sale_date <= '2026-08-30'\n",
+   "n": 13,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "negative_count | min_amount\n0 | NULL\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:47",
+   "statement": "WITH period_sales AS (\n  SELECT f.receipt_id, f.store_key, SUM(f.net_amount) as receipt_total\n  FROM fact_sales_line f\n  WHERE f.sale_date >= '2026-08-03' AND f.sale_date <= '2026-08-30'\n  GROUP BY f.receipt_id, f.store_key\n)\nSELECT \n  s.format,\n  ROUND(AVG(ps.receipt_total), 2) as avg_basket_value\nFROM period_sales ps\nINNER JOIN dim_store s ON ps.store_key = s.store_key\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 14,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | avg_basket_value\nLarge | 60.6\nMedium | 60.15\nSmall | 50.67\nTraining | 34.27\nWeb | 64.76\n(5 rows)"
+  }
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-L-t17-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T17",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "8483ae372ef941a6a3e1b1213caf2ff8e775a4c9d50a6b41c5cdfaf49e6ff86e",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:07:31",
+   "statement": "fiscal-calendar/scripts/fiscal.py Q1 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: Q1 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P01, FY2025/26 P02, FY2025/26 P03\n  fiscal_weeks                       1-13\n  start_date                         2025-04-28\n  end_date                           2025-07-27\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-07-27\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 1 AND 13)\n  note: Q1 = P1-P3 (weeks 1-13), Q2 = P4-P6, Q3 = P7-P9, Q4 = P10-P12 (CAL-PERIODS).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:07:42",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 1 AS first_week, 13 AS last_week\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, cp.subcategory, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_product cp  ON cp.sku = p.sku AND cp.is_current\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND cp.category = 'Garden'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_week BETWEEN params.first_week AND params.last_week\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net \n    FROM fact_return_line \n    GROUP BY 1\n)\nSELECT l.subcategory,\n       SUM(l.net_amount) AS sold_net,\n       COALESCE(SUM(r.refund_net), 0) AS returned_net,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / NULLIF(SUM(l.net_amount), 0), 2) AS return_rate_pct,\n       MAX(l.sale_date) + 30 <= (SELECT MAX(calendar_date) FROM dim_date) AS cohort_complete\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.subcategory;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "subcategory | sold_net | returned_net | return_rate_pct | cohort_complete\nBarbecue & Grills | 176074.46 | 12780.47 | 7.26 | true\nEdible Plants & Seeds | 74584.72 | 718.18 | 0.96 | true\nGarden Furniture | 406939.18 | 52382.11 | 12.87 | true\nGarden Tools | 276601.44 | 14791.25 | 5.35 | true\nOutdoor Lighting | 375.00 | 0.00 | 0.0 | true\nPlants & Flowers | 441427.45 | 12095.09 | 2.74 | true\nPots & Planters | 144538.28 | 5578.93 | 3.86 | true\nSoil & Fertiliser | 147290.55 | 2325.81 | 1.58 | true\n(8 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:07:49",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 8 rows, 5 columns: subcategory, sold_net, returned_net, return_rate_pct, cohort_complete\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 8 rows) ==\n  subcategory | sold_net | returned_net | return_rate_pct | cohort_complete\n  Barbecue & Grills | 176074.46 | 12780.47 | 7.26 | True\n  Edible Plants & Seeds | 74584.72 | 718.18 | 0.96 | True\n  Garden Furniture | 406939.18 | 52382.11 | 12.87 | True\n  Garden Tools | 276601.44 | 14791.25 | 5.35 | True\n  Outdoor Lighting | 375.00 | 0.00 | 0.0 | True\n  Plants & Flowers | 441427.45 | 12095.09 | 2.74 | True\n  Pots & Planters | 144538.28 | 5578.93 | 3.86 | True\n  Soil & Fertiliser | 147290.55 | 2325.81 | 1.58 | True\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

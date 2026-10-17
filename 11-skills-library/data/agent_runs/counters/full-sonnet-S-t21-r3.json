@@ -1,0 +1,139 @@
+{
+ "run_id": "full-sonnet-S-t21-r3",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T21",
+ "budget": 30,
+ "used": 14,
+ "refused": 0,
+ "packet_sha256": "218338b5ae0b9d82391789990a38df96b2ddb3dacd1936c76f8e550f830d131f",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:49:48",
+   "statement": "SELECT * FROM ref_fiscal_calendar WHERE fiscal_year IN ('FY2024/25') ORDER BY fiscal_period\n",
+   "n": 1,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_quarter | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2024/25 | 1 | 1 | FY2024/25 P01 | 2024-04-29 | 2024-05-26 | 4 | 1 | 4 | true\nFY2024/25 | 2 | 1 | FY2024/25 P02 | 2024-05-27 | 2024-06-23 | 4 | 5 | 8 | true\nFY2024/25 | 3 | 1 | FY2024/25 P03 | 2024-06-24 | 2024-07-28 | 5 | 9 | 13 | true\nFY2024/25 | 4 | 2 | FY2024/25 P04 | 2024-07-29 | 2024-08-25 | 4 | 14 | 17 | true\nFY2024/25 | 5 | 2 | FY2024/25 P05 | 2024-08-26 | 2024-09-22 | 4 | 18 | 21 | true\nFY2024/25 | 6 | 2 | FY2024/25 P06 | 2024-09-23 | 2024-10-27 | 5 | 22 | 26 | true\nFY2024/25 | 7 | 3 | FY2024/25 P07 | 2024-10-28 | 2024-11-24 | 4 | 27 | 30 | true\nFY2024/25 | 8 | 3 | FY2024/25 P08 | 2024-11-25 | 2024-12-22 | 4 | 31 | 34 | true\nFY2024/25 | 9 | 3 | FY2024/25 P09 | 2024-12-23 | 2025-01-26 | 5 | 35 | 39 | true\nFY2024/25 | 10 | 4 | FY2024/25 P10 | 2025-01-27 | 2025-02-23 | 4 | 40 | 43 | true\nFY2024/25 | 11 | 4 | FY2024/25 P11 | 2025-02-24 | 2025-03-23 | 4 | 44 | 47 | true\nFY2024/25 | 12 | 4 | FY2024/25 P12 | 2025-03-24 | 2025-04-27 | 5 | 48 | 52 | true\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:49:49",
+   "statement": "SELECT * FROM dim_channel\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_id | channel_name | channel_group | legacy_channel_code\n1 | Store | store | ST\n2 | Web home delivery | web | WB\n3 | Click and collect | web | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:49:53",
+   "statement": "SELECT channel_code, channel_id, count(*) n, count(DISTINCT sales_line_id) nd, sum(gross_amount) g, min(sale_date) mn, max(sale_date) mx, sum(CASE WHEN staff_purchase_flag THEN 1 ELSE 0 END) staff\nFROM fact_sales_line WHERE sale_date BETWEEN '2024-07-29' AND '2024-10-27'\nGROUP BY ALL ORDER BY 1,2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "channel_code | channel_id | n | nd | g | mn | mx | staff\nST | NULL | 122993 | 122993 | 3817787.89 | 2024-07-29 | 2024-10-27 | 2174\nWB | NULL | 13286 | 13286 | 499578.73 | 2024-07-29 | 2024-10-27 | 0\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:49:55",
+   "statement": "SELECT s.store_id, s.store_name, s.store_key, count(*) n, sum(f.gross_amount) g\nFROM fact_sales_line f JOIN dim_store s USING(store_key)\nWHERE f.sale_date BETWEEN '2024-07-29' AND '2024-10-27' AND (f.channel_code<>'ST' OR f.channel_code IS NULL OR s.store_id>=900)\nGROUP BY ALL ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_id | store_name | store_key | n | g\n900 | Tuomimetsä web shop | 46 | 13286 | 499578.73\n999 | Training store | 47 | 472 | 11496.86\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:00",
+   "statement": "SELECT o.fulfilment_type, o.status, f.channel_code, s.store_id, count(*) n, count(DISTINCT o.web_order_id) orders, sum(f.gross_amount) g, sum(DISTINCT 0) z\nFROM fact_web_order o LEFT JOIN fact_sales_line f ON f.receipt_id=o.web_order_id\nLEFT JOIN dim_store s ON s.store_key=f.store_key\nWHERE o.order_ts_utc >= '2024-07-27' AND o.order_ts_utc < '2024-10-30'\nGROUP BY ALL ORDER BY 1,2,3,4\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fulfilment_type | status | channel_code | store_id | n | orders | g | z\nclick_and_collect | cancelled | NULL | NULL | 68 | 68 | NULL | 0\nclick_and_collect | collected | WB | 900 | 3152 | 1586 | 117344.43 | 0\nhome_delivery | cancelled | NULL | NULL | 202 | 202 | NULL | 0\nhome_delivery | delivered | WB | 900 | 10712 | 5347 | 405469.03 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:01",
+   "statement": "SELECT count(*) n, count(DISTINCT web_order_id) d, min(order_ts_utc), max(order_ts_utc) FROM fact_web_order\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | min(order_ts_utc) | max(order_ts_utc)\n94876 | 94876 | 2024-04-28T21:24:15 | 2026-10-04T20:56:59\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:08",
+   "statement": "SELECT count(*) n, count(DISTINCT (receipt_id, line_no)) d, count(DISTINCT sales_line_id) dl,\n sum(CASE WHEN CAST(sale_ts_utc AS DATE)<>sale_date THEN 1 ELSE 0 END) datediff,\n sum(CASE WHEN CAST(timezone('Europe/Helsinki', timezone('UTC', sale_ts_utc)) AS DATE)<>sale_date THEN 1 ELSE 0 END) localdiff,\n min(etl_loaded_at), max(etl_loaded_at), count(DISTINCT etl_loaded_at)\nFROM fact_sales_line WHERE channel_code='WB' AND sale_date BETWEEN '2024-07-29' AND '2024-10-27'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | dl | datediff | localdiff | min(etl_loaded_at) | max(etl_loaded_at) | count(DISTINCT etl_loaded_at)\n13286 | 13286 | 13286 | 604 | 0 | 2024-07-30T01:00:00 | 2024-10-28T01:00:00 | 91\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:10",
+   "statement": "SELECT date_trunc('month', sale_date) m, count(*) n, count(DISTINCT sales_line_id) d, sum(gross_amount) g, sum(net_amount*(1+vat_rate)) calc, sum(CASE WHEN abs(gross_amount-net_amount*(1+vat_rate))>0.02 THEN 1 ELSE 0 END) bad\nFROM fact_sales_line WHERE channel_code='WB' AND sale_date BETWEEN '2024-07-01' AND '2024-11-30' GROUP BY 1 ORDER BY 1\n",
+   "n": 8,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "m | n | d | g | calc | bad\n2024-07-01T00:00:00 | 4811 | 4811 | 193402.41 | 193402.633600 | 0\n2024-08-01T00:00:00 | 4354 | 4354 | 174410.47 | 174410.373400 | 0\n2024-09-01T00:00:00 | 4325 | 4325 | 160395.63 | 160395.185850 | 0\n2024-10-01T00:00:00 | 4730 | 4730 | 170351.56 | 170351.521750 | 0\n2024-11-01T00:00:00 | 5511 | 5511 | 185519.48 | 185519.540850 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:15",
+   "statement": "SELECT p.vat_class, f.vat_rate, min(sale_date) mn, max(sale_date) mx, count(*) n\nFROM fact_sales_line f JOIN dim_product p USING(product_key)\nWHERE f.channel_code='WB' AND sale_date BETWEEN '2024-07-29' AND '2024-10-27' GROUP BY ALL ORDER BY 1,2\n",
+   "n": 9,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_class | vat_rate | mn | mx | n\nreduced10 | 0.1000 | 2024-08-09 | 2024-10-19 | 22\nreduced14 | 0.1400 | 2024-07-29 | 2024-10-27 | 424\nstandard | 0.2400 | 2024-07-29 | 2024-08-31 | 4587\nstandard | 0.2550 | 2024-09-01 | 2024-10-27 | 8253\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:17",
+   "statement": "WITH d AS (SELECT calendar_date FROM dim_date WHERE calendar_date BETWEEN '2024-07-29' AND '2024-10-27'),\nw AS (SELECT sale_date, count(*) n, sum(gross_amount) g FROM fact_sales_line WHERE channel_code='WB' GROUP BY 1)\nSELECT d.calendar_date, w.n, w.g FROM d LEFT JOIN w ON w.sale_date=d.calendar_date WHERE w.n IS NULL OR w.n < 80 OR w.n > 250 ORDER BY 1\n",
+   "n": 10,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "calendar_date | n | g\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:22",
+   "statement": "WITH l AS (SELECT receipt_id, sum(gross_amount) g, count(*) c, min(sale_date) sd FROM fact_sales_line WHERE channel_code='WB' GROUP BY 1)\nSELECT count(*) orders, sum(CASE WHEN abs(l.g-o.order_total_gross)>0.05 THEN 1 ELSE 0 END) mismatch, sum(CASE WHEN l.c<>o.line_count THEN 1 ELSE 0 END) lc_mismatch, sum(l.g) lines_g, sum(o.order_total_gross) ord_g,\n sum(CASE WHEN CAST(timezone('Europe/Helsinki', timezone('UTC', o.order_ts_utc)) AS DATE)<>l.sd THEN 1 ELSE 0 END) datediff\nFROM l JOIN fact_web_order o ON o.web_order_id=l.receipt_id WHERE l.sd BETWEEN '2024-07-29' AND '2024-10-27'\n",
+   "n": 11,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | mismatch | lc_mismatch | lines_g | ord_g | datediff\n6644 | 0 | 0 | 499578.73 | 499578.73 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:24",
+   "statement": "SELECT d.fiscal_year, d.fiscal_period, count(DISTINCT d.calendar_date) days, min(calendar_date) mn, max(calendar_date) mx\nFROM dim_date d WHERE calendar_date BETWEEN '2024-07-20' AND '2024-11-02' GROUP BY ALL ORDER BY 3 DESC, 1,2\n",
+   "n": 12,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"days\"\n\nLINE 1: ....fiscal_year, d.fiscal_period, count(DISTINCT d.calendar_date) days, min(calendar_date) mn, max(calendar_date) mx\n                                                                          ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:27",
+   "statement": "SELECT d.fiscal_year, d.fiscal_period, count(*) ndays, min(calendar_date) mn, max(calendar_date) mx\nFROM dim_date d WHERE calendar_date BETWEEN '2024-07-20' AND '2024-11-02' GROUP BY ALL ORDER BY 1,2\n",
+   "n": 13,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "fiscal_year | fiscal_period | ndays | mn | mx\nFY2024/25 | 3 | 9 | 2024-07-20 | 2024-07-28\nFY2024/25 | 4 | 28 | 2024-07-29 | 2024-08-25\nFY2024/25 | 5 | 28 | 2024-08-26 | 2024-09-22\nFY2024/25 | 6 | 35 | 2024-09-23 | 2024-10-27\nFY2024/25 | 7 | 6 | 2024-10-28 | 2024-11-02\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:50:32",
+   "statement": "SELECT d.fiscal_year, d.fiscal_quarter, d.fiscal_period, round(sum(f.gross_amount),2) AS web_gross_sales_eur,\n count(*) lines, count(DISTINCT f.receipt_id) orders, min(f.gross_amount) mn, min(f.quantity) mq\nFROM fact_sales_line f JOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE f.channel_code='WB' AND d.fiscal_year='FY2024/25' AND d.fiscal_period BETWEEN 4 AND 6\nGROUP BY ALL ORDER BY 3\n",
+   "n": 14,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_quarter | fiscal_period | web_gross_sales_eur | lines | orders | mn | mq\nFY2024/25 | 2 | 4 | 156217.19 | 3952 | 1999 | 1.33 | 1\nFY2024/25 | 2 | 5 | 153878.42 | 4075 | 2030 | 1.15 | 1\nFY2024/25 | 2 | 6 | 189483.12 | 5259 | 2615 | 1.71 | 1\n(3 rows)"
+  }
+ ]
+}

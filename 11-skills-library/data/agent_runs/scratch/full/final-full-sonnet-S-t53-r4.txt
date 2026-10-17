@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "WITH lfl_store AS (SELECT DISTINCT store_id FROM dim_store WHERE store_id BETWEEN 100 AND 899 AND store_id &lt;&gt; 129), sales AS (SELECT CASE WHEN f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-31' THEN 'cur' ELSE 'base' END AS win, f.net_amount AS amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN lfl_store l ON l.store_id = s.store_id WHERE f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-31' OR f.sale_date BETWEEN DATE '2025-05-05' AND DATE '2025-06-01'), returns AS (SELECT CASE WHEN r.return_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-31' THEN 'cur' ELSE 'base' END AS win, -r.refund_net AS amount FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN lfl_store l ON l.store_id = s.store_id WHERE r.return_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-31' OR r.return_date BETWEEN DATE '2025-05-05' AND DATE '2025-06-01'), tot AS (SELECT win, sum(amount) net_sales FROM (SELECT * FROM sales UNION ALL SELECT * FROM returns) GROUP BY win) SELECT 'FY2026/27' AS fiscal_year, 1 AS fiscal_period, round(100 * (max(net_sales) FILTER (WHERE win='cur') / max(net_sales) FILTER (WHERE win='base') - 1), 2) AS lfl_growth_pct FROM tot",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "lfl_growth_pct"],
+    "rows": [["FY2026/27", 1, 1.23]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2026/27 period 1 = 2026-05-04 to 2026-05-31 (4 weeks, ref_fiscal_calendar)",
+    "Like-for-like: only stores that traded in both the current and the comparison window",
+    "Like-for-like sales = store sales only. Web shop (store 900), click-and-collect (booked to the web shop in both years) and the training store (999) are excluded",
+    "Net sales = line net_amount (EUR excl. VAT, after line discounts) minus refund_net on returns booked in the window, matching rpt_daily_store_sales",
+    "Stores identified by store_id (not store_key), so store versions and region reassignments do not affect the result",
+    "Store sales selected by store (store_id 101-139), not by channel_code = 'ST', because the channel code was replaced by channel_id from 2025-11-03"
+  ],
+  "assumptions": [
+    "'Period 1 this year' means FY2026/27 P01, the latest P01 (today is 2026-10-09 and that fiscal year runs from 2026-05-04)",
+    "The comparison window is 364 days earlier, 2025-05-05 to 2025-06-01. FY2025/26 was a 53-week year, so FY2026/27 week 1 starts a week later in the calendar than FY2025/26 week 1. Matching weekdays and the time of year means comparing with FY2025/26 weeks 2-5, not weeks 1-4 (P01). The same-label comparison is shown below",
+    "Both windows have 28 trading days and the same holidays. The same-label window (2025-04-28 to 2025-05-25) contains May Day (2025-05-01), when the stores were shut and recorded no sales",
+    "Stores 136 Tampere Lamminpää (opened 2024-09-02) and 137 Lohja (opened 2024-11-04) are included. They were open for the whole of the comparison window and for more than 12 months before the current period began",
+    "Staff purchases are included, as they are real till sales and the net-sales report includes them",
+    "Returns are counted in the period they are booked, not the period of the original sale, as in the daily store sales report"
+  ],
+  "caveats": [
+    "Correction: store 129 Savonlinna closed on 2026-01-25 and has no sales in the current period. It is excluded, which leaves 38 comparable stores (it had about 11.7k EUR net in the comparison window)",
+    "Correction: from 2025-11-03 fact_sales_line carries channel_id instead of channel_code. Filtering on channel_code = 'ST' returns no rows for 2026 and would fail the comparison. Web orders were also coded WB in the old data, so I selected stores by store_id instead",
+    "Correction: the 2026 window shows web and training-store lines under store keys 900 and 999. Removing them keeps the figure to store trading only (the total includes about 229k EUR of web sales in the current period that is not in the figure)",
+    "Correction: the 53-week FY2025/26 shifts the calendar. Comparing P01 with P01 (2025-04-28 to 2025-05-25) gives +6.70% (+6.12% without stores 136 and 137). That figure is flattered by seasonal build-up, because the 2025 window ends a week earlier in the spring season and includes the May Day closure. The 364-day comparison, +1.23%, is the like-for-like figure",
+    "Sensitivity: excluding the two stores opened in 2024 (136 and 137), which grew 13-15% against a 1% average, gives +0.74% instead of +1.23%. The tmp_lfl_store_list_2024 and 2025 tables leave them out. I kept them in because both were open for the whole comparison window",
+    "Individual stores swing widely (from -22% at Porvoo to +16.5% at Jyväskylä Palokka), so the +1.23% hides a lot of store-level variation",
+    "Duplicate lines exist in fact_sales_line for 2025-09-15 to 2025-09-21 (about 418 lines loaded twice). They fall outside both windows and do not affect this answer, but they will inflate any query that covers September 2025",
+    "The comparison window for region or store breakdowns is not affected by the regional reorganisation of 2025-04-28 (Capital Region), but a regional split of this figure would need store_id-based mapping",
+    "The data was complete for all of period 1 in both years (fully_loaded = true, no duplicate lines in either window, daily sales from every store on all 28 days)"
+  ]
+}
+```

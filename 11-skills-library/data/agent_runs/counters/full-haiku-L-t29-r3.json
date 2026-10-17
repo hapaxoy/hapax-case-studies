@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-L-t29-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T29",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "c949122111ca8e6956541ea556d2653ba9b9ee07f66d5f95b6af161d421e1a1e",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:53:06",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 FY2024/25",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P05\n  fiscal_weeks                       18-21\n  start_date                         2024-08-26\n  end_date                           2024-09-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2024-09-22\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 18 AND 21)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:19",
+   "statement": "SELECT \n  f.vat_rate,\n  SUM(f.gross_amount - f.net_amount) AS vat_charged\nFROM fact_sales_line f\nJOIN dim_date d ON d.calendar_date = f.sale_date\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE d.fiscal_year = 'FY2024/25' \n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\nGROUP BY f.vat_rate\nORDER BY f.vat_rate\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_rate | vat_charged\n0.1000 | 150.67\n0.1400 | 817.62\n0.2400 | 54105.20\n0.2550 | 180017.23\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:24",
+   "statement": "SELECT \n  SUM(f.gross_amount - f.net_amount) AS total_vat_charged\nFROM fact_sales_line f\nJOIN dim_date d ON d.calendar_date = f.sale_date\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE d.fiscal_year = 'FY2024/25' \n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_vat_charged\n235090.72\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:29",
+   "statement": "SELECT \n  f.channel_code,\n  SUM(f.gross_amount - f.net_amount) AS vat_charged\nFROM fact_sales_line f\nJOIN dim_date d ON d.calendar_date = f.sale_date\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE d.fiscal_year = 'FY2024/25' \n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\nGROUP BY f.channel_code\nORDER BY f.channel_code\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "channel_code | vat_charged\nST | 235090.72\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:34",
+   "statement": "-- Check net sales from fact_sales_line\nSELECT \n  'fact_sales_line' AS source,\n  SUM(f.net_amount) AS net_sales\nFROM fact_sales_line f\nJOIN dim_date d ON d.calendar_date = f.sale_date\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE d.fiscal_year = 'FY2024/25' \n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\n  AND f.channel_code = 'ST'\n\nUNION ALL\n\n-- Check against control total rpt_daily_store_sales\nSELECT\n  'rpt_daily_store_sales' AS source,\n  SUM(r.net_sales) AS net_sales\nFROM rpt_daily_store_sales r\nJOIN dim_date d ON d.calendar_date = r.business_date\nWHERE d.fiscal_year = 'FY2024/25' \n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND r.store_id < 900\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "source | net_sales\nfact_sales_line | 938729.24\nrpt_daily_store_sales | 893768.86\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:53:41",
+   "statement": "-- Check returns VAT during P5 FY2024/25\nSELECT \n  r.vat_rate,\n  COUNT(*) AS return_lines,\n  SUM(r.refund_gross - r.refund_net) AS vat_refunded\nFROM fact_return_line r\nJOIN dim_date d ON d.calendar_date = r.return_date\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key\nWHERE d.fiscal_year = 'FY2024/25' \n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\nGROUP BY r.vat_rate\nORDER BY r.vat_rate\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_rate | return_lines | vat_refunded\n0.1000 | 1 | 1.20\n0.1400 | 22 | 10.48\n0.2400 | 595 | 5094.72\n0.2550 | 746 | 6029.57\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:54:01",
+   "statement": "SELECT \n  CAST(ROUND(f.vat_rate * 100, 1) AS VARCHAR) AS vat_rate_pct,\n  f.vat_rate,\n  ROUND(SUM(f.gross_amount - f.net_amount), 2) AS vat_charged\nFROM fact_sales_line f\nJOIN dim_date d ON d.calendar_date = f.sale_date\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE d.fiscal_year = 'FY2024/25' \n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\nGROUP BY f.vat_rate\nORDER BY f.vat_rate\n",
+   "n": 7,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "vat_rate_pct | vat_rate | vat_charged\n10.0 | 0.1000 | 150.67\n14.0 | 0.1400 | 817.62\n24.0 | 0.2400 | 54105.20\n25.5 | 0.2550 | 180017.23\n(4 rows)"
+  }
+ ]
+}

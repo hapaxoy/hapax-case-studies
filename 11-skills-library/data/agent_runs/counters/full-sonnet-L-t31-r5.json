@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t31-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "f80101c92b155187cdc374ff502dcf107bc11ef8b59c39587839b09586784fbf",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:39:20",
+   "statement": "fiscal-calendar/scripts/fiscal.py P8 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P8 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P08\n  fiscal_weeks                       31-34\n  start_date                         2025-11-24\n  end_date                           2025-12-21\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 31 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:28",
+   "statement": "WITH p AS (SELECT DATE '2025-12-21' AS e),\nact AS (\n  SELECT DISTINCT m.member_id,\n    bool_or(s.store_id=999 OR pr.category='ZZ Test') OVER (PARTITION BY m.member_id) AS dummy\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key=f.member_key\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product pr ON pr.product_key=f.product_key\n  CROSS JOIN p\n  WHERE f.sale_date > p.e-364 AND f.sale_date <= p.e\n),\nver AS (\n  SELECT member_id, count(*) n FROM dim_member CROSS JOIN p WHERE p.e BETWEEN valid_from AND valid_to GROUP BY 1\n)\nSELECT 'versions_valid_per_member' k, n::VARCHAR v, count(*) c FROM ver GROUP BY 1,2\nUNION ALL\nSELECT 'active_all', cur.tier, count(DISTINCT a.member_id) FROM act a CROSS JOIN p JOIN dim_member cur ON cur.member_id=a.member_id AND p.e BETWEEN cur.valid_from AND cur.valid_to GROUP BY 1,2\nUNION ALL\nSELECT 'active_dummy_flag', a.dummy::VARCHAR, count(*) FROM act a GROUP BY 1,2\nORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "k | v | c\nactive_all | Basic | 14654\nactive_all | Gold | 3901\nactive_all | Silver | 10971\nactive_dummy_flag | false | 29526\nversions_valid_per_member | 1 | 48675\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:38",
+   "statement": "WITH p AS (SELECT DATE '2025-12-21' AS e),\nl AS (\n  SELECT m.member_id, f.sales_line_id, f.receipt_id, f.sale_date, f.channel_code, w.status\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key=f.member_key\n  LEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id AND f.receipt_id IN (SELECT web_order_id FROM fact_web_order)\n  CROSS JOIN p\n  WHERE f.sale_date > p.e-364 AND f.sale_date <= p.e\n)\nSELECT (SELECT count(DISTINCT member_id) FROM l) AS all_active,\n       (SELECT count(DISTINCT member_id) FROM l WHERE status IS NULL OR status<>'cancelled') AS excl_cancelled,\n       (SELECT count(*) FROM l WHERE status='cancelled') AS cancelled_lines,\n       (SELECT count(*)-count(DISTINCT sales_line_id) FROM l) AS dup_line_ids,\n       (SELECT max(sale_date) FROM fact_sales_line) AS max_sale,\n       (SELECT min(sale_date) FROM l) AS min_sale\n",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Not implemented Error: Cannot perform non-inner join on subquery!"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:42",
+   "statement": "WITH p AS (SELECT DATE '2025-12-21' AS e),\nl AS (\n  SELECT m.member_id, f.sales_line_id, f.receipt_id, f.sale_date, w.status\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key=f.member_key\n  LEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id\n  CROSS JOIN p\n  WHERE f.sale_date > p.e-364 AND f.sale_date <= p.e\n)\nSELECT (SELECT count(DISTINCT member_id) FROM l) AS all_active,\n       (SELECT count(DISTINCT member_id) FROM l WHERE status IS NULL OR status<>'cancelled') AS excl_cancelled,\n       (SELECT count(*) FROM l WHERE status='cancelled') AS cancelled_lines,\n       (SELECT count(*)-count(DISTINCT sales_line_id) FROM l) AS dup_line_ids,\n       (SELECT max(sale_date) FROM fact_sales_line) AS max_sale,\n       (SELECT min(sale_date) FROM l) AS min_sale\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "all_active | excl_cancelled | cancelled_lines | dup_line_ids | max_sale | min_sale\n29526 | 29526 | 0 | 0 | 2026-10-04 | 2024-12-23\n(1 row)"
+  }
+ ]
+}

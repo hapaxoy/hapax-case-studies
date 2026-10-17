@@ -1,0 +1,26 @@
+```json
+{
+  "sql": "SELECT tier, COUNT(DISTINCT member_id) AS members FROM dim_member WHERE is_current AND tier = 'Gold' GROUP BY tier",
+  "result": {
+    "columns": ["tier", "members"],
+    "rows": [["Gold", 5791]]
+  },
+  "definitions_applied": [
+    "Members counted by distinct member_id, not by member_key (dim_member keeps one row per version)",
+    "Tier read from the current member version (is_current, valid_to = 9999-12-31)",
+    "Canonical dim_member only; stg_member_updates and other staging, bak_ and tmp_ tables not used"
+  ],
+  "assumptions": [
+    "\"At the moment\" is read as the current version of each member, as loaded through Sunday 4 October 2026 (the warehouse load date), not 7 October, the date of the request.",
+    "\"Gold-tier loyalty members\" is read as all loyalty members whose current tier is Gold, whatever their activity, marketing consent or home store. It does not mean active Gold members (a purchase in the last 52 weeks), which would be a lower figure.",
+    "No fiscal calendar, store, product or sales filters apply, because the question is a count of members."
+  ],
+  "caveats": [
+    "No problems found in dim_member. Each of the 60,000 member_ids has exactly one current version. No version periods overlap or leave gaps, and none is inverted. No current version or join date falls after 4 October 2026. The only tier values are Basic, Silver and Gold.",
+    "Counting dim_member rows with tier = 'Gold' without the current-version filter gives 8,203 versions. That counts members who were Gold at some point more than once, including 2,233 members who have since moved to another tier or whose Gold version has been superseded. The figure to use is 5,791.",
+    "The count of 5,791 is the same whether taken on the current version or on the version valid on 4 October 2026 or 7 October 2026.",
+    "The warehouse is loaded only through 4 October 2026, so tier changes made on 5 to 7 October are not included.",
+    "No control total applies to this request: rpt_daily_store_sales holds sales, not members."
+  ]
+}
+```

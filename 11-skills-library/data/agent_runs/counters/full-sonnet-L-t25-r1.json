@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t25-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T25",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "2371d6fde7c799e69bde0d268a45bef1970c54386a4699cb222e2729ab4f7269",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:42:05",
+   "statement": "WITH v AS (\n  SELECT *, ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) rn,\n         COUNT(*) OVER (PARTITION BY member_id) nv,\n         COUNT(DISTINCT join_date) OVER (PARTITION BY member_id) nj\n  FROM dim_member)\nSELECT\n  count(*) versions, count(DISTINCT member_id) members,\n  sum(CASE WHEN rn=1 AND join_date IS NULL THEN 1 ELSE 0 END) null_join,\n  sum(CASE WHEN rn=1 AND valid_from <> join_date THEN 1 ELSE 0 END) first_vf_ne_join,\n  sum(CASE WHEN rn=1 AND nj>1 THEN 1 ELSE 0 END) multi_join_dates,\n  sum(CASE WHEN rn=1 AND join_date >= DATE '2025-04-28' AND join_date <= DATE '2026-05-03' THEN 1 ELSE 0 END) fy2526,\n  sum(CASE WHEN rn=1 AND join_date >= DATE '2025-01-01' AND join_date <= DATE '2025-12-31' THEN 1 ELSE 0 END) cal2025,\n  count(DISTINCT member_key) keys,\n  min(join_date), max(join_date),\n  sum(CASE WHEN rn=1 AND home_store_id NOT IN (SELECT store_id FROM dim_store) THEN 1 ELSE 0 END) orphan_store\nFROM v\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "versions | members | null_join | first_vf_ne_join | multi_join_dates | fy2526 | cal2025 | keys | min(join_date) | max(join_date) | orphan_store\n89314 | 60000 | 0 | 0 | 0 | 14854 | 14629 | 89314 | 2019-01-01 | 2026-10-04 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:42:14",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) rn\n  FROM dim_member),\ncs AS (SELECT store_id, store_name, region, close_date, open_date FROM dim_store WHERE is_current)\nSELECT fv.home_store_id, cs.store_name, cs.region, cs.open_date, cs.close_date,\n  sum(CASE WHEN join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03' THEN 1 ELSE 0 END) fy2526,\n  sum(CASE WHEN join_date BETWEEN DATE '2025-01-01' AND DATE '2025-12-31' THEN 1 ELSE 0 END) cal2025\nFROM fv LEFT JOIN cs ON cs.store_id = fv.home_store_id\nWHERE rn = 1 AND (join_date BETWEEN DATE '2025-01-01' AND DATE '2026-05-03')\nGROUP BY ALL ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "home_store_id | store_name | region | open_date | close_date | fy2526 | cal2025\n101 | Helsinki Vuosaari | Capital Region | NULL | NULL | 351 | 333\n102 | Helsinki Pitäjänmäki | Capital Region | NULL | NULL | 597 | 576\n103 | Espoo Lommila | Capital Region | NULL | NULL | 281 | 299\n104 | Vantaa Tammisto | Capital Region | NULL | NULL | 485 | 471\n105 | Kerava | Capital Region | NULL | NULL | 147 | 141\n106 | Porvoo | South | NULL | NULL | 171 | 158\n107 | Hyvinkää | South | NULL | NULL | 287 | 272\n108 | Lahti | South | NULL | NULL | 500 | 503\n109 | Hämeenlinna | South | NULL | NULL | 295 | 292\n110 | Turku Kupittaa | South | NULL | NULL | 500 | 493\n111 | Turku Härmälä | South | NULL | NULL | 261 | 249\n112 | Raisio | South | NULL | NULL | 156 | 147\n113 | Salo | South | NULL | NULL | 133 | 124\n114 | Kouvola | South | NULL | NULL | 249 | 242\n115 | Tampere Hervanta | West | NULL | NULL | 696 | 715\n116 | Tampere Lielahti | West | NULL | NULL | 459 | 451\n117 | Tampere Kaleva | West | NULL | NULL | 447 | 401\n118 | Nokia | West | NULL | NULL | 373 | 393\n119 | Pori | West | NULL | NULL | 342 | 349\n120 | Rauma | West | NULL | NULL | 144 | 134\n121 | Vaasa | West | NULL | NULL | 344 | 317\n122 | Seinäjoki | West | NULL | NULL | 331 | 333\n123 | Kokkola | West | NULL | NULL | 167 | 157\n124 | Jyväskylä Palokka | East | NULL | NULL | 309 | 331\n125 | Kuopio | East | NULL | NULL | 484 | 491\n126 | Joensuu | East | NULL | NULL | 378 | 357\n127 | Mikkeli | East | NULL | NULL | 289 | 264\n128 | Lappeenranta"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:42:20",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id, valid_from, valid_to,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) rn,\n         COUNT(*) OVER (PARTITION BY member_id, valid_from) dup_vf\n  FROM dim_member)\nSELECT\n  (SELECT count(*) FROM fv WHERE dup_vf>1) dup_version_starts,\n  (SELECT count(*) FROM fv WHERE rn=1 AND home_store_id=129 AND join_date > DATE '2026-01-25') sav_after_close,\n  (SELECT count(*) FROM fv WHERE rn=1 AND home_store_id=129 AND join_date BETWEEN DATE '2026-01-26' AND DATE '2026-05-03') sav_after_close_fy,\n  (SELECT max(join_date) FROM fv WHERE rn=1 AND home_store_id=129) sav_last_join,\n  (SELECT count(*) FROM fv WHERE rn=1 AND home_store_id IN (136,137) AND join_date < CASE home_store_id WHEN 136 THEN DATE '2024-09-02' ELSE DATE '2024-11-04' END) before_open,\n  (SELECT count(*) FROM fv WHERE rn=1 AND home_store_id=999) s999,\n  (SELECT count(*) FROM stg_member_updates) stg_rows,\n  (SELECT count(*) FROM fv WHERE rn=1 AND home_store_id=119 AND join_date BETWEEN DATE '2025-09-08' AND DATE '2025-10-12') pori_refit_joins\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_version_starts | sav_after_close | sav_after_close_fy | sav_last_join | before_open | s999 | stg_rows | pori_refit_joins\n0 | 0 | 0 | 2026-01-24 | 0 | 0 | 4061 | 24\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:42:26",
+   "statement": "WITH first_version AS (\n    SELECT member_id, join_date, home_store_id,\n           ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS version_no\n    FROM dim_member\n)\nSELECT d.fiscal_year, fv.home_store_id AS store_id, cs.store_name, COUNT(*) AS new_members\nFROM first_version fv\nJOIN dim_date d ON d.calendar_date = fv.join_date\nLEFT JOIN dim_store cs ON cs.store_id = fv.home_store_id AND cs.is_current\nWHERE fv.version_no = 1 AND d.fiscal_year = 'FY2025/26'\nGROUP BY 1, 2, 3\nORDER BY 2\n",
+   "n": 4,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "fiscal_year | store_id | store_name | new_members\nFY2025/26 | 101 | Helsinki Vuosaari | 351\nFY2025/26 | 102 | Helsinki Pitäjänmäki | 597\nFY2025/26 | 103 | Espoo Lommila | 281\nFY2025/26 | 104 | Vantaa Tammisto | 485\nFY2025/26 | 105 | Kerava | 147\nFY2025/26 | 106 | Porvoo | 171\nFY2025/26 | 107 | Hyvinkää | 287\nFY2025/26 | 108 | Lahti | 500\nFY2025/26 | 109 | Hämeenlinna | 295\nFY2025/26 | 110 | Turku Kupittaa | 500\nFY2025/26 | 111 | Turku Härmälä | 261\nFY2025/26 | 112 | Raisio | 156\nFY2025/26 | 113 | Salo | 133\nFY2025/26 | 114 | Kouvola | 249\nFY2025/26 | 115 | Tampere Hervanta | 696\nFY2025/26 | 116 | Tampere Lielahti | 459\nFY2025/26 | 117 | Tampere Kaleva | 447\nFY2025/26 | 118 | Nokia | 373\nFY2025/26 | 119 | Pori | 342\nFY2025/26 | 120 | Rauma | 144\nFY2025/26 | 121 | Vaasa | 344\nFY2025/26 | 122 | Seinäjoki | 331\nFY2025/26 | 123 | Kokkola | 167\nFY2025/26 | 124 | Jyväskylä Palokka | 309\nFY2025/26 | 125 | Kuopio | 484\nFY2025/26 | 126 | Joensuu | 378\nFY2025/26 | 127 | Mikkeli | 289\nFY2025/26 | 128 | Lappeenranta | 330\nFY2025/26 | 129 | Savonlinna | 113\nFY2025/26 | 130 | Kotka | 143\nFY2025/26 | 131 | Oulu Kaakkuri | 536\nFY2025/26 | 132 | Oulu Linnanmaa | 311\nFY2025/26 | 133 | Kemi | 157\nFY2025/26 | 134 | Rovaniemi | 237\nFY2025/26 | 135 | Kajaani | 133\nFY2025/26 | 136 | Tampere Lamminpää | 304\nFY2025/26 | 137 | Lohja | 155\nFY2025/26 | 138 | Iisalmi | 157\nFY2025/26 | 139 | Raahe | 170\nFY2025/26 | 900 | Tuomimetsä web shop | 2932\n(40 rows)"
+  }
+ ]
+}

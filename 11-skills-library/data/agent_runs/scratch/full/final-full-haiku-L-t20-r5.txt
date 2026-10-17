@@ -1,0 +1,35 @@
+Perfect! The totals match. Let me prepare the final answer. I'll create a clean version of the query for the response.
+
+```json
+{
+  "sql": "WITH net_lines AS (\n  SELECT f.sale_date, f.store_key, f.product_key, f.net_amount, 0 AS refund_net\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON s.store_key = f.store_key\n  INNER JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id < 900 AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n  UNION ALL\n  SELECT r.return_date, r.store_key, r.product_key, 0 AS net_amount, -r.refund_net\n  FROM fact_return_line r\n  INNER JOIN dim_store s ON s.store_key = r.store_key\n  INNER JOIN dim_product p ON p.product_key = r.product_key\n  WHERE s.store_id < 900 AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cs.region, SUM(nl.net_amount + nl.refund_net) AS net_sales\nFROM net_lines nl\nINNER JOIN dim_date d ON d.calendar_date = nl.sale_date\nINNER JOIN dim_store s ON s.store_key = nl.store_key\nINNER JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 22\nGROUP BY cs.region\nORDER BY net_sales DESC",
+  "result": {
+    "columns": ["region", "net_sales"],
+    "rows": [
+      ["West", 1815139.47],
+      ["South", 1309213.51],
+      ["East", 959424.31],
+      ["Capital Region", 948667.50],
+      ["North", 730386.24]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns (returns reduce sales on their return date, not the sale date)",
+    "Store scope: physical stores only (store_id < 900), excluding training store 999",
+    "Product scope: excludes test articles (category ZZ Test)",
+    "As-is hierarchy: current region names (Capital Region as one of five regions)",
+    "Fiscal period: FY2026/27 weeks 1-22 (2026-05-04 through 2026-10-04)"
+  ],
+  "assumptions": [
+    "'How they are doing' interpreted as net sales, the primary retail performance metric",
+    "'This year so far' interpreted as the current fiscal year FY2026/27 through the last loaded data (2026-10-04)",
+    "'Stores only, no web shop' applied by filtering to physical stores (store_id < 900, excluding web at 900 and training at 999)",
+    "Ranking determined by net sales in descending order"
+  ],
+  "caveats": [
+    "Data current through 2026-10-04; FY2026/27 continues through 2027-05-02 but is incomplete",
+    "The five regions include Capital Region, which was created on 2026-04-28 when six stores moved from South/East",
+    "Net sales verified against rpt_daily_store_sales control total: 5,762,831.03 EUR (sum of all regions)"
+  ]
+}
+```

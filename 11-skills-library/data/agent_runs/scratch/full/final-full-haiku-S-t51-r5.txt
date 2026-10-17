@@ -1,0 +1,34 @@
+Based on my analysis of the Black Week 2025 campaign in the Tuomimetsä warehouse, here is the uplift analysis:
+
+```json
+{
+  "sql": "WITH campaign_info AS (SELECT mailing_list_size - holdout_size as targeted_member_count, holdout_size as holdout_member_count FROM dim_campaign WHERE campaign_id = 15), holdout_ids AS (SELECT member_id FROM campaign_holdout WHERE campaign_id = 15), holdout_keys AS (SELECT DISTINCT m.member_key FROM dim_member m WHERE m.member_id IN (SELECT member_id FROM holdout_ids) AND m.is_current = TRUE), exposed_ids AS (SELECT DISTINCT member_key FROM fact_campaign_exposure WHERE campaign_id = 15), targeted_spend AS (SELECT COALESCE(SUM(net_amount), 0) as total FROM fact_sales_line WHERE sale_date BETWEEN '2025-11-24' AND '2025-11-30' AND member_key IN (SELECT member_key FROM exposed_ids)), holdout_spend AS (SELECT COALESCE(SUM(net_amount), 0) as total FROM fact_sales_line WHERE sale_date BETWEEN '2025-11-24' AND '2025-11-30' AND member_key IN (SELECT member_key FROM holdout_keys)), calculations AS (SELECT ci.targeted_member_count, ci.holdout_member_count, ts.total as targeted_total, hs.total as holdout_total, ROUND(ts.total / ci.targeted_member_count, 2) as avg_spend_targeted, ROUND(hs.total / ci.holdout_member_count, 2) as avg_spend_holdout FROM campaign_info ci, targeted_spend ts, holdout_spend hs) SELECT 'Targeted Members' as group_name, avg_spend_targeted as avg_spend_per_member UNION ALL SELECT 'Held-out Members', avg_spend_holdout UNION ALL SELECT 'Uplift', ROUND(targeted_total - (targeted_member_count * avg_spend_holdout), 2) FROM calculations",
+  "result": {
+    "columns": ["Metric", "Amount EUR"],
+    "rows": [
+      ["Average spend per targeted member", 4.72],
+      ["Average spend per held-out member", 2.61],
+      ["Uplift in euros", 50207.24]
+    ]
+  },
+  "definitions_applied": [
+    "Targeted members = mailing list size minus holdout size",
+    "Held-out members = control group explicitly excluded from campaign exposure",
+    "Campaign period = Black Week 2025 dates (24–30 November 2025)",
+    "Net sales = transaction amounts excluding VAT",
+    "Uplift = targeted group total spend minus what they would have spent at holdout group average"
+  ],
+  "assumptions": [
+    "Campaign exposure data represents the actual targeted audience contacted during the campaign",
+    "Holdout group members are identified via the campaign_holdout table joined to current member records",
+    "Sales during campaign period are attributed to members via current member_key in fact_sales_line",
+    "Uplift is calculated as incremental spend: targeted group actual spend minus counterfactual (targeted members at holdout spend level)"
+  ],
+  "caveats": [
+    "Low transaction penetration: only 8.0% of targeted members (1,896 of 23,826) and 4.7% of holdout members (130 of 2,747) had sales during the 7-day campaign period; both groups represent small active shopper bases during this window",
+    "All amounts are net of VAT (using net_amount column from fact_sales_line)",
+    "Campaign exposure table shows 23,844 unique exposed members versus 23,826 expected from dim_campaign (18-member variance, likely minor contact list mismatch)",
+    "Uplift calculation assumes holdout group spending behaviour represents counterfactual for targeted group in the absence of campaign exposure"
+  ]
+}
+```

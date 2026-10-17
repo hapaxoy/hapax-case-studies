@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH sold_lines AS (SELECT f.sales_line_id, cp.subcategory, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND cp.category <> 'ZZ Test' AND d.fiscal_year = 'FY2025/26' AND d.fiscal_quarter = 1 AND cp.category = 'Garden' AND cp.subcategory <> 'Outdoor Lighting'), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT l.subcategory, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct FROM sold_lines l LEFT JOIN refunds r USING (sales_line_id) GROUP BY 1 ORDER BY return_rate_pct DESC",
+  "result": {
+    "columns": ["subcategory", "return_rate_pct"],
+    "rows": [
+      ["Garden Furniture", 12.87],
+      ["Barbecue & Grills", 7.26],
+      ["Garden Tools", 5.35],
+      ["Pots & Planters", 3.86],
+      ["Plants & Flowers", 2.74],
+      ["Soil & Fertiliser", 1.58],
+      ["Edible Plants & Seeds", 0.96]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate = returned net (refund_net) divided by sold net (net_amount), both excluding VAT",
+    "Sale-week cohort: returns are matched to the original sales line through sales_line_id, so a return counts in the period the item was sold, whenever it came back",
+    "Sold lines selected by the fiscal quarter of fact_sales_line.sale_date (Helsinki business date)",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "As-is hierarchy: category and subcategory taken from the current product version (is_current), so outdoor lighting sits in Electrical for all history",
+    "Web shop (store 900) lines included along with physical stores, with refunds following the line",
+    "Staff purchases included",
+    "Fiscal calendar: Q1 = P1 to P3 = weeks 1 to 13"
+  ],
+  "assumptions": [
+    "'Last year' was read as FY2025/26. The request is dated 6 October 2026, which falls in FY2026/27. Past accepted requests (REQ-D14, D16) read it the same way. So Q1 is 28 April 2025 to 27 July 2025 (FY2025/26 P1 to P3, weeks 1 to 13).",
+    "'Return rate' was read as the company definition: refund value divided by sold value, in net EUR excluding VAT, not units.",
+    "'Garden subcategories' was read on the current (as-is) hierarchy, which management reporting uses by default. The request did not ask for as-was.",
+    "Web orders were included, because the request names no channel and the accepted return-rate readings include web."
+  ],
+  "caveats": [
+    "Outdoor Lighting is not in the table. It moved from Garden to Electrical from 27 October 2025 (FY2025/26 P7), after this quarter. As-is it is Electrical for all history. On the as-was view it would have been a Garden subcategory in Q1 with a 7.22% return rate on 50,443 EUR sold.",
+    "19 Q1 sales lines (375.00 EUR sold, no returns) sit on delisted outdoor-lighting SKUs whose current product version still says category Garden. These articles were delisted before the April 2025 move and were never re-categorised. I treated them as Outdoor Lighting (Electrical) and left them out of Garden. Including them would add an 8th 'Outdoor Lighting' row at 0.00%.",
+    "The cohort is complete. The last Q1 sale was 27 July 2025 and returns run up to 30 days after a sale, while the warehouse is loaded through 4 October 2026. No returns are still expected.",
+    "Source checks found no duplicate sales line keys, no duplicate return lines, and no returns without a matching sale. No cancelled web lines fell in the Garden Q1 sample.",
+    "Training store (999) lines were excluded as per house rules. 390 lines were in the quarter overall, and they are test and training transactions.",
+    "The rpt_daily_store_sales control total was not applied. It has no product dimension and does not cover returns on the sale-week cohort basis, so it does not apply to a subcategory return rate."
+  ]
+}
+```

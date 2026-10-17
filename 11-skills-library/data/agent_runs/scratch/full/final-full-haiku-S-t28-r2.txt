@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH stock_at_period_end AS (\n  SELECT \n    dp.category,\n    SUM(fs.closing_units) as closing_stock_units\n  FROM fact_stock_week fs\n  JOIN dim_product dp ON fs.product_key = dp.product_key\n  WHERE fs.week_ending_date = '2026-09-27'\n  GROUP BY dp.category\n),\nperiod_sales AS (\n  SELECT \n    dp.category,\n    SUM(fsl.quantity)::DECIMAL / COUNT(DISTINCT d.fiscal_week) as avg_weekly_sales\n  FROM fact_sales_line fsl\n  JOIN dim_product dp ON fsl.product_key = dp.product_key\n  JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 5\n  GROUP BY dp.category\n)\nSELECT \n  s.category,\n  ROUND(s.closing_stock_units / ps.avg_weekly_sales, 2) as weeks_of_cover\nFROM stock_at_period_end s\nJOIN period_sales ps ON s.category = ps.category\nWHERE s.category != 'ZZ Test'\nORDER BY s.category",
+  "result": {
+    "columns": ["category", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 9.96],
+      ["Cleaning &amp; Household", 6.56],
+      ["Electrical", 7.36],
+      ["Furniture", 21.21],
+      ["Garden", 15.9],
+      ["Home Textiles &amp; Decor", 10.01],
+      ["Kitchen &amp; Dining", 11.75],
+      ["Paint &amp; Decorating", 11.59],
+      ["Seasonal", 36.46],
+      ["Tools &amp; Hardware", 6.6]
+    ]
+  },
+  "definitions_applied": [
+    "Weeks of cover (inventory turnover metric): closing stock units divided by average weekly sales for the period",
+    "Last period: the most recent complete fiscal period (FY2026/27 P05, ended 2026-09-27)",
+    "Period sales: sales volume from the same period used for average weekly calculation",
+    "Closing stock: units held in inventory as of the last fiscal week-ending date of the period"
+  ],
+  "assumptions": [
+    "Last period interpreted as the most recent complete fiscal period (P05 ending 2026-09-27) rather than the in-progress period (P06)",
+    "Average weekly sales calculated from the 4 full weeks of sales data within the period",
+    "Test product category (ZZ Test) excluded from results as non-operational inventory",
+    "All store locations included in calculation (no filtering by store, region or format)",
+    "Stock quantity measured in base units (not weighted by value or product size)"
+  ],
+  "caveats": [
+    "Seasonal category shows very high weeks of cover (36.46) due to low sales relative to stock, indicating planned buildup for upcoming seasonal demand",
+    "Tools &amp; Hardware and Cleaning &amp; Household categories show lower coverage (6.6 and 6.56 weeks) indicating higher velocity",
+    "Calculation uses sales data only; does not account for returns, adjustments, or stock write-offs",
+    "Period P06 (current, started 2026-10-01) has incomplete data as of request date (2026-10-07); only 1 week of stock data available"
+  ]
+}
+```

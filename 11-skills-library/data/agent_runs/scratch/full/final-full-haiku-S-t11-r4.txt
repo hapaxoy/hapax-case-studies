@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH sales_by_category AS (\n  SELECT \n    d.fiscal_year,\n    p.category,\n    COALESCE(SUM(f.net_amount), 0) - COALESCE(SUM(r.refund_net), 0) as net_sales\n  FROM fact_sales_line f\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  JOIN dim_product p ON f.product_key = p.product_key\n  LEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\n  WHERE p.category IN ('Garden', 'Electrical')\n    AND d.fiscal_period = 8\n    AND d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  GROUP BY d.fiscal_year, p.category\n)\nSELECT \n  category,\n  MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) as net_sales_fy2025_26,\n  MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END) as net_sales_fy2024_25,\n  ROUND((MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) - \n          MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END)) / \n         MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END) * 100, 2) as growth_pct\nFROM sales_by_category\nGROUP BY category\nORDER BY category;",
+  "result": {
+    "columns": ["category", "net_sales_fy2025_26", "net_sales_fy2024_25", "growth_pct"],
+    "rows": [
+      ["Electrical", 171977.48, 143318.00, 20.0],
+      ["Garden", 37007.18, 56241.19, -34.2]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: sum of net_amount (line value excluding VAT after discounts) minus refund_net (returns)",
+    "Fiscal period: fiscal period numbering 1-12 within each fiscal year (period 8 mid-way through fiscal year)",
+    "Category: product category from dim_product, used to group sales",
+    "Growth: year-over-year percentage change calculated as (FY2025/26 - FY2024/25) / FY2024/25 × 100"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (most recent complete fiscal year); year before as FY2024/25",
+    "Period 8 means fiscal period 8 in the respective fiscal years",
+    "Growth calculated as year-over-year percentage change",
+    "Net sales includes both store (ST) and web (WB) channels",
+    "Net sales calculation accounts for returns (refunds subtracted from gross sales)"
+  ],
+  "caveats": [
+    "Staff purchases are included in the sales totals (marked separately in the data but not filtered out)",
+    "Returns accounted for: Garden had EUR 2,139.65 returned in FY2025/26 P8 and EUR 3,259.83 in FY2024/25 P8; Electrical had EUR 10,240.51 returned in FY2025/26 P8 and EUR 6,999.52 in FY2024/25 P8",
+    "Garden category shows significant decline (-34.2%), driven by lower sales volume in the later fiscal year"
+  ]
+}
+```

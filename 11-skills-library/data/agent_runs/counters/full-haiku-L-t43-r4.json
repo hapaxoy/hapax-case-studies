@@ -1,0 +1,49 @@
+{
+ "run_id": "full-haiku-L-t43-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T43",
+ "budget": 30,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "670b3af11b3256e3170cfa135bcb624edb4b4b047db3c2edeeb7d05483ec532b",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:38:23",
+   "statement": "fiscal-calendar/scripts/fiscal.py last period",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: last period    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: 'Last period' = the last completed fiscal period (CAL-RELATIVE).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:38:38",
+   "statement": "SELECT \n  ROW_NUMBER() OVER (ORDER BY net_sales DESC) AS rank,\n  p.sku,\n  p.product_name,\n  SUM(fsl.net_amount) - COALESCE(SUM(CASE WHEN frl.return_line_id IS NOT NULL THEN frl.refund_net ELSE 0 END), 0) AS net_sales\nFROM fact_sales_line fsl\nINNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\nINNER JOIN dim_product p ON fsl.product_key = p.product_key\nINNER JOIN dim_store s ON fsl.store_key = s.store_key\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nWHERE d.fiscal_year = 'FY2026/27' \n  AND d.fiscal_week BETWEEN 18 AND 21\n  AND s.store_id < 900  -- Exclude web shop and training store\n  AND p.category != 'ZZ Test'  -- Exclude test articles\nGROUP BY p.sku, p.product_name\nORDER BY net_sales DESC\nLIMIT 10\n",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Column \"net_sales\" referenced that exists in the SELECT clause - but this column cannot be referenced before it is defined"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:38:43",
+   "statement": "WITH product_sales AS (\n  SELECT \n    p.sku,\n    p.product_name,\n    SUM(fsl.net_amount) - COALESCE(SUM(CASE WHEN frl.return_line_id IS NOT NULL THEN frl.refund_net ELSE 0 END), 0) AS net_sales\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  INNER JOIN dim_product p ON fsl.product_key = p.product_key\n  INNER JOIN dim_store s ON fsl.store_key = s.store_key\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 18 AND 21\n    AND s.store_id < 900  -- Exclude web shop and training store\n    AND p.category != 'ZZ Test'  -- Exclude test articles\n  GROUP BY p.sku, p.product_name\n)\nSELECT \n  ROW_NUMBER() OVER (ORDER BY net_sales DESC) AS rank,\n  sku,\n  product_name,\n  net_sales\nFROM product_sales\nORDER BY net_sales DESC\nLIMIT 10\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "rank | sku | product_name | net_sales\n1 | 100955 | Interior Paint Norvik 298 | 7942.03\n2 | 100927 | Outdoor Lighting Kultala 862 | 6800.15\n3 | 103415 | Home Office Peltola 918 | 6116.33\n4 | 101411 | Power Tools Nordhem 370 | 4924.03\n5 | 102116 | Smart Home Tuulikki 855 | 4921.36\n6 | 101398 | Power Tools Havu Pro 689 | 4634.30\n7 | 103434 | Home Office Tuulikki 821 | 4595.99\n8 | 101022 | Interior Paint Kultala 377 | 4101.62\n9 | 103697 | Storage Boxes Tuulikki 952 | 3909.49\n10 | 101888 | Indoor Lighting Havu 419 | 3823.86\n(10 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:38:49",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 10 rows, 4 columns: rank, sku, product_name, net_sales\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  rank | sku | product_name | net_sales\n  1 | 100955 | Interior Paint Norvik 298 | 7942.03\n  2 | 100927 | Outdoor Lighting Kultala 862 | 6800.15\n  3 | 103415 | Home Office Peltola 918 | 6116.33\n  4 | 101411 | Power Tools Nordhem 370 | 4924.03\n  5 | 102116 | Smart Home Tuulikki 855 | 4921.36\n  6 | 101398 | Power Tools Havu Pro 689 | 4634.30\n  7 | 103434 | Home Office Tuulikki 821 | 4595.99\n  8 | 101022 | Interior Paint Kultala 377 | 4101.62\n  9 | 103697 | Storage Boxes Tuulikki 952 | 3909.49\n  10 | 101888 | Indoor Lighting Havu 419 | 3823.86\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

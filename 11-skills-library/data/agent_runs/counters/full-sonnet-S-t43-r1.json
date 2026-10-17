@@ -1,0 +1,112 @@
+{
+ "run_id": "full-sonnet-S-t43-r1",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T43",
+ "budget": 12,
+ "used": 11,
+ "refused": 0,
+ "packet_sha256": "a9c3785673d2bd5848c5d9f8b7b033b213484cf35e461d4949bb0647af0ebce9",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:26",
+   "statement": "SELECT * FROM ref_fiscal_calendar WHERE period_end_date >= DATE '2026-06-01' AND period_start_date <= DATE '2026-11-30' ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_quarter | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2026/27 | 2 | 1 | FY2026/27 P02 | 2026-06-01 | 2026-06-28 | 4 | 5 | 8 | true\nFY2026/27 | 3 | 1 | FY2026/27 P03 | 2026-06-29 | 2026-08-02 | 5 | 9 | 13 | true\nFY2026/27 | 4 | 2 | FY2026/27 P04 | 2026-08-03 | 2026-08-30 | 4 | 14 | 17 | true\nFY2026/27 | 5 | 2 | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | 4 | 18 | 21 | true\nFY2026/27 | 6 | 2 | FY2026/27 P06 | 2026-09-28 | 2026-11-01 | 5 | 22 | 26 | false\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:27",
+   "statement": "SELECT min(sale_date), max(sale_date), count(*), max(etl_loaded_at) FROM fact_sales_line\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min(sale_date) | max(sale_date) | count_star() | max(etl_loaded_at)\n2024-04-29 | 2026-10-04 | 1510641 | 2026-10-05T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:33",
+   "statement": "SELECT channel_code, staff_purchase_flag, count(*) n, count(DISTINCT sales_line_id) dist_ids, count(DISTINCT (receipt_id, line_no)) dist_rl, sum(net_amount) net, sum(quantity) qty, min(quantity) minq, min(net_amount) minnet, count(DISTINCT etl_loaded_at) loads, count(DISTINCT channel_id) chids\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "channel_code | staff_purchase_flag | n | dist_ids | dist_rl | net | qty | minq | minnet | loads | chids\nNULL | false | 46199 | 46199 | 46199 | 1164637.63 | 79748 | 1 | 0.87 | 28 | 3\nNULL | true | 715 | 715 | 715 | 15448.49 | 1229 | 1 | 1.09 | 28 | 1\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:34",
+   "statement": "SELECT s.store_id, s.store_name, s.format, count(*) n, sum(f.net_amount) net\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND s.store_id>=900\nGROUP BY ALL ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_id | store_name | format | n | net\n900 | Tuomimetsä web shop | Web | 6474 | 193492.09\n999 | Training store | Training | 139 | 2690.92\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:41",
+   "statement": "SELECT 'channel' k, channel_id::VARCHAR a, channel_name b, channel_group c, legacy_channel_code d FROM dim_channel\nUNION ALL SELECT 'pk_dups', count(*)::VARCHAR, count(DISTINCT product_key)::VARCHAR, count(DISTINCT sku)::VARCHAR, NULL FROM dim_product\nUNION ALL SELECT 'sales_chid', channel_id::VARCHAR, count(*)::VARCHAR, sum(net_amount)::VARCHAR, NULL FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' GROUP BY channel_id\nUNION ALL SELECT 'orphan_pk', count(*)::VARCHAR, NULL, NULL, NULL FROM fact_sales_line f LEFT JOIN dim_product p ON p.product_key=f.product_key WHERE f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND p.product_key IS NULL\nUNION ALL SELECT 'ts_vs_date', count(*)::VARCHAR, NULL,NULL,NULL FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND CAST(sale_ts_utc AS DATE) <> sale_date\nUNION ALL SELECT 'neg', count(*)::VARCHAR, sum(net_amount)::VARCHAR, NULL,NULL FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND (net_amount<=0 OR quantity<=0)\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "k | a | b | c | d\nchannel | 1 | Store | store | ST\nchannel | 2 | Web home delivery | web | WB\nchannel | 3 | Click and collect | web | NULL\npk_dups | 4105 | 4105 | 4000 | NULL\nsales_chid | 1 | 40440 | 986594.03 | NULL\nsales_chid | 2 | 4547 | 134969.00 | NULL\nsales_chid | 3 | 1927 | 58523.09 | NULL\norphan_pk | 0 | NULL | NULL | NULL\nts_vs_date | 303 | NULL | NULL | NULL\nneg | 0 | NULL | NULL | NULL\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:45",
+   "statement": "SELECT o.status, count(DISTINCT o.web_order_id) orders, count(f.sales_line_id) lines, sum(f.net_amount) net, count(DISTINCT CASE WHEN f.sales_line_id IS NULL THEN o.web_order_id END) orders_no_lines\nFROM fact_web_order o LEFT JOIN fact_sales_line f ON f.receipt_id=o.web_order_id AND f.channel_id IN (2,3)\nWHERE CAST(o.order_ts_utc AS DATE) BETWEEN DATE '2026-08-30' AND DATE '2026-09-28'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | orders | lines | net | orders_no_lines\ncancelled | 161 | 0 | NULL | 161\ncollected | 1070 | 2113 | 63719.41 | 0\ndelivered | 2457 | 4896 | 146695.59 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:47",
+   "statement": "SELECT reason_code, count(*) n, sum(refund_net) refund, sum(quantity_returned) q, count(DISTINCT return_line_id) d\nFROM fact_return_line WHERE return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' GROUP BY 1 ORDER BY 1\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "reason_code | n | refund | q | d\nchanged_mind | 663 | 25446.32 | 811 | 663\ndamaged_in_transit | 156 | 4737.73 | 199 | 156\ndefective | 336 | 11996.96 | 406 | 336\nnot_as_described | 363 | 14115.61 | 433 | 363\nwrong_size_or_fit | 371 | 13684.28 | 457 | 371\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:54",
+   "statement": "WITH s AS (\n  SELECT p.sku, sum(f.net_amount) net_all, sum(CASE WHEN NOT f.staff_purchase_flag THEN f.net_amount END) net_nostaff,\n         sum(f.quantity) units_all, sum(CASE WHEN NOT f.staff_purchase_flag THEN f.quantity END) units_nostaff,\n         sum(CASE WHEN st.store_id=999 THEN f.net_amount ELSE 0 END) net_999\n  FROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key JOIN dim_store st ON st.store_key=f.store_key\n  WHERE f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n  GROUP BY 1),\nr AS (\n  SELECT p.sku, sum(r.refund_net) ref_net, sum(r.quantity_returned) ref_units\n  FROM fact_return_line r JOIN dim_product p ON p.product_key=r.product_key\n  WHERE r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' GROUP BY 1)\nSELECT s.sku, (SELECT product_name FROM dim_product d WHERE d.sku=s.sku AND d.is_current LIMIT 1) nm, net_all, net_nostaff, net_999, units_all, units_nostaff, coalesce(ref_net,0) ref_net, coalesce(ref_units,0) ref_units, net_all-net_999-coalesce(ref_net,0) net_after_ret\nFROM s LEFT JOIN r USING (sku) ORDER BY net_all DESC LIMIT 16\n",
+   "n": 8,
+   "ok": true,
+   "rows": 16,
+   "output_preview": "sku | nm | net_all | net_nostaff | net_999 | units_all | units_nostaff | ref_net | ref_units | net_after_ret\n100955 | Interior Paint Norvik 298 | 9656.04 | 9441.78 | 0.00 | 234 | 228 | 294.07 | 7 | 9361.97\n103415 | Home Office Peltola 918 | 8627.98 | 8627.98 | 0.00 | 76 | 76 | 1162.80 | 10 | 7465.18\n100927 | Outdoor Lighting Kultala 862 | 7970.46 | 7970.46 | 0.00 | 145 | 145 | 493.94 | 9 | 7476.52\n103434 | Home Office Tuulikki 821 | 6312.02 | 6185.18 | 0.00 | 86 | 84 | 727.45 | 10 | 5584.57\n102116 | Smart Home Tuulikki 855 | 5875.28 | 5737.07 | 46.07 | 111 | 108 | 420.05 | 8 | 5409.16\n101398 | Power Tools Havu Pro 689 | 5643.62 | 5643.62 | 0.00 | 68 | 68 | 601.30 | 7 | 5042.32\n101411 | Power Tools Nordhem 370 | 5487.85 | 5487.85 | 0.00 | 31 | 31 | 375.88 | 2 | 5111.97\n103329 | Living Room Havu Pro 936 | 5410.67 | 5410.67 | 0.00 | 11 | 11 | 0.00 | 0 | 5410.67\n101375 | Power Tools Selkämaa 638 | 5090.47 | 5090.47 | 0.00 | 22 | 22 | 377.07 | 2 | 4713.40\n101022 | Interior Paint Kultala 377 | 4799.53 | 4799.53 | 0.00 | 88 | 88 | 110.78 | 2 | 4688.75\n103697 | Storage Boxes Tuulikki 952 | 4364.03 | 4304.74 | 0.00 | 192 | 189 | 93.00 | 4 | 4271.03\n103075 | Cushions & Throws Tuulikki 338 | 4341.88 | 4318.14 | 0.00 | 407 | 404 | 278.12 | 27 | 4063.76\n101888 | Indoor Lighting Havu 419 | 4321.76 | 4279.44 | 0.00 | 88 | 87 | 191.69 | 4 | 4130.07\n101946 | Indoor Lighting Harmaja 965 | 4266.36 | 4217.54 | 0.00 | 153 | 151 | 86.16 | 3 | 4180.20\n101763 | Fixings & Fasteners Nordhem 594 | 4262"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:21:57",
+   "statement": "SELECT d.business_date, d.store_id, d.net_sales_before_returns rpt_gross, d.returns_net, d.net_sales, x.fact_net, x.fact_net_nostaff\nFROM rpt_daily_store_sales d\nJOIN (SELECT f.sale_date, s.store_id, sum(f.net_amount) fact_net, sum(CASE WHEN NOT f.staff_purchase_flag THEN f.net_amount END) fact_net_nostaff\n      FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE f.sale_date BETWEEN DATE '2026-09-14' AND DATE '2026-09-15' GROUP BY 1,2) x\n ON x.sale_date=d.business_date AND x.store_id=d.store_id\nWHERE d.business_date BETWEEN DATE '2026-09-14' AND DATE '2026-09-15' AND d.store_id IN (1,2,3,4,900,999)\nORDER BY 1,2\n",
+   "n": 9,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "business_date | store_id | rpt_gross | returns_net | net_sales | fact_net | fact_net_nostaff\n2026-09-14 | 900 | 12630.79 | 477.50 | 12153.29 | 7047.71 | 7047.71\n2026-09-15 | 900 | 9053.81 | 813.41 | 8240.40 | 5023.82 | 5023.82\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:22:06",
+   "statement": "WITH x AS (SELECT s.store_id, sum(f.net_amount) fact_all, sum(CASE WHEN NOT f.staff_purchase_flag THEN f.net_amount END) fact_nostaff, count(*) lines\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE f.sale_date BETWEEN DATE '2026-09-14' AND DATE '2026-09-20' GROUP BY 1),\nd AS (SELECT store_id, sum(net_sales_before_returns) rpt_gross, sum(returns_net) rpt_ret, sum(net_sales) rpt_net FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-09-14' AND DATE '2026-09-20' GROUP BY 1)\nSELECT coalesce(x.store_id,d.store_id) store_id, fact_all, fact_nostaff, rpt_gross, rpt_ret, rpt_net, lines FROM x FULL JOIN d ON x.store_id=d.store_id ORDER BY 1 LIMIT 12\n",
+   "n": 10,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "store_id | fact_all | fact_nostaff | rpt_gross | rpt_ret | rpt_net | lines\n101 | 8810.79 | 8687.85 | 8810.79 | 329.66 | 8481.13 | 351\n102 | 15288.66 | 15216.93 | 15288.66 | 1138.02 | 14150.64 | 540\n103 | 6311.43 | 6293.85 | 6311.43 | 113.03 | 6198.40 | 239\n104 | 8914.92 | 8854.75 | 8914.92 | 679.53 | 8235.39 | 381\n105 | 2066.33 | 2066.33 | 2066.33 | 117.67 | 1948.66 | 90\n106 | 2317.97 | 2303.25 | 2317.97 | 129.04 | 2188.93 | 100\n107 | 7493.25 | 7428.98 | 7493.25 | 146.45 | 7346.80 | 254\n108 | 11688.76 | 11600.67 | 11688.76 | 558.17 | 11130.59 | 461\n109 | 4999.01 | 4940.37 | 4999.01 | 447.88 | 4551.13 | 228\n110 | 10795.89 | 10744.33 | 10795.89 | 958.89 | 9837.00 | 421\n111 | 4730.54 | 4730.54 | 4730.54 | 288.11 | 4442.43 | 172\n112 | 3027.80 | 3027.80 | 3027.80 | 131.72 | 2896.08 | 138\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:22:17",
+   "statement": "WITH sold AS (\n  SELECT p.sku, sum(f.net_amount) AS sales_net\n  FROM fact_sales_line f\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_store st ON st.store_key = f.store_key\n  WHERE f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND st.store_id <> 999\n  GROUP BY p.sku),\nrefunded AS (\n  SELECT p.sku, sum(r.refund_net) AS refund_net\n  FROM fact_return_line r\n  JOIN dim_product p ON p.product_key = r.product_key\n  JOIN dim_store st ON st.store_key = r.store_key\n  WHERE r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND st.store_id <> 999\n  GROUP BY p.sku),\nnames AS (SELECT sku, max_by(product_name, valid_from) AS product_name, count(DISTINCT product_name) AS name_versions FROM dim_product GROUP BY sku)\nSELECT row_number() OVER (ORDER BY s.sales_net - coalesce(r.refund_net, 0) DESC) AS rank, s.sku, n.product_name,\n       round(s.sales_net - coalesce(r.refund_net, 0), 2) AS net_sales, n.name_versions\nFROM sold s LEFT JOIN refunded r USING (sku) JOIN names n USING (sku)\nORDER BY net_sales DESC LIMIT 12\n",
+   "n": 11,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "rank | sku | product_name | net_sales | name_versions\n1 | 100955 | Interior Paint Norvik 298 | 9361.97 | 1\n2 | 100927 | Outdoor Lighting Kultala 862 | 7476.52 | 1\n3 | 103415 | Home Office Peltola 918 | 7465.18 | 1\n4 | 103434 | Home Office Tuulikki 821 | 5584.57 | 1\n5 | 103329 | Living Room Havu Pro 936 | 5410.67 | 1\n6 | 102116 | Smart Home Tuulikki 855 | 5409.16 | 1\n7 | 101411 | Power Tools Nordhem 370 | 5111.97 | 1\n8 | 101398 | Power Tools Havu Pro 689 | 5042.32 | 1\n9 | 101375 | Power Tools Selkämaa 638 | 4713.40 | 1\n10 | 101022 | Interior Paint Kultala 377 | 4688.75 | 1\n11 | 103697 | Storage Boxes Tuulikki 952 | 4271.03 | 1\n12 | 101763 | Fixings & Fasteners Nordhem 594 | 4262.06 | 1\n(12 rows)"
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t04-r1",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T04",
+ "budget": 30,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "a74fb721a89e7f6c9c3498e409e5003025da1ba44daf0eeac44a9c62036e0108",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:07",
+   "statement": "SELECT strftime(f.sale_date,'%Y-%m') AS ym, s.store_id<900 AS physical, s.store_id=999 AS training,\n count(*) AS n_lines, count(DISTINCT (f.receipt_id, f.line_no)) AS n_keys, count(DISTINCT f.sales_line_id) AS n_ids,\n sum(f.gross_amount) AS gross, sum(f.net_amount) AS net, min(f.sale_date) mn, max(f.sale_date) mx\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY 1,2,3 ORDER BY 1,2,3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "ym | physical | training | n_lines | n_keys | n_ids | gross | net | mn | mx\n2024-08 | false | false | 4354 | 4354 | 4354 | 174410.47 | 140756.43 | 2024-08-01 | 2024-08-31\n2024-08 | false | true | 158 | 158 | 158 | 4282.23 | 3455.34 | 2024-08-01 | 2024-08-30\n2024-08 | true | false | 42757 | 42757 | 42757 | 1365081.89 | 1101807.91 | 2024-08-01 | 2024-08-31\n2024-09 | false | false | 4325 | 4325 | 4325 | 160395.63 | 127884.25 | 2024-09-01 | 2024-09-30\n2024-09 | false | true | 125 | 125 | 125 | 3351.71 | 2670.92 | 2024-09-02 | 2024-09-30\n2024-09 | true | false | 39234 | 39234 | 39234 | 1208912.16 | 964016.09 | 2024-09-01 | 2024-09-30\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:15",
+   "statement": "WITH l AS (\n SELECT f.*, s.store_id, p.category, p.vat_class\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND s.store_id<900\n)\nSELECT strftime(sale_date,'%Y-%m') ym, category='ZZ Test' AS test, vat_rate, vat_class, count(*) n,\n sum(gross_amount) g, sum(net_amount) nt, sum(CASE WHEN abs(gross_amount - net_amount*(1+vat_rate))>0.02 THEN 1 ELSE 0 END) AS mismatches,\n sum(CASE WHEN net_amount<=0 OR quantity<=0 THEN 1 ELSE 0 END) AS nonpos,\n count(DISTINCT etl_loaded_at) AS loads\nFROM l GROUP BY 1,2,3,4 ORDER BY 1,2,3,4\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "ym | test | vat_rate | vat_class | n | g | nt | mismatches | nonpos | loads\n2024-08 | false | 0.1000 | reduced10 | 54 | 1701.57 | 1546.85 | 0 | 0 | 26\n2024-08 | false | 0.1400 | reduced14 | 1885 | 10724.62 | 9406.75 | 0 | 0 | 31\n2024-08 | false | 0.2400 | standard | 40818 | 1352655.70 | 1090854.31 | 0 | 0 | 31\n2024-09 | false | 0.1000 | reduced10 | 57 | 2055.10 | 1868.21 | 0 | 0 | 23\n2024-09 | false | 0.1400 | reduced14 | 1128 | 6351.26 | 5570.91 | 0 | 0 | 30\n2024-09 | false | 0.2550 | standard | 38049 | 1200505.80 | 956576.97 | 0 | 0 | 30\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:18",
+   "statement": "WITH l AS (\n SELECT strftime(f.sale_date,'%Y-%m') ym, sum(f.net_amount) net\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND s.store_id<900 AND p.category<>'ZZ Test'\n GROUP BY 1),\nr AS (SELECT strftime(business_date,'%Y-%m') ym, sum(net_sales_before_returns) ctl, sum(returns_net) ret, min(business_date) mn, max(business_date) mx, count(*) n\n FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND store_id<900 GROUP BY 1)\nSELECT l.ym, l.net, r.ctl, l.net-r.ctl AS gap, r.ret, r.mn, r.mx, r.n FROM l JOIN r USING(ym) ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "ym | net | ctl | gap | ret | mn | mx | n\n2024-08 | 1101807.91 | 1101807.91 | 0.00 | 51492.65 | 2024-08-01 | 2024-08-31 | 1136\n2024-09 | 964016.09 | 964016.09 | 0.00 | 45299.75 | 2024-09-01 | 2024-09-30 | 1138\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:23",
+   "statement": "SELECT d.calendar_year, d.calendar_month, strftime(f.sale_date, '%B %Y') AS month_label,\n       SUM(f.gross_amount) AS store_sales_incl_vat_before_returns\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nWHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n  AND f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY 1, 2, 3 ORDER BY 1, 2\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "calendar_year | calendar_month | month_label | store_sales_incl_vat_before_returns\n2024 | 8 | August 2024 | 1365081.89\n2024 | 9 | September 2024 | 1208912.16\n(2 rows)"
+  }
+ ]
+}

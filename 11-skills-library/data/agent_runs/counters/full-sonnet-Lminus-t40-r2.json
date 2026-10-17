@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t40-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T40",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "fa20aea14253c1385ca05792460808166525d745be425a82fe917f597de132da",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:32:40",
+   "statement": "SELECT 'prod' k, CAST(product_key AS VARCHAR) a, CAST(sku AS VARCHAR) b, product_name c, category d, CAST(listed_from AS VARCHAR) e, CAST(delisted_on AS VARCHAR) f, CAST(valid_from AS VARCHAR) g, CAST(valid_to AS VARCHAR) h\nFROM dim_product WHERE sku = 101624 OR product_name ILIKE '%Kaakkuri%'\nUNION ALL\nSELECT 'week', fiscal_year, CAST(fiscal_week AS VARCHAR), CAST(min(calendar_date) AS VARCHAR), CAST(max(calendar_date) AS VARCHAR), CAST(max(is_trading_day) AS VARCHAR), CAST(min(is_trading_day) AS VARCHAR), fiscal_period_label, ''\nFROM dim_date WHERE calendar_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-08' GROUP BY fiscal_year, fiscal_week, fiscal_period_label\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "k | a | b | c | d | e | f | g | h\nprod | 1702 | 101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | 2019-01-01 | NULL | 2000-01-01 | 9999-12-31\nweek | FY2026/27 | 22 | 2026-09-28 | 2026-10-04 | true | true | FY2026/27 P06 | \n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:32:45",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current\nFROM dim_store WHERE city ILIKE '%Oulu%' OR store_name ILIKE '%Oulu%' OR store_name ILIKE '%Kaakkuri%' ORDER BY store_id, valid_from\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n37 | 131 | Oulu Kaakkuri | Oulu | North | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n38 | 132 | Oulu Linnanmaa | Oulu | North | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:32:51",
+   "statement": "SELECT f.sale_date, count(*) AS line_cnt, count(DISTINCT f.sales_line_id) AS distinct_lines, sum(f.quantity) AS units,\n       sum(CASE WHEN f.staff_purchase_flag THEN f.quantity ELSE 0 END) AS staff_units,\n       sum(CASE WHEN f.quantity < 0 THEN f.quantity ELSE 0 END) AS neg_units,\n       min(f.sale_ts_utc) AS min_ts, max(f.sale_ts_utc) AS max_ts, sum(f.net_amount) AS net, max(f.etl_loaded_at) AS loaded\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE s.store_id = 131 AND p.sku = 101624 AND f.sale_date BETWEEN DATE '2026-09-26' AND DATE '2026-10-06'\nGROUP BY f.sale_date ORDER BY f.sale_date\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "sale_date | line_cnt | distinct_lines | units | staff_units | neg_units | min_ts | max_ts | net | loaded\n2026-09-28 | 1 | 1 | 1 | 0 | 0 | 2026-09-28T13:25:01 | 2026-09-28T13:25:01 | 1.91 | 2026-09-29T01:00:00\n2026-09-29 | 1 | 1 | 2 | 0 | 0 | 2026-09-29T11:28:06 | 2026-09-29T11:28:06 | 2.29 | 2026-09-30T01:00:00\n2026-10-01 | 1 | 1 | 1 | 0 | 0 | 2026-10-01T15:18:07 | 2026-10-01T15:18:07 | 1.91 | 2026-10-02T01:00:00\n2026-10-02 | 2 | 2 | 9 | 0 | 0 | 2026-10-02T09:15:36 | 2026-10-02T11:39:24 | 17.19 | 2026-10-03T01:00:00\n2026-10-03 | 2 | 2 | 2 | 0 | 0 | 2026-10-03T09:15:21 | 2026-10-03T13:28:38 | 3.63 | 2026-10-04T01:00:00\n2026-10-04 | 1 | 1 | 2 | 0 | 0 | 2026-10-04T14:48:57 | 2026-10-04T14:48:57 | 3.82 | 2026-10-05T01:00:00\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:32:57",
+   "statement": "SELECT f.sales_line_id, f.receipt_id, f.line_no, f.sale_date, f.sale_ts_utc, f.store_key, f.product_key, f.member_key, f.channel_code, f.quantity, f.net_amount, f.gross_amount, f.vat_rate, f.standard_cost, f.staff_purchase_flag,\n       (SELECT count(*) FROM fact_sales_line g WHERE g.receipt_id = f.receipt_id AND g.line_no = f.line_no) AS dup_receipt_line,\n       (SELECT coalesce(sum(r.quantity_returned),0) FROM fact_return_line r WHERE r.sales_line_id = f.sales_line_id) AS qty_returned_all_time,\n       (SELECT min(r.return_date) FROM fact_return_line r WHERE r.sales_line_id = f.sales_line_id) AS first_return\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE s.store_id = 131 AND p.sku = 101624 AND f.sale_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04'\nORDER BY f.sale_ts_utc\n",
+   "n": 4,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "sales_line_id | receipt_id | line_no | sale_date | sale_ts_utc | store_key | product_key | member_key | channel_code | quantity | net_amount | gross_amount | vat_rate | standard_cost | staff_purchase_flag | dup_receipt_line | qty_returned_all_time | first_return\n1500158 | 10573338 | 3 | 2026-09-28 | 2026-09-28T13:25:01 | 37 | 1702 | 89067 | NULL | 1 | 1.91 | 2.40 | 0.2550 | 0.64 | false | 1 | 0 | NULL\n1501348 | 10573760 | 2 | 2026-09-29 | 2026-09-29T11:28:06 | 37 | 1702 | 73953 | NULL | 2 | 2.29 | 2.87 | 0.2550 | 1.28 | false | 1 | 0 | NULL\n1504943 | 10575133 | 1 | 2026-10-01 | 2026-10-01T15:18:07 | 37 | 1702 | 21678 | NULL | 1 | 1.91 | 2.40 | 0.2550 | 0.64 | false | 1 | 0 | NULL\n1505814 | 10575443 | 1 | 2026-10-02 | 2026-10-02T09:15:36 | 37 | 1702 | 10174 | NULL | 4 | 7.64 | 9.59 | 0.2550 | 2.56 | false | 1 | 0 | NULL\n1506207 | 10575615 | 1 | 2026-10-02 | 2026-10-02T11:39:24 | 37 | 1702 | NULL | NULL | 5 | 9.55 | 11.99 | 0.2550 | 3.20 | false | 1 | 0 | NULL\n1507678 | 10576215 | 5 | 2026-10-03 | 2026-10-03T09:15:21 | 37 | 1702 | 12604 | NULL | 1 | 1.91 | 2.40 | 0.2550 | 0.64 | false | 1 | 0 | NULL\n1508707 | 10576649 | 2 | 2026-10-03 | 2026-10-03T13:28:38 | 37 | 1702 | 48440 | NULL | 1 | 1.72 | 2.16 | 0.2550 | 0.64 | false | 1 | 0 | NULL\n1510199 | 10577283 | 1 | 2026-10-04 | 2026-10-04T14:48:57 | 37 | 1702 | 17460 | NULL | 2 | 3.82 | 4.79 | 0.2550 | 1.28 | false | 1 | 0 | NULL\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:33:04",
+   "statement": "WITH f AS (\n  SELECT f.sale_date, sum(f.quantity) AS units, count(DISTINCT f.receipt_id) AS receipts, sum(f.net_amount) AS net_before_returns\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 131 AND f.sale_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04' AND p.category <> 'ZZ Test'\n  GROUP BY f.sale_date)\nSELECT r.business_date, r.units_sold AS rpt_units, f.units AS fact_units, r.receipts AS rpt_receipts, f.receipts AS fact_receipts, r.net_sales_before_returns AS rpt_net, f.net_before_returns AS fact_net\nFROM rpt_daily_store_sales r FULL JOIN f ON f.sale_date = r.business_date\nWHERE r.store_id = 131 AND r.business_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04' ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "business_date | rpt_units | fact_units | rpt_receipts | fact_receipts | rpt_net | fact_net\n2026-09-28 | 118 | 118 | 28 | 28 | 1526.61 | 1526.61\n2026-09-29 | 105 | 105 | 24 | 24 | 1373.94 | 1373.94\n2026-09-30 | 97 | 97 | 22 | 22 | 1398.42 | 1398.42\n2026-10-01 | 128 | 128 | 31 | 31 | 1566.12 | 1566.12\n2026-10-02 | 183 | 183 | 40 | 40 | 2062.82 | 2062.82\n2026-10-03 | 142 | 142 | 33 | 33 | 1618.34 | 1618.34\n2026-10-04 | 91 | 91 | 25 | 25 | 1286.63 | 1286.63\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:33:07",
+   "statement": "SELECT s.store_id, s.store_name, p.sku, p.product_name, SUM(f.quantity) AS units_sold\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE s.store_id = 131 AND s.store_id <> 999 AND p.sku = 101624 AND p.category <> 'ZZ Test'\n  AND f.sale_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04'\nGROUP BY s.store_id, s.store_name, p.sku, p.product_name\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | sku | product_name | units_sold\n131 | Oulu Kaakkuri | 101624 | Fixings & Fasteners Raudikko 251 | 17\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t52-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T52",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "a478b9ec32178d380beaa2bc2b63cce5c3e48588b6648c60423f9b6022b9b279",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:23:05",
+   "statement": "SELECT 'store' k, CAST(store_key AS VARCHAR) a, CAST(store_id AS VARCHAR) b, store_name c, region d, CAST(valid_from AS VARCHAR) e, CAST(valid_to AS VARCHAR) f FROM dim_store WHERE store_name ILIKE '%Pit%' OR store_id=102\nUNION ALL\nSELECT 'period', fiscal_period_label, CAST(period_start_date AS VARCHAR), CAST(period_end_date AS VARCHAR), CAST(fully_loaded AS VARCHAR), '', '' FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=5\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "k | a | b | c | d | e | f\nstore | 3 | 102 | Helsinki Pitäjänmäki | South | 2000-01-01 | 2025-04-27\nstore | 4 | 102 | Helsinki Pitäjänmäki | Capital Region | 2025-04-28 | 9999-12-31\nstore | 15 | 110 | Turku Kupittaa | South | 2000-01-01 | 9999-12-31\nperiod | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | true |  | \n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:23:09",
+   "statement": "SELECT count(*) n, count(DISTINCT sales_line_id) ids, count(DISTINCT (receipt_id, line_no)) rl, count(DISTINCT etl_loaded_at) loads, min(sale_date), max(sale_date), sum(quantity) q, sum(CASE WHEN quantity<=0 THEN 1 ELSE 0 END) nonpos\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE s.store_id=102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | ids | rl | loads | min(sale_date) | max(sale_date) | q | nonpos\n2121 | 2121 | 2121 | 28 | 2026-08-31 | 2026-09-27 | 3740 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:23:15",
+   "statement": "WITH sold AS (\n  SELECT cp.sku, cp.product_name, cp.category, cp.subcategory, SUM(f.quantity) units, SUM(f.net_amount) net, count(*) lines\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product p ON p.product_key=f.product_key\n  JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\n  WHERE s.store_id=102 AND p.category<>'ZZ Test'\n    AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n  GROUP BY 1,2,3,4\n), ret AS (\n  SELECT p.sku, SUM(r.quantity_returned) ret_units\n  FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\n  WHERE s.store_id=102 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n  GROUP BY 1\n)\nSELECT sold.*, COALESCE(ret.ret_units,0) ret_units FROM sold LEFT JOIN ret USING (sku) ORDER BY units DESC LIMIT 8\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "sku | product_name | category | subcategory | units | net | lines | ret_units\n101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | Fixings & Fasteners | 52 | 98.17 | 14 | 0\n101778 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | Fixings & Fasteners | 44 | 172.40 | 13 | 0\n102244 | Batteries & Bulbs Havu Pro 791 | Electrical | Batteries & Bulbs | 42 | 193.07 | 19 | 1\n102233 | Batteries & Bulbs Havu Pro 384 | Electrical | Batteries & Bulbs | 30 | 310.74 | 12 | 0\n103670 | Storage Boxes Vesikko 753 | Cleaning & Household | Storage Boxes | 30 | 258.39 | 17 | 0\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | Plumbing Parts | 29 | 162.11 | 14 | 1\n102213 | Batteries & Bulbs Kuusela 444 | Electrical | Batteries & Bulbs | 29 | 256.03 | 12 | 0\n103545 | Cleaning Products Poutaranta Home 928 | Cleaning & Household | Cleaning Products | 29 | 120.12 | 15 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:23:20",
+   "statement": "WITH a AS (\n SELECT sum(f.net_amount) n, sum(f.quantity) q, count(DISTINCT f.receipt_id) r\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE s.store_id=102 AND p.category<>'ZZ Test' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'),\nb AS (SELECT sum(net_sales_before_returns) n, sum(units_sold) q, sum(receipts) r FROM rpt_daily_store_sales WHERE store_id=102 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27')\nSELECT a.n, b.n, a.q, b.q, a.r, b.r FROM a, b\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | n | q | q | r | r\n57200.59 | 57200.59 | 3740 | 3740 | 923 | 923\n(1 row)"
+  }
+ ]
+}

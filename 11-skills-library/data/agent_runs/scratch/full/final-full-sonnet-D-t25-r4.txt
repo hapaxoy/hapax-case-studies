@@ -1,0 +1,73 @@
+```json
+{
+  "sql": "WITH first_version AS (\n    SELECT member_id, join_date, home_store_id,\n           row_number() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS version_no\n    FROM dim_member\n)\nSELECT s.store_id, s.store_name, COUNT(DISTINCT m.member_id) AS new_members\nFROM first_version m\nJOIN dim_store s ON s.store_id = m.home_store_id AND s.is_current\nWHERE m.version_no = 1\n  AND m.join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03'\n  AND s.store_id <> 999\nGROUP BY 1, 2\nORDER BY 1",
+  "result": {
+    "columns": ["store_id", "store_name", "new_members"],
+    "rows": [
+      [101, "Helsinki Vuosaari", 351],
+      [102, "Helsinki Pitäjänmäki", 597],
+      [103, "Espoo Lommila", 281],
+      [104, "Vantaa Tammisto", 485],
+      [105, "Kerava", 147],
+      [106, "Porvoo", 171],
+      [107, "Hyvinkää", 287],
+      [108, "Lahti", 500],
+      [109, "Hämeenlinna", 295],
+      [110, "Turku Kupittaa", 500],
+      [111, "Turku Härmälä", 261],
+      [112, "Raisio", 156],
+      [113, "Salo", 133],
+      [114, "Kouvola", 249],
+      [115, "Tampere Hervanta", 696],
+      [116, "Tampere Lielahti", 459],
+      [117, "Tampere Kaleva", 447],
+      [118, "Nokia", 373],
+      [119, "Pori", 342],
+      [120, "Rauma", 144],
+      [121, "Vaasa", 344],
+      [122, "Seinäjoki", 331],
+      [123, "Kokkola", 167],
+      [124, "Jyväskylä Palokka", 309],
+      [125, "Kuopio", 484],
+      [126, "Joensuu", 378],
+      [127, "Mikkeli", 289],
+      [128, "Lappeenranta", 330],
+      [129, "Savonlinna", 113],
+      [130, "Kotka", 143],
+      [131, "Oulu Kaakkuri", 536],
+      [132, "Oulu Linnanmaa", 311],
+      [133, "Kemi", 157],
+      [134, "Rovaniemi", 237],
+      [135, "Kajaani", 133],
+      [136, "Tampere Lamminpää", 304],
+      [137, "Lohja", 155],
+      [138, "Iisalmi", 157],
+      [139, "Raahe", 170],
+      [900, "Tuomimetsä web shop", 2932]
+    ]
+  },
+  "definitions_applied": [
+    "New member counted on their join date at the home store in their first dim_member version (the store where they enrolled)",
+    "Online sign-ups sit under store 900 (Tuomimetsä web shop) and are shown as their own row",
+    "Members counted by distinct member_id, not by member_key, so later tier, store or consent versions do not add rows",
+    "Store 999 (training store) left out; it has no sign-ups in the period, so no total changed",
+    "Fiscal year FY2025/26 from the company calendar (28 April 2025 to 3 May 2026), using the dates directly rather than calendar months",
+    "Store names taken from the current dim_store version (store_id plus is_current)"
+  ],
+  "assumptions": [
+    "'Last year' (request received 7 October 2026, during FY2026/27) read as FY2025/26, following the past readings for FY2026/27 requests (REQ-D04, D08, D28, D35). That is 28 April 2025 to 3 May 2026.",
+    "Week 53 (27 April to 3 May 2026) is kept in, because there is no year-on-year comparison in this request (as in REQ-D12 and REQ-D35)",
+    "'Each store' read as the 39 physical stores that had sign-ups plus the web shop as its own row. All 39 had at least one sign-up, so no store is missing.",
+    "Stores are listed by their store number and current name, with no region grouping, because none was asked for",
+    "Sign-ups are attributed to the store as it is now, but home_store_id is a store number, so region changes do not affect the counts"
+  ],
+  "caveats": [
+    "If Marketing meant calendar year 2025 instead of the fiscal year, the figures will differ. Say so and I will rerun it.",
+    "Savonlinna (129) closed on 25 January 2026, so its 113 sign-ups cover only the part of the year it was open (last sign-up 24 January 2026).",
+    "Tampere Lamminpää (136) and Lohja (137) opened in autumn 2024, so they are open for all of FY2025/26 and their counts are comparable with the others.",
+    "Data oddity, left as recorded: 24 sign-ups are booked to Pori (119) inside its refit closure (8 September to 12 October 2025), and many stores have a few sign-ups dated on days they were shut (holidays). I did not remove them, because the join date and home store in dim_member are the defined source. A check with the store would be needed if these matter.",
+    "No corrections to the totals were needed. Every member has a single join date across versions, and the first version's valid_from equals the join date. Distinct member_id counts equal row counts, so there are no duplicate sign-ups. The total across all rows is 14,854 new members (including 2,932 online).",
+    "The control-total check against rpt_daily_store_sales does not apply to member counts."
+  ]
+}
+```

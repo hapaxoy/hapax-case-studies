@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH sold AS (SELECT f.sales_line_id, f.net_amount, p.sku FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_quarter = 1 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT 'FY2025/26' AS fiscal_year, 1 AS fiscal_quarter, cp.subcategory, ROUND(100.0 * SUM(COALESCE(r.refund_net, 0)) / SUM(sold.net_amount), 2) AS return_rate_pct FROM sold JOIN dim_product cp ON cp.sku = sold.sku AND cp.is_current LEFT JOIN refunds r ON r.sales_line_id = sold.sales_line_id WHERE cp.category = 'Garden' AND cp.subcategory &lt;&gt; 'Outdoor Lighting' GROUP BY cp.subcategory ORDER BY cp.subcategory",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_quarter", "subcategory", "return_rate_pct"],
+    "rows": [
+      ["FY2025/26", 1, "Barbecue &amp; Grills", 7.26],
+      ["FY2025/26", 1, "Edible Plants &amp; Seeds", 0.96],
+      ["FY2025/26", 1, "Garden Furniture", 12.87],
+      ["FY2025/26", 1, "Garden Tools", 5.35],
+      ["FY2025/26", 1, "Plants &amp; Flowers", 2.74],
+      ["FY2025/26", 1, "Pots &amp; Planters", 3.86],
+      ["FY2025/26", 1, "Soil &amp; Fertiliser", 1.58]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: refund_net divided by sold net_amount, both excluding VAT",
+    "Sale-week cohort: sold lines selected by the fiscal quarter of fact_sales_line.sale_date, with refunds matched through sales_line_id whenever and wherever they were booked, web included",
+    "As-is hierarchy: category and subcategory taken from the current product version (dim_product.is_current, joined on sku)",
+    "Outdoor lighting treated as Electrical for all history (moved from Garden on 27 October 2025)",
+    "Store 999 and category ZZ Test excluded",
+    "Fiscal calendar from dim_date (FY2025/26 Q1 = fiscal weeks 1 to 13, 28 April to 27 July 2025)",
+    "Deprecated objects not used (no stg_, bak_, tmp_, old dim tables, rpt.v_ views, channel_code)"
+  ],
+  "assumptions": [
+    "'Q1 of last year' on 6 October 2026 (current year FY2026/27) is read as FY2025/26 Q1, 28 April to 27 July 2025. This follows past readings of 'last year' made in FY2026/27 (REQ-D04, D08, D28, D35).",
+    "Hierarchy is as-is, since the request did not ask for as-was. Category management reporting restates history on the current hierarchy.",
+    "All channels are included (stores and the web shop, store 900), as in the accepted return-rate queries REQ-D14 to D16. Web is not shown separately because the request did not ask for it.",
+    "Staff purchases are kept in, as in the sales definitions."
+  ],
+  "caveats": [
+    "Correction 1: five outdoor-lighting articles (SKUs 100870, 100877, 100879, 100916, 100917) were delisted before the 27 October 2025 move. They never got an Electrical version, so the current dim_product row still says Garden / Outdoor Lighting. Read literally, this gives a spurious 'Outdoor Lighting' row under Garden (19 lines, EUR 375 sold, no returns, rate 0.0%). I treated them as Electrical, as the as-is rule requires, and removed that row. The remaining outdoor lighting (68 articles) is Electrical as-is, so Garden has seven subcategories. Electrical Outdoor Lighting would have shown 7.22% for the same quarter.",
+    "Correction 2: store 999 (390 sales lines in the quarter) and ZZ Test articles were excluded.",
+    "Returns on the quarter's sales that arrived later are all included. The warehouse is loaded to 4 October 2026, past the 30-day return window, so the cohort is complete. 439 return lines in the data arrived more than 30 days after the sale and are counted.",
+    "Checks passed. No duplicate sales or return lines. No returns without a sales line, none dated before the sale, and none refunding more than the line value. No sales lines are lost in the store or product joins.",
+    "Sold values (EUR net) behind the rates: Barbecue &amp; Grills 176074.46, Edible Plants &amp; Seeds 74584.72, Garden Furniture 406939.18, Garden Tools 276601.44, Plants &amp; Flowers 441427.45, Pots &amp; Planters 144538.28, Soil &amp; Fertiliser 147290.55.",
+    "The rpt_daily_store_sales control total was not run. It applies to store-level figures and not to a category subset, so it does not apply to this request.",
+    "Return rate is the value share (refund net divided by sold net), not a unit share. It is dated by the sale quarter, not the return date, so it differs by design from net sales, which are dated by return date."
+  ]
+}
+```

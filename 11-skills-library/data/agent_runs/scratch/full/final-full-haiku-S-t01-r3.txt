@@ -1,0 +1,35 @@
+Based on my analysis of the DuckDB warehouse, I have completed the like-for-like comparison for period 4. Let me provide the final answer.
+
+```json
+{
+  "sql": "WITH lfl_stores AS (SELECT DISTINCT store_id FROM dim_store WHERE (open_date IS NULL OR open_date <= '2024-07-29') AND (close_date IS NULL OR close_date >= '2025-08-24') AND store_id NOT IN (900, 999)), p4_sales AS (SELECT d.fiscal_year, d.fiscal_period, s.store_id, s.store_name, SUM(f.net_amount) as store_sales FROM fact_sales_line f JOIN dim_date d ON f.sale_date = d.calendar_date JOIN dim_store s ON f.store_key = s.store_key WHERE (d.fiscal_year = 'FY2024/25' OR d.fiscal_year = 'FY2025/26') AND d.fiscal_period = 4 AND f.channel_code = 'ST' AND s.store_id IN (SELECT store_id FROM lfl_stores) GROUP BY d.fiscal_year, d.fiscal_period, s.store_id, s.store_name) SELECT fiscal_year, SUM(store_sales) as total_net_sales, COUNT(DISTINCT store_id) as store_count, ROUND(SUM(store_sales) / COUNT(DISTINCT store_id), 2) as avg_store_sales FROM p4_sales GROUP BY fiscal_year ORDER BY fiscal_year",
+  "result": {
+    "columns": ["fiscal_year", "net_sales_eur", "stores_in_sample"],
+    "rows": [
+      ["FY2024/25", 971437.06, 37],
+      ["FY2025/26", 1029197.29, 37],
+      ["Like-for-like change", 57760.23, null],
+      ["Like-for-like change %", 5.9, null]
+    ]
+  },
+  "definitions_applied": [
+    "Like-for-like: stores operating during both P4 periods (FY2024/25 P04: 2024-07-29 to 2024-08-25; FY2025/26 P04: 2025-07-28 to 2025-08-24)",
+    "Store channel sales only (excludes web orders, training store 999, web shop 900)",
+    "Net sales: net amount excluding VAT after line discounts",
+    "Period 4: fiscal period 4 as defined in ref_fiscal_calendar"
+  ],
+  "assumptions": [
+    "Like-for-like sample includes stores with open_date NULL or before 2024-07-29, and close_date NULL or on/after 2025-08-24",
+    "Web shop (store_id 900) and training store (store_id 999) excluded from store operations comparison",
+    "Channel filter (ST = store channel) applied to exclude WB (web) sales",
+    "'This year' interpreted as FY2025/26, 'last year' as FY2024/25"
+  ],
+  "caveats": [
+    "One store (Savonlinna, store_id 129) was closed after the P4 2025 period (2026-01-25) but was operating during both P4 periods, so it is included in the LFL sample",
+    "Store Porvoo (store_id 106) never closed (close_date NULL) and is included; its close date is unknown",
+    "Capital Region stores (101-105) were reclassified from South region on 2025-04-28, so regional breakdowns show different assignments across periods; this analysis reports combined LFL performance",
+    "Like-for-like comparison is on 37 stores only, excluding 4 stores (Tampere Lamminpää and Lohja opened after P4 2024, and web/training locations)",
+    "All figures in EUR excluding VAT"
+  ]
+}
+```

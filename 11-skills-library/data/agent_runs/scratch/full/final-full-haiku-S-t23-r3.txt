@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH sales_period2 AS (\n  SELECT \n    ds.format,\n    fsl.sales_line_id,\n    fsl.net_amount\n  FROM fact_sales_line fsl\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  WHERE fsl.sale_date BETWEEN '2025-05-26' AND '2025-06-22'\n    AND ds.store_id &lt; 900\n    AND ds.format IN ('Large', 'Medium', 'Small')\n),\nreturns_for_sales AS (\n  SELECT \n    sp.format,\n    sp.sales_line_id,\n    sp.net_amount,\n    COALESCE(frl.refund_net, 0) as refund_net\n  FROM sales_period2 sp\n  LEFT JOIN fact_return_line frl ON frl.sales_line_id = sp.sales_line_id\n)\nSELECT \n  format,\n  ROUND(SUM(refund_net) * 100.0 / SUM(net_amount), 2) as return_share_pct\nFROM returns_for_sales\nGROUP BY format\nORDER BY format",
+  "result": {
+    "columns": ["format", "return_share_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28]
+    ]
+  },
+  "definitions_applied": [
+    "Period 2 of the fiscal year, defined as 2025-05-26 to 2025-06-22 for FY2025/26",
+    "Store format from physical retail locations (excludes Web and Training pseudo-locations)",
+    "Return share calculated as (total refund value / total sales value) × 100",
+    "Net amounts used (excluding VAT) per standard financial reporting practice"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2025/26, the fiscal year immediately prior to the current FY2026/27",
+    "Store format means physical retail store formats (Large, Medium, Small), excluding Web and Training channels",
+    "Return share is measured by refund value ratio, not unit count",
+    "Returns are linked to original sales via sales_line_id; partial returns are counted in their entirety"
+  ],
+  "caveats": [
+    "No data quality issues detected; all sales and return records for the period validated",
+    "Small format stores show the lowest return share (4.28%), while Medium format shows the highest (4.53%)",
+    "Differences are modest (0.25 percentage points), suggesting consistent return behaviour across formats"
+  ]
+}
+```

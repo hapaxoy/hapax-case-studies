@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-Lminus-t49-r1",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T49",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "78c4e530c4f89bb86fd0dc86835e560581029afed0bf6c2a80e84e749f4c793e",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:02:33",
+   "statement": "SELECT format, count(*) AS versions, count(DISTINCT store_id) AS stores, min(store_id) AS min_id, max(store_id) AS max_id,\n (SELECT count(*) FROM (SELECT store_id FROM dim_store GROUP BY 1 HAVING count(DISTINCT format)>1)) AS stores_with_format_change,\n (SELECT fiscal_period_label||' '||min(calendar_date)||' '||max(calendar_date)||' '||max(is_trading_day::int) FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=4 GROUP BY fiscal_period_label) AS p4\nFROM dim_store GROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | versions | stores | min_id | max_id | stores_with_format_change | p4\nLarge | 10 | 8 | 102 | 131 | 0 | FY2026/27 P04 2026-08-03 2026-08-30 1\nMedium | 21 | 18 | 101 | 136 | 0 | FY2026/27 P04 2026-08-03 2026-08-30 1\nSmall | 14 | 13 | 105 | 139 | 0 | FY2026/27 P04 2026-08-03 2026-08-30 1\nTraining | 1 | 1 | 999 | 999 | 0 | FY2026/27 P04 2026-08-03 2026-08-30 1\nWeb | 1 | 1 | 900 | 900 | 0 | FY2026/27 P04 2026-08-03 2026-08-30 1\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:02:38",
+   "statement": "SELECT count(*) AS lines, count(DISTINCT (receipt_id, line_no)) AS distinct_lines, count(DISTINCT sales_line_id) AS distinct_ids,\n count(DISTINCT receipt_id) AS receipts,\n (SELECT count(*) FROM (SELECT receipt_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY 1 HAVING count(DISTINCT store_key)>1 OR count(DISTINCT sale_date)>1)) AS receipts_multi_store_or_date,\n sum((net_amount<=0)::int) AS nonpositive_lines, min(sale_date), max(sale_date),\n (SELECT fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=4) AS loaded\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | distinct_lines | distinct_ids | receipts | receipts_multi_store_or_date | nonpositive_lines | min(sale_date) | max(sale_date) | loaded\n48107 | 48107 | 48107 | 21311 | 0 | 0 | 2026-08-03 | 2026-08-30 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:02:44",
+   "statement": "WITH src AS (\n  SELECT cs.store_id, cs.format, f.receipt_id, f.net_amount, f.staff_purchase_flag\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n    AND s.store_id < 900 AND p.category <> 'ZZ Test'\n), mine AS (\n  SELECT format, count(DISTINCT receipt_id) AS all_receipts, sum(net_amount) AS all_net,\n    count(DISTINCT receipt_id) FILTER (WHERE NOT staff_purchase_flag) AS rcpt,\n    sum(net_amount) FILTER (WHERE NOT staff_purchase_flag) AS net\n  FROM src GROUP BY 1\n), ctl AS (\n  SELECT cs.format, sum(r.receipts) AS ctl_receipts, sum(r.net_sales_before_returns) AS ctl_net\n  FROM rpt_daily_store_sales r JOIN dim_store cs ON cs.store_id = r.store_id AND cs.is_current\n  WHERE r.business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND r.store_id < 900\n  GROUP BY 1\n)\nSELECT m.format, all_receipts, ctl_receipts, all_net, ctl_net, rcpt, net, round(net/rcpt,2) AS atv, round(all_net/all_receipts,2) AS atv_incl_staff\nFROM mine m JOIN ctl c USING (format) ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | all_receipts | ctl_receipts | all_net | ctl_net | rcpt | net | atv | atv_incl_staff\nLarge | 6607 | 6607 | 400409.69 | 400409.69 | 6508 | 394865.46 | 60.67 | 60.6\nMedium | 8779 | 8779 | 528036.85 | 528036.85 | 8641 | 520763.45 | 60.27 | 60.15\nSmall | 2641 | 2641 | 133820.18 | 133820.18 | 2598 | 131841.05 | 50.75 | 50.67\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:02:52",
+   "statement": "SELECT (SELECT count(*) FROM (SELECT receipt_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY 1 HAVING count(DISTINCT staff_purchase_flag)>1)) AS mixed_staff_receipts,\n (SELECT count(*) FROM fact_sales_line f JOIN dim_product p USING (product_key) JOIN dim_store s USING (store_key) WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND p.category='ZZ Test') AS zz_lines_in_stores,\n (SELECT count(*) FROM fact_sales_line f JOIN dim_store s USING (store_key) WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id=999) AS lines_999\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mixed_staff_receipts | zz_lines_in_stores | lines_999\n0 | 0 | 127\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:02:57",
+   "statement": "WITH params AS (SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period)\nSELECT params.fiscal_year, params.fiscal_period, cs.format,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900\n  AND NOT f.staff_purchase_flag\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY 1, 2, 3\nORDER BY 3\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | format | atv\nFY2026/27 | 4 | Large | 60.67\nFY2026/27 | 4 | Medium | 60.27\nFY2026/27 | 4 | Small | 50.75\n(3 rows)"
+  }
+ ]
+}

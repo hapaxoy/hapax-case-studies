@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-D-t48-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T48",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "13cc588532c450269771163343630c3411c862c56946bfea5063069836ce3666",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:04",
+   "statement": "SELECT d.fiscal_week, d.fiscal_week_end_date, ref.period_start_date, ref.period_end_date, ref.fully_loaded,\n       COUNT(*) AS n_rows,\n       COUNT(DISTINCT (f.store_key, f.product_key)) AS n_distinct_keys,\n       COUNT(DISTINCT f.etl_loaded_at) AS n_loads,\n       SUM(f.closing_value) AS raw_value\nFROM fact_stock_week f\nJOIN dim_date d ON d.calendar_date = f.week_ending_date\nJOIN ref_fiscal_calendar ref ON ref.fiscal_year = d.fiscal_year AND ref.fiscal_period = d.fiscal_period\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3 AND p.category = 'Paint & Decorating' AND s.store_id < 900\nGROUP BY ALL ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "fiscal_week | fiscal_week_end_date | period_start_date | period_end_date | fully_loaded | n_rows | n_distinct_keys | n_loads | raw_value\n9 | 2026-07-05 | 2026-06-29 | 2026-08-02 | true | 2699 | 2699 | 1 | 341138.89\n10 | 2026-07-12 | 2026-06-29 | 2026-08-02 | true | 2674 | 2674 | 1 | 341742.53\n11 | 2026-07-19 | 2026-06-29 | 2026-08-02 | true | 2674 | 2674 | 1 | 344245.91\n12 | 2026-07-26 | 2026-06-29 | 2026-08-02 | true | 2674 | 2674 | 1 | 349160.39\n13 | 2026-08-02 | 2026-06-29 | 2026-08-02 | true | 2674 | 2674 | 1 | 346046.42\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:10",
+   "statement": "WITH x AS (\n  SELECT d.fiscal_week, s.store_id, p.sku, cp.category AS cur_cat, p.category AS asof_cat, f.closing_units, f.closing_value, f.store_key, f.product_key, p.standard_unit_cost, f.etl_loaded_at\n  FROM fact_stock_week f\n  JOIN dim_date d ON d.calendar_date = f.week_ending_date\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3 AND cp.category = 'Paint & Decorating' AND s.store_id < 900\n)\nSELECT fiscal_week, COUNT(*) n, COUNT(DISTINCT (store_id, sku)) nat, COUNT(DISTINCT store_id) stores, COUNT(DISTINCT sku) skus,\n SUM(closing_value) v, SUM(CASE WHEN asof_cat<>cur_cat THEN 1 ELSE 0 END) catdiff,\n SUM(CASE WHEN closing_units<0 THEN 1 ELSE 0 END) neg,\n SUM(CASE WHEN ABS(closing_value - closing_units*standard_unit_cost)>0.02 THEN 1 ELSE 0 END) valmismatch\nFROM x GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "fiscal_week | n | nat | stores | skus | v | catdiff | neg | valmismatch\n9 | 2699 | 2699 | 38 | 361 | 341138.89 | 0 | 0 | 0\n10 | 2674 | 2674 | 38 | 358 | 341742.53 | 0 | 0 | 0\n11 | 2674 | 2674 | 38 | 358 | 344245.91 | 0 | 0 | 0\n12 | 2674 | 2674 | 38 | 358 | 349160.39 | 0 | 0 | 0\n13 | 2674 | 2674 | 38 | 358 | 346046.42 | 0 | 0 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:17",
+   "statement": "WITH stores AS (SELECT DISTINCT store_id FROM dim_store WHERE is_current AND store_id < 900 AND store_id <> 999),\nwk AS (SELECT DISTINCT fiscal_week, fiscal_week_end_date FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=3),\ncnt AS (\n  SELECT d.fiscal_week, s.store_id, COUNT(*) n, SUM(f.closing_value) v\n  FROM fact_stock_week f JOIN dim_date d ON d.calendar_date=f.week_ending_date\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product p ON p.product_key=f.product_key JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\n  WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=3 AND cp.category='Paint & Decorating'\n  GROUP BY 1,2)\nSELECT st.store_id, cs.store_name, cs.close_date, cs.open_date,\n  MAX(CASE WHEN w.fiscal_week=9 THEN c.n END) w9, MAX(CASE WHEN w.fiscal_week=10 THEN c.n END) w10,\n  MAX(CASE WHEN w.fiscal_week=11 THEN c.n END) w11, MAX(CASE WHEN w.fiscal_week=12 THEN c.n END) w12,\n  MAX(CASE WHEN w.fiscal_week=13 THEN c.n END) w13\nFROM stores st CROSS JOIN wk w LEFT JOIN cnt c ON c.store_id=st.store_id AND c.fiscal_week=w.fiscal_week\nJOIN dim_store cs ON cs.store_id=st.store_id AND cs.is_current\nGROUP BY ALL ORDER BY st.store_id\n",
+   "n": 3,
+   "ok": true,
+   "rows": 39,
+   "output_preview": "store_id | store_name | close_date | open_date | w9 | w10 | w11 | w12 | w13\n101 | Helsinki Vuosaari | NULL | NULL | 70 | 69 | 69 | 69 | 69\n102 | Helsinki Pitäjänmäki | NULL | NULL | 114 | 111 | 111 | 111 | 111\n103 | Espoo Lommila | NULL | NULL | 67 | 66 | 66 | 66 | 66\n104 | Vantaa Tammisto | NULL | NULL | 126 | 124 | 124 | 124 | 124\n105 | Kerava | NULL | NULL | 34 | 34 | 34 | 34 | 34\n106 | Porvoo | NULL | NULL | 36 | 34 | 34 | 34 | 34\n107 | Hyvinkää | NULL | NULL | 63 | 63 | 63 | 63 | 63\n108 | Lahti | NULL | NULL | 108 | 108 | 108 | 108 | 108\n109 | Hämeenlinna | NULL | NULL | 82 | 81 | 81 | 81 | 81\n110 | Turku Kupittaa | NULL | NULL | 127 | 126 | 126 | 126 | 126\n111 | Turku Härmälä | NULL | NULL | 75 | 75 | 75 | 75 | 75\n112 | Raisio | NULL | NULL | 35 | 35 | 35 | 35 | 35\n113 | Salo | NULL | NULL | 34 | 34 | 34 | 34 | 34\n114 | Kouvola | NULL | NULL | 78 | 77 | 77 | 77 | 77\n115 | Tampere Hervanta | NULL | NULL | 128 | 126 | 126 | 126 | 126\n116 | Tampere Lielahti | NULL | NULL | 132 | 130 | 130 | 130 | 130\n117 | Tampere Kaleva | NULL | NULL | 63 | 63 | 63 | 63 | 63\n118 | Nokia | NULL | NULL | 55 | 55 | 55 | 55 | 55\n119 | Pori | NULL | NULL | 66 | 65 | 65 | 65 | 65\n120 | Rauma | NULL | NULL | 41 | 41 | 41 | 41 | 41\n121 | Vaasa | NULL | NULL | 60 | 58 | 58 | 58 | 58\n122 | Seinäjoki | NULL | NULL | 73 | 73 | 73 | 73 | 73\n123 | Kokkola | NULL | NULL | 29 | 29 | 29 | 29 | 29\n124 | Jyväskylä Palokka | NULL | NULL | 76 | 76 | 76 | 76 | 76\n125 | Kuopio | NULL | NULL | 123 | 121 | 121 | "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:23",
+   "statement": "WITH weekly AS (\n  SELECT d.fiscal_week, SUM(f.closing_value) AS closing_value\n  FROM fact_stock_week f\n  JOIN dim_date d ON d.calendar_date = f.week_ending_date\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3\n    AND cp.category = 'Paint & Decorating' AND cp.category <> 'ZZ Test'\n    AND s.store_id < 900\n  GROUP BY d.fiscal_week\n)\nSELECT 'FY2026/27' AS fiscal_year, 3 AS fiscal_period, 'Paint & Decorating' AS category,\n       ROUND(AVG(closing_value), 2) AS average_stock_value_at_cost_eur, COUNT(*) AS weeks\nFROM weekly\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | category | average_stock_value_at_cost_eur | weeks\nFY2026/27 | 3 | Paint & Decorating | 344466.83 | 5\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:29",
+   "statement": "WITH w AS (\n  SELECT d.fiscal_week, s.store_id, p.sku, f.closing_units, f.closing_value, f.adjustment_units, f.receipts_units, cp.delisted_on\n  FROM fact_stock_week f JOIN dim_date d ON d.calendar_date=f.week_ending_date\n  JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\n  WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=3 AND cp.category='Paint & Decorating' AND s.store_id<900)\nSELECT a.sku, COUNT(*) n, SUM(a.closing_units) units9, SUM(a.closing_value) val9, MIN(a.delisted_on) delisted, MIN(a.adjustment_units) minadj\nFROM w a WHERE a.fiscal_week=9 AND NOT EXISTS (SELECT 1 FROM w b WHERE b.fiscal_week=10 AND b.store_id=a.store_id AND b.sku=a.sku)\nGROUP BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "sku | n | units9 | val9 | delisted | minadj\n101007 | 6 | 0 | 0.00 | 2026-07-01 | -8\n101187 | 10 | 0 | 0.00 | 2026-07-01 | -23\n101166 | 9 | 0 | 0.00 | 2026-07-01 | -8\n(3 rows)"
+  }
+ ]
+}

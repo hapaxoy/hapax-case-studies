@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH web_sales AS (SELECT d.fiscal_year, d.fiscal_period, sum(f.net_amount) AS gross_net FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id = 900 AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY 1, 2), web_returns AS (SELECT d.fiscal_year, d.fiscal_period, sum(r.refund_net) AS refunds FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = r.return_date WHERE s.store_id = 900 AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY 1, 2) SELECT w.fiscal_year, w.fiscal_period, w.gross_net - coalesce(r.refunds, 0) AS web_net_sales FROM web_sales w LEFT JOIN web_returns r USING (fiscal_year, fiscal_period) ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_net_sales"],
+    "rows": [
+      ["FY2025/26", 5, 139538.50],
+      ["FY2025/26", 6, 171790.72],
+      ["FY2025/26", 7, 149464.88],
+      ["FY2025/26", 8, 226718.44]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: fiscal year FY2025/26 starts 2025-04-28, with periods taken from dim_date (P5 = 2025-08-25 to 2025-09-21, P6 = 2025-09-22 to 2025-10-26, P7 = 2025-10-27 to 2025-11-23, P8 = 2025-11-24 to 2025-12-21)",
+    "Net sales = line value in EUR excluding VAT after line discounts (net_amount), less refunds excluding VAT (refund_net), as in rpt_daily_store_sales",
+    "Web channel identified by the web shop pseudo-location (store_id 900), because the channel code was replaced by channel_id at the web-platform migration",
+    "Sales assigned to the period of sale_date; refunds assigned to the period of return_date (refunds booked on the day, as in the daily sales report)",
+    "Returns attributed to the channel of the original sales line, not to the store where the goods came back"
+  ],
+  "assumptions": [
+    "'Last year' means the last complete fiscal year, FY2025/26. The request is dated 2026-10-09, which falls in FY2026/27 P06, so FY2025/26 is the previous fiscal year.",
+    "'Periods 5 to 8' means fiscal periods 5, 6, 7 and 8, with one row per period.",
+    "'Net sales' means net of returns, in EUR excluding VAT, following the company's daily sales report. Before returns, the figures would be 158124.35, 194176.17, 166510.02 and 249084.84 for P5 to P8.",
+    "Web includes both home delivery and click-and-collect. Cancelled orders have no sales lines, so they add nothing.",
+    "No staff purchases appear on web lines, so no exclusion was needed."
+  ],
+  "caveats": [
+    "From 2025-11-03 (inside P7) the web lines have channel_code NULL and use channel_id 2 (home delivery) or 3 (click and collect). Before that date they carry channel_code 'WB'. A filter on channel_code = 'WB' would drop about 14,330 web lines from P7 and P8. The rpt.v_daily_sales and rpt.v_weekly_store_sales views filter on channel_code = 'WB', so they would understate web sales for this period. I identified web lines by the web shop location instead, which covers both regimes.",
+    "Web orders returned in physical stores are booked to those stores in fact_return_line. A filter on the web shop's store_key would miss them. Across P5 to P8 these refunds are about 11 thousand EUR in all (P5 about 5.5k, P6 about 4.4k, P7 about 5.0k, P8 about 4.9k, roughly, from the store-by-store breakdown). I included them by linking each return to its original sales line.",
+    "Sale dates are the warehouse's own sale_date. They differ from the UTC date of sale_ts_utc on about 5 percent of web lines (orders placed near midnight), so I used sale_date and did not re-derive dates from the UTC timestamps.",
+    "I found no duplicate sales or return lines in the period. Every web line has a matching order and every return has a matching sales line. All periods are marked fully loaded in ref_fiscal_calendar.",
+    "FY2025/26 is a 53-week year, but the extra week falls in P12, so periods 5 to 8 are unaffected. Do not compare these periods against FY2024/25 P5 to P8 by week number without checking the calendar. The period start dates are shifted by one day compared with the year before."
+  ]
+}
+```

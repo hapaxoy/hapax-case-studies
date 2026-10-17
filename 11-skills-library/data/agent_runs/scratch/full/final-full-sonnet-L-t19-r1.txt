@@ -1,0 +1,44 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), q AS (SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current WHERE d.fiscal_year IN ('FY2025/26','FY2024/25') AND d.fiscal_week BETWEEN 27 AND 39 GROUP BY 1, 2) SELECT ty.region, ty.net_sales AS net_sales_fy2025_26, ly.net_sales AS net_sales_fy2024_25, ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct FROM q ty JOIN q ly ON ly.region = ty.region AND ly.fiscal_year = 'FY2024/25' WHERE ty.fiscal_year = 'FY2025/26' ORDER BY ty.region",
+  "result": {
+    "columns": ["region", "net_sales_fy2025_26", "net_sales_fy2024_25", "growth_pct"],
+    "rows": [
+      ["Capital Region", 527026.01, 525151.30, 0.4],
+      ["East", 597583.01, 588069.69, 1.6],
+      ["North", 413618.24, 387519.62, 6.7],
+      ["South", 729021.20, 710020.17, 2.7],
+      ["West", 997953.07, 952479.50, 4.8],
+      ["Online", 580450.93, 447645.43, 29.7]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT after line discounts, minus returns",
+    "Returns reduce net sales on their own return date, not the original sale date",
+    "Web sales recognised on the Helsinki dispatch date; only delivered and collected orders count (cancelled and processing orders excluded)",
+    "Web shop is store 900, region Online, shown as its own line (identified by store_id, not channel_code)",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Regions as-is: current store version (is_current), restated on today's five-region structure",
+    "Fiscal Q3 = periods 7-9 = fiscal weeks 27-39, compared with the same fiscal week numbers in the prior year (aligned on week number, not calendar date)",
+    "Helsinki time for all dates (UTC timestamps converted)",
+    "Growth % = (FY2025/26 / FY2024/25 - 1) x 100",
+    "Control-total check against rpt_daily_store_sales"
+  ],
+  "assumptions": [
+    "'Q3 last year' read as FY2025/26 Q3 (27 Oct 2025 to 25 Jan 2026), because the request was received on 6 Oct 2026, in FY2026/27. This is the same reading accepted in past requests that asked in FY2026/27 for 'last year' (REQ-D04 and others).",
+    "'Q3 the year before' read as FY2024/25 Q3 (28 Oct 2024 to 26 Jan 2025), weeks 27-39.",
+    "Regions reported as-is (current hierarchy), the company default, since as-was was not requested. Capital Region therefore also covers the five stores that were South before 28 April 2025, in both years, and Kouvola is in South in both years.",
+    "Net sales is the company definition (after returns, web on dispatch date). No gross or VAT-inclusive figure was requested.",
+    "No like-for-like adjustment was applied. All stores trading in each quarter are included."
+  ],
+  "caveats": [
+    "No correction to the numbers was needed. Both years' region totals reconcile exactly with rpt_daily_store_sales, store by store and day by day (FY2025/26 Q3 total 3,845,652.46; FY2024/25 Q3 total 3,610,885.71; gap 0.00).",
+    "Store 999 and ZZ Test lines were removed. In sold lines that is about 6,888 EUR in FY2025/26 Q3 and 6,486 EUR in FY2024/25 Q3 (the removal of their returns is not included in those two figures).",
+    "Duplicate sales lines (same receipt_id and line_no loaded twice, 418 receipt lines) exist in the warehouse for 15-21 September 2025. That is outside this quarter's range, so the figures here are not affected. They would overstate any figure for that week.",
+    "The Online line (+29.7%) is not like-for-like with the stores. It is the web shop (store 900) on dispatch date, and it grew far faster than any physical region.",
+    "Growth for physical regions is not like-for-like. Lohja (opened 4 Nov 2024, South) and Tampere Lamminpää (opened 2 Sep 2024, West) were not in the full prior-year quarter, which lifts South and West growth. Savonlinna (East) closed on 25 Jan 2026, the last day of the quarter, so it trades in nearly all of it.",
+    "The deprecated views rpt.v_daily_sales and rpt.v_weekly_store_sales and rpt_weekly_sales_by_region were not used. The views drop web sales after 3 Nov 2025, and the table uses the old four-region structure.",
+    "Net sales are net of returns booked in the quarter, including returns of goods sold earlier. Web orders placed late in the quarter but dispatched after 25 Jan 2026 fall in Q4, and orders placed before the quarter but dispatched in it fall in Q3."
+  ]
+}
+```

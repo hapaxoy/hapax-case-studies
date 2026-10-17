@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t01-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T01",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "627f45d411efe031be8f4f7a1b2c86ba85c577c0af07d612f5ff93092a40b702",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:53",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded\nFROM ref_fiscal_calendar WHERE fiscal_period = 4 AND fiscal_year IN ('FY2025/26','FY2026/27')\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2025/26 | 4 | 2025-07-28 | 2025-08-24 | 4 | 14 | 17 | true\nFY2026/27 | 4 | 2026-08-03 | 2026-08-30 | 4 | 14 | 17 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:07:03",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS ty_year, 'FY2025/26' AS ly_year, 14 AS first_week, 17 AS last_week\n),\nrange_start AS (\n    SELECT MIN(d.calendar_date) AS first_day\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year = params.ty_year AND d.fiscal_week = params.first_week\n),\nweeks AS (\n    SELECT DISTINCT d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n),\nstore_weeks AS (\n    SELECT st.store_id, w.fiscal_year, w.fiscal_week,\n           (st.open_date IS NULL OR st.open_date <= w.fiscal_week_start_date)\n           AND (st.close_date IS NULL OR st.close_date >= w.fiscal_week_end_date)\n           AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                           WHERE c.store_id = st.store_id\n                             AND c.closure_start_date <= w.fiscal_week_end_date\n                             AND c.closure_end_date >= w.fiscal_week_start_date) AS trading\n    FROM dim_store st\n    CROSS JOIN weeks w\n    WHERE st.is_current AND st.store_id < 900\n),\nlfl_store_weeks AS (\n    SELECT ty.store_id, ty.fiscal_week\n    FROM store_weeks ty\n    CROSS JOIN params\n    CROSS JOIN range_start\n    JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = params.ly_year\n    JOIN dim_store st   ON st.store_id = ty.store_id AND st.is_current\n    WHERE ty.fiscal_year = params.ty_year AND ty.trading AND ly.trading\n      AND (st.open_date IS NULL OR st.open_date <= range_start.first_day - 364)\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nlfl_sales AS (\n    SELECT d.fiscal_year, SUM(n.net_sales) AS net_sales, COUNT(DISTINCT n.store_id || '-' || d.fiscal_week) AS store_weeks, COUNT(DISTINCT n.store_id) AS stores\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n    GROUP BY d.fiscal_year\n)\nSELECT ty.stores, ty.store_weeks, ty.net_sales AS this_year, ly.net_sales AS last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct\nFROM lfl_sales ty CROSS JOIN params JOIN lfl_sales ly ON ly.fiscal_year = params.ly_year\nWHERE ty.fiscal_year = params.ty_year\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "stores | store_weeks | this_year | last_year | lfl_growth_pct\n38 | 152 | 1010478.52 | 1010743.32 | -0.03\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:07:09",
+   "statement": "SELECT 'sales' AS tbl, d.fiscal_year, COUNT(*) AS n_rows, COUNT(DISTINCT f.sales_line_id) AS distinct_ids, COUNT(DISTINCT f.receipt_id || '-' || f.line_no) AS distinct_receipt_lines, SUM(f.net_amount) AS net\nFROM fact_sales_line f JOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17) OR (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 14 AND 17)\nGROUP BY d.fiscal_year\nUNION ALL\nSELECT 'returns', d.fiscal_year, COUNT(*), COUNT(DISTINCT r.return_line_id), COUNT(DISTINCT r.sales_line_id), SUM(r.refund_net)\nFROM fact_return_line r JOIN dim_date d ON d.calendar_date = r.return_date\nWHERE d.fiscal_week BETWEEN 14 AND 17 AND d.fiscal_year IN ('FY2025/26','FY2026/27')\nGROUP BY d.fiscal_year\nUNION ALL\nSELECT 'control_rpt', d.fiscal_year, COUNT(*), COUNT(DISTINCT r.store_id || r.business_date), 0, SUM(r.net_sales)\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\nWHERE d.fiscal_week BETWEEN 14 AND 17 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND r.store_id < 900\nGROUP BY d.fiscal_year\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tbl | fiscal_year | n_rows | distinct_ids | distinct_receipt_lines | net\nsales | FY2025/26 | 47097 | 47097 | 47097 | 1241819.51\nsales | FY2026/27 | 48107 | 48107 | 48107 | 1273257.17\nreturns | FY2026/27 | 1926 | 1926 | 1926 | 74361.18\nreturns | FY2025/26 | 1801 | 1801 | 1801 | 67055.58\ncontrol_rpt | FY2026/27 | 1064 | 1064 | 0 | 1010478.52\ncontrol_rpt | FY2025/26 | 1092 | 1092 | 0 | 1020292.46\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:07:18",
+   "statement": "WITH ly AS (\n  SELECT r.store_id, SUM(r.net_sales) AS rpt_ly, COUNT(*) AS days\n  FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\n  WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 14 AND 17 AND r.store_id < 900\n  GROUP BY 1),\nty AS (\n  SELECT r.store_id, SUM(r.net_sales) AS rpt_ty, COUNT(*) AS days\n  FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\n  WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17 AND r.store_id < 900\n  GROUP BY 1)\nSELECT COALESCE(ly.store_id, ty.store_id) AS store_id, s.store_name, s.open_date, s.close_date, ly.rpt_ly, ty.rpt_ty, ly.days AS ly_days, ty.days AS ty_days\nFROM ly FULL JOIN ty ON ty.store_id = ly.store_id\nJOIN dim_store s ON s.store_id = COALESCE(ly.store_id, ty.store_id) AND s.is_current\nWHERE ly.rpt_ly IS NULL OR ty.rpt_ty IS NULL OR ty.rpt_ty / ly.rpt_ly - 1 NOT BETWEEN -0.25 AND 0.25 OR ly.days <> ty.days\nORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "store_id | store_name | open_date | close_date | rpt_ly | rpt_ty | ly_days | ty_days\n127 | Mikkeli | NULL | NULL | 27002.23 | 19921.39 | 28 | 28\n129 | Savonlinna | NULL | 2026-01-25 | 9549.14 | NULL | 28 | NULL\n137 | Lohja | 2024-11-04 | NULL | 10333.21 | 12955.76 | 28 | 28\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:07:23",
+   "statement": "SELECT d.fiscal_year, d.fiscal_week, SUM(r.net_sales) AS net_sales, SUM(r.receipts) AS receipts, SUM(r.units_sold) AS units, COUNT(*) AS days, SUM(CASE WHEN r.net_sales = 0 THEN 1 ELSE 0 END) AS zero_days\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\nWHERE r.store_id = 127 AND d.fiscal_week BETWEEN 10 AND 21 AND d.fiscal_year IN ('FY2025/26','FY2026/27')\nGROUP BY 1,2 ORDER BY 2,1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 24,
+   "output_preview": "fiscal_year | fiscal_week | net_sales | receipts | units | days | zero_days\nFY2025/26 | 10 | 8892.01 | 150 | 581 | 7 | 0\nFY2026/27 | 10 | 6125.37 | 113 | 460 | 7 | 0\nFY2025/26 | 11 | 6810.87 | 121 | 473 | 7 | 0\nFY2026/27 | 11 | 6099.80 | 119 | 420 | 7 | 0\nFY2025/26 | 12 | 5347.60 | 98 | 389 | 7 | 0\nFY2026/27 | 12 | 5641.66 | 109 | 399 | 7 | 0\nFY2025/26 | 13 | 6724.78 | 119 | 441 | 7 | 0\nFY2026/27 | 13 | 4681.02 | 102 | 367 | 7 | 0\nFY2025/26 | 14 | 6452.83 | 118 | 505 | 7 | 0\nFY2026/27 | 14 | 5295.13 | 103 | 426 | 7 | 0\nFY2025/26 | 15 | 7221.41 | 112 | 492 | 7 | 0\nFY2026/27 | 15 | 5183.89 | 107 | 432 | 7 | 0\nFY2025/26 | 16 | 5947.95 | 99 | 421 | 7 | 0\nFY2026/27 | 16 | 4576.14 | 91 | 333 | 7 | 0\nFY2025/26 | 17 | 7380.04 | 112 | 488 | 7 | 0\nFY2026/27 | 17 | 4866.23 | 95 | 361 | 7 | 0\nFY2025/26 | 18 | 5926.17 | 118 | 450 | 7 | 0\nFY2026/27 | 18 | 5416.53 | 98 | 366 | 7 | 0\nFY2025/26 | 19 | 5326.13 | 105 | 411 | 7 | 0\nFY2026/27 | 19 | 5009.13 | 98 | 401 | 7 | 0\nFY2025/26 | 20 | 3778.75 | 79 | 313 | 7 | 0\nFY2026/27 | 20 | 4236.25 | 87 | 337 | 7 | 0\nFY2025/26 | 21 | 6703.49 | 105 | 455 | 7 | 0\nFY2026/27 | 21 | 4762.40 | 96 | 418 | 7 | 0\n(24 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:07:35",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS ty_year, 'FY2025/26' AS ly_year, 4 AS period_no, 14 AS first_week, 17 AS last_week\n),\nrange_start AS (\n    SELECT MIN(d.calendar_date) AS first_day\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year = params.ty_year AND d.fiscal_week = params.first_week\n),\nweeks AS (\n    SELECT DISTINCT d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n),\nstore_weeks AS (\n    SELECT st.store_id, w.fiscal_year, w.fiscal_week,\n           (st.open_date IS NULL OR st.open_date <= w.fiscal_week_start_date)\n           AND (st.close_date IS NULL OR st.close_date >= w.fiscal_week_end_date)\n           AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                           WHERE c.store_id = st.store_id\n                             AND c.closure_start_date <= w.fiscal_week_end_date\n                             AND c.closure_end_date >= w.fiscal_week_start_date) AS trading\n    FROM dim_store st\n    CROSS JOIN weeks w\n    WHERE st.is_current AND st.store_id < 900\n),\nlfl_store_weeks AS (\n    SELECT ty.store_id, ty.fiscal_week\n    FROM store_weeks ty\n    CROSS JOIN params\n    CROSS JOIN range_start\n    JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = params.ly_year\n    JOIN dim_store st   ON st.store_id = ty.store_id AND st.is_current\n    WHERE ty.fiscal_year = params.ty_year AND ty.trading AND ly.trading\n      AND (st.open_date IS NULL OR st.open_date <= range_start.first_day - 364)\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nlfl_sales AS (\n    SELECT d.fiscal_year, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d ON d.calendar_date = n.business_date\n    JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n    GROUP BY d.fiscal_year\n)\nSELECT params.ty_year AS fiscal_year, params.period_no AS fiscal_period,\n       ty.net_sales AS net_sales_this_year, ly.net_sales AS net_sales_last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct\nFROM params\nJOIN lfl_sales ty ON ty.fiscal_year = params.ty_year\nJOIN lfl_sales ly ON ly.fiscal_year = params.ly_year\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | net_sales_this_year | net_sales_last_year | lfl_growth_pct\nFY2026/27 | 4 | 1010478.52 | 1010743.32 | -0.03\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-L-t43-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T43",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "0d1f37324bb65f49d7a99d93dcc1f793c00ed94bf649521db4e61fdf1e122d99",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:40:38",
+   "statement": "fiscal-calendar/scripts/fiscal.py last period --as-of 2026-10-08",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: last period    as of: 2026-10-08    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: 'Last period' = the last completed fiscal period (CAL-RELATIVE).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:46",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, p.sku,\n           f.net_amount AS net_sales, f.quantity AS units\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND NOT (s.store_id = 900 AND w.web_order_id IS NULL)\n    UNION ALL\n    SELECT r.return_date, p.sku, -r.refund_net, -r.quantity_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, cp.category, cp.brand,\n       SUM(n.net_sales) AS net_sales, SUM(n.units) AS units,\n       RANK() OVER (ORDER BY SUM(n.net_sales) DESC) AS rk_value,\n       RANK() OVER (ORDER BY SUM(n.units) DESC) AS rk_units\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21\nGROUP BY 1,2,3,4\nORDER BY net_sales DESC\nLIMIT 15\n",
+   "n": 2,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sku | product_name | category | brand | net_sales | units | rk_value | rk_units\n100955 | Interior Paint Norvik 298 | Paint & Decorating | Norvik | 9488.00 | 230 | 1 | 24\n100927 | Outdoor Lighting Kultala 862 | Electrical | Kultala | 7364.26 | 134 | 2 | 80\n103415 | Home Office Peltola 918 | Furniture | Peltola | 7250.06 | 64 | 3 | 289\n103434 | Home Office Tuulikki 821 | Furniture | Tuulikki | 5435.35 | 74 | 4 | 227\n102116 | Smart Home Tuulikki 855 | Electrical | Tuulikki | 5409.16 | 102 | 5 | 131\n101398 | Power Tools Havu Pro 689 | Tools & Hardware | Havu Pro | 5166.87 | 63 | 6 | 294\n103329 | Living Room Havu Pro 936 | Furniture | Havu Pro | 5056.70 | 10 | 7 | 1618\n101411 | Power Tools Nordhem 370 | Tools & Hardware | Nordhem | 4924.03 | 28 | 8 | 743\n101022 | Interior Paint Kultala 377 | Paint & Decorating | Kultala | 4633.36 | 85 | 9 | 182\n101375 | Power Tools Selkämaa 638 | Tools & Hardware | Selkämaa | 4477.73 | 19 | 10 | 1059\n101763 | Fixings & Fasteners Nordhem 594 | Tools & Hardware | Nordhem | 4262.06 | 474 | 11 | 2\n103697 | Storage Boxes Tuulikki 952 | Cleaning & Household | Tuulikki | 4224.53 | 186 | 12 | 38\n101946 | Indoor Lighting Harmaja 965 | Electrical | Harmaja | 4139.99 | 149 | 13 | 68\n101888 | Indoor Lighting Havu 419 | Electrical | Havu | 4130.07 | 84 | 14 | 189\n103075 | Cushions & Throws Tuulikki 338 | Home Textiles & Decor | Tuulikki | 4107.56 | 384 | 15 | 8\n(15 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:53",
+   "statement": "SELECT count(*) AS lines, count(DISTINCT (receipt_id, line_no)) AS distinct_keys, count(DISTINCT sales_line_id) AS distinct_ids,\n       min(sale_date) AS mn, max(sale_date) AS mx,\n       count(*) FILTER (WHERE quantity <= 0) AS nonpos_qty, count(*) FILTER (WHERE net_amount <= 0) AS nonpos_net,\n       count(DISTINCT etl_loaded_at) AS loads, min(etl_loaded_at) AS first_load, max(etl_loaded_at) AS last_load\nFROM fact_sales_line f\nWHERE sale_date BETWEEN DATE '2026-08-24' AND DATE '2026-10-04'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | distinct_keys | distinct_ids | mn | mx | nonpos_qty | nonpos_net | loads | first_load | last_load\n69758 | 69758 | 69758 | 2026-08-24 | 2026-10-04 | 0 | 0 | 42 | 2026-08-25T01:00:00 | 2026-10-05T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:41:03",
+   "statement": "WITH top AS (SELECT * FROM (VALUES (100955),(100927),(103415),(103434),(102116),(101398),(103329),(101411),(101022),(101375),(101763),(103697),(101946)) t(sku))\nSELECT p.sku, count(*) AS versions, sum(CASE WHEN p.is_current THEN 1 ELSE 0 END) AS current_rows,\n       string_agg(DISTINCT p.product_name, ' / ') AS names, string_agg(DISTINCT p.category, ' / ') AS cats,\n       min(p.listed_from) AS listed, max(p.delisted_on) AS delisted,\n       string_agg(CAST(p.standard_unit_cost AS VARCHAR), ',' ORDER BY p.valid_from) AS costs\nFROM dim_product p JOIN top USING (sku)\nGROUP BY p.sku ORDER BY p.sku\n",
+   "n": 4,
+   "ok": true,
+   "rows": 13,
+   "output_preview": "sku | versions | current_rows | names | cats | listed | delisted | costs\n100927 | 2 | 1 | Outdoor Lighting Kultala 862 | Electrical / Garden | 2019-01-01 | NULL | 36.41,36.41\n100955 | 1 | 1 | Interior Paint Norvik 298 | Paint & Decorating | 2019-01-01 | NULL | 28.01\n101022 | 1 | 1 | Interior Paint Kultala 377 | Paint & Decorating | 2019-01-01 | NULL | 36.95\n101375 | 1 | 1 | Power Tools Selkämaa 638 | Tools & Hardware | 2019-01-01 | NULL | 152.83\n101398 | 1 | 1 | Power Tools Havu Pro 689 | Tools & Hardware | 2019-01-01 | NULL | 55.51\n101411 | 1 | 1 | Power Tools Nordhem 370 | Tools & Hardware | 2019-01-01 | NULL | 134.15\n101763 | 1 | 1 | Fixings & Fasteners Nordhem 594 | Tools & Hardware | 2019-01-01 | NULL | 3.49\n101946 | 1 | 1 | Indoor Lighting Harmaja 965 | Electrical | 2019-01-01 | NULL | 18.07\n102116 | 1 | 1 | Smart Home Tuulikki 855 | Electrical | 2019-01-01 | NULL | 36.79\n103329 | 1 | 1 | Living Room Havu Pro 936 | Furniture | 2019-01-01 | NULL | 316.92\n103415 | 1 | 1 | Home Office Peltola 918 | Furniture | 2019-01-01 | NULL | 72.06\n103434 | 1 | 1 | Home Office Tuulikki 821 | Furniture | 2019-01-01 | NULL | 49.70\n103697 | 1 | 1 | Storage Boxes Tuulikki 952 | Cleaning & Household | 2019-01-01 | NULL | 13.77\n(13 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:41:14",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nsl AS (\n    SELECT p.sku, s.store_id, f.receipt_id, COALESCE(w.dispatch_date, f.sale_date) AS bd, f.net_amount, f.quantity, f.sale_date, f.channel_code,\n           (w.web_order_id IS NULL AND s.store_id = 900) AS web_no_dispatch\n    FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id=f.receipt_id\n    WHERE s.store_id<>999 AND p.category<>'ZZ Test'\n)\nSELECT sku, sum(net_amount) FILTER (WHERE bd BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND NOT web_no_dispatch) AS sold_net,\n  sum(net_amount) FILTER (WHERE bd BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND store_id=900 AND NOT web_no_dispatch) AS web_net,\n  count(*) FILTER (WHERE bd BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND NOT web_no_dispatch) AS nlines,\n  max(net_amount) FILTER (WHERE bd BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND NOT web_no_dispatch) AS maxline,\n  max(quantity) FILTER (WHERE bd BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND NOT web_no_dispatch) AS maxqty,\n  sum(net_amount) FILTER (WHERE sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') AS by_sale_date_net\nFROM sl WHERE sku IN (100955,100927,103415,103434,102116,101398,103329,101411,101022,101375,101763,103697,101946,101888,103075)\nGROUP BY sku ORDER BY sold_net DESC\n",
+   "n": 5,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sku | sold_net | web_net | nlines | maxline | maxqty | by_sale_date_net\n100955 | 9782.07 | 1756.02 | 187 | 126.03 | 3 | 9656.04\n103415 | 8412.86 | 1715.13 | 74 | 116.28 | 1 | 8627.98\n100927 | 7858.20 | 721.27 | 128 | 168.39 | 3 | 7970.46\n103434 | 6162.80 | 1342.98 | 84 | 74.61 | 1 | 6312.02\n102116 | 5829.21 | 487.80 | 110 | 54.20 | 1 | 5829.21\n101398 | 5768.17 | 554.05 | 70 | 85.90 | 1 | 5643.62\n101411 | 5299.91 | 187.94 | 30 | 187.94 | 1 | 5487.85\n103329 | 5056.70 | 1517.01 | 10 | 505.67 | 1 | 5410.67\n101375 | 4854.80 | 707.01 | 21 | 235.67 | 1 | 5090.47\n101022 | 4744.14 | 531.74 | 70 | 166.17 | 3 | 4799.53\n103075 | 4385.68 | 480.16 | 281 | 32.85 | 3 | 4341.88\n101888 | 4321.76 | 448.11 | 61 | 149.37 | 3 | 4321.76\n103697 | 4317.53 | 384.79 | 102 | 116.25 | 5 | 4364.03\n101763 | 4262.06 | 568.84 | 161 | 64.12 | 7 | 4262.06\n101946 | 4226.15 | 465.26 | 115 | 86.16 | 3 | 4266.36\n(15 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:41:26",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnl AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS bd, s.store_id, f.net_amount AS v\n    FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id=f.receipt_id\n    WHERE s.store_id<>999 AND p.category<>'ZZ Test' AND NOT (s.store_id=900 AND w.web_order_id IS NULL)\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\n    WHERE s.store_id<>999 AND p.category<>'ZZ Test'\n)\nSELECT (SELECT sum(v) FROM nl WHERE bd BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') AS mine,\n       (SELECT sum(net_sales) FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND store_id<>999) AS control,\n       (SELECT sum(net_sales) FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') AS control_all\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mine | control | control_all\n1109546.52 | 1109546.52 | 1109546.52\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:41:37",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, p.sku, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND NOT (s.store_id = 900 AND w.web_order_id IS NULL)\n    UNION ALL\n    SELECT r.return_date, p.sku, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, SUM(n.net_sales) AS net_sales\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 5\nGROUP BY cp.sku, cp.product_name\nORDER BY net_sales DESC\nLIMIT 11\n",
+   "n": 7,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "sku | product_name | net_sales\n100955 | Interior Paint Norvik 298 | 9488.00\n100927 | Outdoor Lighting Kultala 862 | 7364.26\n103415 | Home Office Peltola 918 | 7250.06\n103434 | Home Office Tuulikki 821 | 5435.35\n102116 | Smart Home Tuulikki 855 | 5409.16\n101398 | Power Tools Havu Pro 689 | 5166.87\n103329 | Living Room Havu Pro 936 | 5056.70\n101411 | Power Tools Nordhem 370 | 4924.03\n101022 | Interior Paint Kultala 377 | 4633.36\n101375 | Power Tools Selkämaa 638 | 4477.73\n101763 | Fixings & Fasteners Nordhem 594 | 4262.06\n(11 rows)"
+  }
+ ]
+}

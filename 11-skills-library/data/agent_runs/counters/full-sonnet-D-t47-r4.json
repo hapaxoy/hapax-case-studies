@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t47-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T47",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "8acc6b9e38e3d32d4ab0c28c397e590d524d6e80c4bbf0f8259ccadb4a411e2c",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:55",
+   "statement": "SELECT tier, is_current, count(*) AS version_rows, count(DISTINCT member_id) AS members, count(DISTINCT member_key) AS keys, min(valid_from), max(valid_from), min(valid_to), max(valid_to)\nFROM dim_member GROUP BY ALL ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tier | is_current | version_rows | members | keys | min(valid_from) | max(valid_from) | min(valid_to) | max(valid_to)\nBasic | false | 19343 | 17903 | 19343 | 2019-01-01 | 2026-10-01 | 2024-05-28 | 2026-10-02\nBasic | true | 31229 | 31229 | 31229 | 2019-01-01 | 2026-10-04 | 9999-12-31 | 9999-12-31\nGold | false | 2412 | 2233 | 2412 | 2019-01-01 | 2026-09-30 | 2024-05-28 | 2026-10-02\nGold | true | 5791 | 5791 | 5791 | 2019-01-02 | 2026-10-04 | 9999-12-31 | 9999-12-31\nSilver | false | 7559 | 7068 | 7559 | 2019-01-01 | 2026-10-02 | 2024-05-28 | 2026-10-02\nSilver | true | 22980 | 22980 | 22980 | 2019-01-02 | 2026-10-04 | 9999-12-31 | 9999-12-31\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:20:01",
+   "statement": "WITH cur AS (SELECT member_id, count(*) AS n_cur FROM dim_member WHERE is_current GROUP BY 1),\nlastv AS (SELECT member_id, max(valid_from) AS last_from, count(*) AS n_versions, count(DISTINCT valid_from) AS d_from FROM dim_member GROUP BY 1),\ntot AS (SELECT count(DISTINCT member_id) AS all_members FROM dim_member)\nSELECT\n (SELECT all_members FROM tot) AS all_members,\n (SELECT count(*) FROM cur) AS members_with_current,\n (SELECT count(*) FROM cur WHERE n_cur>1) AS multi_current,\n (SELECT count(*) FROM lastv WHERE n_versions<>d_from) AS dup_valid_from,\n (SELECT count(*) FROM dim_member WHERE is_current AND valid_to<>DATE '9999-12-31') AS cur_bad_to,\n (SELECT count(*) FROM dim_member WHERE NOT is_current AND valid_to=DATE '9999-12-31') AS noncur_open,\n (SELECT count(*) FROM dim_member m JOIN lastv l USING(member_id) WHERE m.is_current AND m.valid_from<>l.last_from) AS cur_not_latest,\n (SELECT count(*) FROM dim_member WHERE tier NOT IN ('Basic','Silver','Gold') OR tier IS NULL) AS odd_tier,\n (SELECT count(*) FROM dim_member WHERE is_current AND valid_from > DATE '2026-10-04') AS future_from\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "all_members | members_with_current | multi_current | dup_valid_from | cur_bad_to | noncur_open | cur_not_latest | odd_tier | future_from\n60000 | 60000 | 0 | 0 | 0 | 0 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:20:03",
+   "statement": "-- version valid on the as-of date (last loaded day 2026-10-04) vs is_current\nSELECT 'asof_valid' AS method, tier, count(DISTINCT member_id) AS members, count(*) AS rows_\nFROM dim_member WHERE DATE '2026-10-04' BETWEEN valid_from AND valid_to GROUP BY ALL\nUNION ALL\nSELECT 'is_current', tier, count(DISTINCT member_id), count(*) FROM dim_member WHERE is_current GROUP BY ALL\nORDER BY 1,2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "method | tier | members | rows_\nasof_valid | Basic | 31229 | 31229\nasof_valid | Gold | 5791 | 5791\nasof_valid | Silver | 22980 | 22980\nis_current | Basic | 31229 | 31229\nis_current | Gold | 5791 | 5791\nis_current | Silver | 22980 | 22980\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:20:07",
+   "statement": "SELECT count(*) AS gold_current, count(DISTINCT member_id) AS gold_members,\n sum(CASE WHEN join_date > DATE '2026-10-04' OR join_date IS NULL THEN 1 ELSE 0 END) AS bad_join,\n sum(CASE WHEN valid_from < join_date THEN 1 ELSE 0 END) AS from_before_join,\n min(member_id), max(member_id), sum(CASE WHEN home_store_id IS NULL THEN 1 ELSE 0 END) AS null_home,\n max(valid_from) AS latest_change\nFROM dim_member WHERE is_current AND tier='Gold'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "gold_current | gold_members | bad_join | from_before_join | min(member_id) | max(member_id) | null_home | latest_change\n5791 | 5791 | 0 | 0 | 70000016 | 70059992 | 0 | 2026-10-04\n(1 row)"
+  }
+ ]
+}

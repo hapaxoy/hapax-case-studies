@@ -1,0 +1,85 @@
+{
+ "run_id": "full-haiku-S-t51-r5",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T51",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "26a350813c0ae5fe134cafffc299e39b05a0f8c30d0a6064297db2353c4dc5e3",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:13",
+   "statement": "SELECT campaign_id, campaign_name, start_date, end_date, mailing_list_size, holdout_size\nFROM dim_campaign\nWHERE campaign_name LIKE '%Black Week%' AND YEAR(start_date) = 2025\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | mailing_list_size | holdout_size\n15 | Black Week 2025 | 2025-11-24 | 2025-11-30 | 26573 | 2747\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:16",
+   "statement": "SELECT COUNT(*) as holdout_count\nFROM campaign_holdout\nWHERE campaign_id = 15\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "holdout_count\n2747\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:22",
+   "statement": "SELECT COUNT(DISTINCT member_key) as exposed_members\nFROM fact_campaign_exposure\nWHERE campaign_id = 15\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "exposed_members\n23844\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:28",
+   "statement": "WITH exposed_members AS (\n  SELECT DISTINCT member_key\n  FROM fact_campaign_exposure\n  WHERE campaign_id = 15\n),\nexposed_spend AS (\n  SELECT \n    COALESCE(SUM(f.net_amount), 0) as total_net_spend,\n    COUNT(DISTINCT f.member_key) as member_count\n  FROM fact_sales_line f\n  WHERE f.sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND f.member_key IN (SELECT member_key FROM exposed_members)\n)\nSELECT \n  total_net_spend,\n  member_count,\n  ROUND(total_net_spend / NULLIF((SELECT mailing_list_size - holdout_size FROM dim_campaign WHERE campaign_id = 15), 0), 2) as avg_spend_per_targeted_member\nFROM exposed_spend\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_net_spend | member_count | avg_spend_per_targeted_member\n112393.10 | 1896 | 4.72\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:32",
+   "statement": "WITH holdout_members AS (\n  SELECT member_id\n  FROM campaign_holdout\n  WHERE campaign_id = 15\n),\nholdout_member_keys AS (\n  SELECT DISTINCT m.member_key\n  FROM dim_member m\n  WHERE m.member_id IN (SELECT member_id FROM holdout_members)\n    AND m.is_current = TRUE\n),\nholdout_spend AS (\n  SELECT \n    COALESCE(SUM(f.net_amount), 0) as total_net_spend,\n    COUNT(DISTINCT f.member_key) as member_count\n  FROM fact_sales_line f\n  WHERE f.sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND f.member_key IN (SELECT member_key FROM holdout_member_keys)\n)\nSELECT \n  total_net_spend,\n  member_count,\n  ROUND(total_net_spend / NULLIF((SELECT holdout_size FROM dim_campaign WHERE campaign_id = 15), 0), 2) as avg_spend_per_holdout_member\nFROM holdout_spend\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_net_spend | member_count | avg_spend_per_holdout_member\n7177.64 | 130 | 2.61\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:41",
+   "statement": "WITH campaign_info AS (\n  SELECT \n    mailing_list_size - holdout_size as targeted_member_count,\n    holdout_size as holdout_member_count\n  FROM dim_campaign\n  WHERE campaign_id = 15\n),\nholdout_ids AS (\n  SELECT member_id\n  FROM campaign_holdout\n  WHERE campaign_id = 15\n),\nholdout_keys AS (\n  SELECT DISTINCT m.member_key\n  FROM dim_member m\n  WHERE m.member_id IN (SELECT member_id FROM holdout_ids)\n    AND m.is_current = TRUE\n),\nexposed_ids AS (\n  SELECT DISTINCT member_key\n  FROM fact_campaign_exposure\n  WHERE campaign_id = 15\n),\ntargeted_spend AS (\n  SELECT COALESCE(SUM(net_amount), 0) as total\n  FROM fact_sales_line\n  WHERE sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND member_key IN (SELECT member_key FROM exposed_ids)\n),\nholdout_spend AS (\n  SELECT COALESCE(SUM(net_amount), 0) as total\n  FROM fact_sales_line\n  WHERE sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND member_key IN (SELECT member_key FROM holdout_keys)\n),\ncalculations AS (\n  SELECT \n    ci.targeted_member_count,\n    ci.holdout_member_count,\n    ts.total as targeted_total,\n    hs.total as holdout_total,\n    ROUND(ts.total / ci.targeted_member_count, 2) as avg_spend_targeted,\n    ROUND(hs.total / ci.holdout_member_count, 2) as avg_spend_holdout\n  FROM campaign_info ci,\n       targeted_spend ts,\n       holdout_spend hs\n)\nSELECT \n  avg_spend_targeted,\n  avg_spend_holdout,\n  ROUND(targeted_total - (holdout_member_count * avg_spend_holdout), 2) as uplift_euros\nFROM calculations\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "avg_spend_targeted | avg_spend_holdout | uplift_euros\n4.72 | 2.61 | 105223.43\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:47",
+   "statement": "WITH campaign_info AS (\n  SELECT \n    mailing_list_size - holdout_size as targeted_member_count,\n    holdout_size as holdout_member_count\n  FROM dim_campaign\n  WHERE campaign_id = 15\n),\nholdout_ids AS (\n  SELECT member_id\n  FROM campaign_holdout\n  WHERE campaign_id = 15\n),\nholdout_keys AS (\n  SELECT DISTINCT m.member_key\n  FROM dim_member m\n  WHERE m.member_id IN (SELECT member_id FROM holdout_ids)\n    AND m.is_current = TRUE\n),\nexposed_ids AS (\n  SELECT DISTINCT member_key\n  FROM fact_campaign_exposure\n  WHERE campaign_id = 15\n),\ntargeted_spend AS (\n  SELECT COALESCE(SUM(net_amount), 0) as total\n  FROM fact_sales_line\n  WHERE sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND member_key IN (SELECT member_key FROM exposed_ids)\n),\nholdout_spend AS (\n  SELECT COALESCE(SUM(net_amount), 0) as total\n  FROM fact_sales_line\n  WHERE sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND member_key IN (SELECT member_key FROM holdout_keys)\n),\ncalculations AS (\n  SELECT \n    ci.targeted_member_count,\n    ci.holdout_member_count,\n    ts.total as targeted_total,\n    hs.total as holdout_total,\n    ROUND(ts.total / ci.targeted_member_count, 2) as avg_spend_targeted,\n    ROUND(hs.total / ci.holdout_member_count, 2) as avg_spend_holdout\n  FROM campaign_info ci,\n       targeted_spend ts,\n       holdout_spend hs\n)\nSELECT \n  avg_spend_targeted,\n  avg_spend_holdout,\n  ROUND(targeted_total - (targeted_member_count * avg_spend_holdout), 2) as uplift_euros\nFROM calculations\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "avg_spend_targeted | avg_spend_holdout | uplift_euros\n4.72 | 2.61 | 50207.24\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:09:53",
+   "statement": "-- Verify campaign details\nSELECT \n  'Campaign Details' as check_type,\n  campaign_name,\n  start_date,\n  end_date,\n  mailing_list_size,\n  holdout_size,\n  (mailing_list_size - holdout_size) as targeted_count\nFROM dim_campaign\nWHERE campaign_id = 15\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "check_type | campaign_name | start_date | end_date | mailing_list_size | holdout_size | targeted_count\nCampaign Details | Black Week 2025 | 2025-11-24 | 2025-11-30 | 26573 | 2747 | 23826\n(1 row)"
+  }
+ ]
+}

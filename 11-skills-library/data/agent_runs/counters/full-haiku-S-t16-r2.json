@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-S-t16-r2",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T16",
+ "budget": 30,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "ff57c83d46873786a1a1cab96bc921078172b1b5c8f45148508c6c2c550e5440",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:26:59",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_period IN (9, 10)\nORDER BY fiscal_year DESC, fiscal_period\nLIMIT 20\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date\nFY2025/26 | 9 | 2025-12-22 | 2026-01-25\nFY2025/26 | 10 | 2026-01-26 | 2026-02-22\nFY2024/25 | 9 | 2024-12-23 | 2025-01-26\nFY2024/25 | 10 | 2025-01-27 | 2025-02-23\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:27:04",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  wo.fulfilment_type,\n  COUNT(*) AS orders,\n  SUM(wo.order_total_gross) AS total_value\nFROM fact_web_order wo\nINNER JOIN fact_sales_line fsl ON wo.web_order_id = fsl.receipt_id\nINNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_period IN (9, 10)\nGROUP BY d.fiscal_year, d.fiscal_period, wo.fulfilment_type\nORDER BY d.fiscal_period, wo.fulfilment_type\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | fulfilment_type | orders | total_value\nFY2024/25 | 9 | click_and_collect | 1447 | 120387.22\nFY2024/25 | 9 | home_delivery | 4613 | 395007.11\nFY2024/25 | 10 | click_and_collect | 999 | 95365.33\nFY2024/25 | 10 | home_delivery | 2790 | 250245.37\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:27:09",
+   "statement": "WITH web_sales_by_fulfillment AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    wo.fulfilment_type,\n    SUM(wo.order_total_gross) AS fulfilment_value\n  FROM fact_web_order wo\n  INNER JOIN fact_sales_line fsl ON wo.web_order_id = fsl.receipt_id\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period IN (9, 10)\n  GROUP BY d.fiscal_year, d.fiscal_period, wo.fulfilment_type\n),\ntotals_per_period AS (\n  SELECT \n    fiscal_year,\n    fiscal_period,\n    SUM(fulfilment_value) AS total_value\n  FROM web_sales_by_fulfillment\n  GROUP BY fiscal_year, fiscal_period\n)\nSELECT \n  wsf.fiscal_year,\n  wsf.fiscal_period,\n  ROUND(100.0 * wsf.fulfilment_value / tp.total_value, 2) AS click_and_collect_share_pct\nFROM web_sales_by_fulfillment wsf\nINNER JOIN totals_per_period tp \n  ON wsf.fiscal_year = tp.fiscal_year \n  AND wsf.fiscal_period = tp.fiscal_period\nWHERE wsf.fulfilment_type = 'click_and_collect'\nORDER BY wsf.fiscal_period\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | click_and_collect_share_pct\nFY2024/25 | 9 | 23.36\nFY2024/25 | 10 | 27.59\n(2 rows)"
+  }
+ ]
+}

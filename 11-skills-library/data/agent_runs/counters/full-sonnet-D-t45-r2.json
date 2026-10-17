@@ -1,0 +1,85 @@
+{
+ "run_id": "full-sonnet-D-t45-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T45",
+ "budget": 30,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "184e23e6209f0e73fd9821b94d39756feef57fadf9a5079e1f2be0ea637808dd",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:42",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE '%tampere%' OR store_name ILIKE '%tampere%' ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n21 | 115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n23 | 117 | Tampere Kaleva | Tampere | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n42 | 136 | Tampere Lamminpää | Tampere | West | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n46 | 900 | Tuomimetsä web shop | Tampere | Online | Web | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n47 | 999 | Training store | Tampere | Head office | Training | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:50",
+   "statement": "SELECT home_store_id, COUNT(*) AS versions, COUNT(DISTINCT member_id) AS members, COUNT(DISTINCT CASE WHEN is_current THEN member_id END) AS current_members, MIN(join_date), MAX(join_date), SUM(CASE WHEN is_current THEN 1 ELSE 0 END) AS cur_rows\nFROM dim_member WHERE home_store_id IN (115,116,117,136,900,999) GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "home_store_id | versions | members | current_members | min(join_date) | max(join_date) | cur_rows\n115 | 4264 | 3109 | 2788 | 2019-01-02 | 2026-10-02 | 2788\n116 | 2670 | 1929 | 1721 | 2019-01-02 | 2026-10-02 | 1721\n117 | 2582 | 1856 | 1692 | 2019-01-02 | 2026-10-04 | 1692\n136 | 1405 | 1007 | 974 | 2019-01-12 | 2026-10-04 | 974\n900 | 17048 | 12028 | 12028 | 2019-01-01 | 2026-10-04 | 12028\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:52",
+   "statement": "SELECT COUNT(*) AS total_rows, COUNT(DISTINCT member_id) AS members, SUM(CASE WHEN is_current THEN 1 ELSE 0 END) AS current_rows, COUNT(DISTINCT CASE WHEN is_current THEN member_id END) AS cur_members, MAX(valid_from), MIN(join_date), MAX(join_date) FROM dim_member\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_rows | members | current_rows | cur_members | max(valid_from) | min(join_date) | max(join_date)\n89314 | 60000 | 60000 | 60000 | 2026-10-04 | 2019-01-01 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:03",
+   "statement": "WITH cur AS (SELECT member_id, home_store_id, join_date, marketing_consent FROM dim_member WHERE is_current),\ntam AS (SELECT store_id FROM dim_store WHERE is_current AND city='Tampere' AND store_id<900)\nSELECT c.home_store_id,\n COUNT(DISTINCT c.member_id) AS members,\n SUM(CASE WHEN c.marketing_consent THEN 1 ELSE 0 END) AS consent,\n SUM(CASE WHEN c.join_date < DATE '2024-09-02' THEN 1 ELSE 0 END) AS joined_before_open,\n COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM dim_member m2 WHERE m2.member_id=c.member_id AND m2.home_store_id<>c.home_store_id) THEN c.member_id END) AS changed_store\nFROM cur c JOIN tam ON tam.store_id=c.home_store_id GROUP BY ROLLUP(1) ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "home_store_id | members | consent | joined_before_open | changed_store\n115 | 2788 | 1892 | 1350 | 156\n116 | 1721 | 1155 | 808 | 102\n117 | 1692 | 1138 | 813 | 91\n136 | 974 | 656 | 362 | 398\nNULL | 7175 | 4841 | 3333 | 747\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:04",
+   "statement": "SELECT COUNT(DISTINCT m.member_id) AS ever_tampere_home FROM dim_member m WHERE m.home_store_id IN (115,116,117,136)\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "ever_tampere_home\n7515\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:10",
+   "statement": "WITH buyers AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\ncur AS (SELECT member_id, home_store_id FROM dim_member WHERE valid_from <= DATE '2026-10-04' AND valid_to >= DATE '2026-10-04')\nSELECT c.home_store_id, COUNT(DISTINCT c.member_id) AS members, COUNT(DISTINCT b.member_id) AS active\nFROM cur c LEFT JOIN buyers b ON b.member_id=c.member_id\nWHERE c.home_store_id IN (115,116,117,136) GROUP BY ROLLUP(1) ORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "home_store_id | members | active\n115 | 2788 | 1708\n116 | 1721 | 1052\n117 | 1692 | 1034\n136 | 974 | 647\nNULL | 7175 | 4441\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:11",
+   "statement": "SELECT DISTINCT s.city, s.store_id, s.store_name FROM dim_store s WHERE s.city ILIKE '%tamp%' OR s.store_name ILIKE '%tamp%' OR s.city ILIKE '%pirkanmaa%'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "city | store_id | store_name\nTampere | 117 | Tampere Kaleva\nTampere | 116 | Tampere Lielahti\nTampere | 999 | Training store\nTampere | 900 | Tuomimetsä web shop\nTampere | 136 | Tampere Lamminpää\nTampere | 115 | Tampere Hervanta\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:17",
+   "statement": "SELECT COUNT(DISTINCT m.member_id) AS tampere_loyalty_members\nFROM dim_member m\nJOIN dim_store s ON s.store_id = m.home_store_id AND s.is_current\nWHERE m.is_current AND s.city = 'Tampere' AND s.store_id < 900\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "tampere_loyalty_members\n7175\n(1 row)"
+  }
+ ]
+}

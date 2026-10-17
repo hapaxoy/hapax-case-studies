@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, d.fiscal_period, s.format AS store_format, count(DISTINCT f.receipt_id) AS transactions, round(sum(f.net_amount) / count(DISTINCT f.receipt_id), 2) AS atv_eur FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4 AND f.channel_id = 1 AND s.store_id &lt; 900 AND NOT f.staff_purchase_flag GROUP BY d.fiscal_year, d.fiscal_period, s.format ORDER BY CASE s.format WHEN 'Small' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_format", "transactions", "atv_eur"],
+    "rows": [
+      ["FY2026/27", 4, "Small", 2598, 50.75],
+      ["FY2026/27", 4, "Medium", 8641, 60.27],
+      ["FY2026/27", 4, "Large", 6508, 60.67]
+    ]
+  },
+  "definitions_applied": [
+    "ATV = net sales excluding VAT divided by the number of distinct receipts",
+    "Fiscal period 4 of FY2026/27 (3 Aug to 30 Aug 2026, 4 weeks), taken from the warehouse fiscal calendar and not calendar months",
+    "Physical-store sales only (channel_id 1, store_id below 900)",
+    "Web shop (900) and click-and-collect lines excluded, so web orders do not count as store transactions",
+    "Training store (999) excluded as a pseudo-location",
+    "Staff purchases excluded (staff_purchase_flag = true)",
+    "Store format taken from the dim_store version attached to each sales line (store_key)",
+    "Sales before returns: refunds are not netted off the sales and are not counted as transactions"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year FY2026/27, as the request is dated 6 Oct 2026. Period 4 is therefore 3 to 30 Aug 2026.",
+    "ATV is a customer metric, so staff purchases are left out. No written company ATV definition was available. Including them lowers ATV slightly: Small 50.67, Medium 60.15, Large 60.60.",
+    "ATV is measured on net sales excluding VAT (the warehouse's net_amount), not on gross sales including VAT.",
+    "The breakdown is by store format, as requested. The format labels in the data are Small, Medium and Large, even though the column comment says Hyper, Standard or Express.",
+    "The query keys on channel_id because channel_code is null for all sales in this period."
+  ],
+  "caveats": [
+    "Period 4 is fully loaded (ref_fiscal_calendar.fully_loaded = true). The fact data matches rpt_daily_store_sales exactly before returns: net sales 1,062,266.72 EUR and 18,027 receipts for all store channels, including staff purchases.",
+    "Excluded from the figures: web and click-and-collect lines (about 211 thousand EUR of net sales in the period), training store 999 lines (zero in the store channel, but 127 lines carried the training-store key) and staff purchases (about 1 percent of lines).",
+    "Returns are not deducted. Refunds booked in the period were about 51.8 thousand EUR net across stores. A returns-adjusted ATV would be lower.",
+    "No duplicate lines, no receipts spanning more than one store or date, no sales on non-trading days, and no overlap with the staging load were found for the period.",
+    "No stores were closed during period 4. The refit closure of store 125 ended on 26 July 2026, and Savonlinna (129) closed on 25 Jan 2026 and has no period 4 sales.",
+    "Small-format ATV (50.75) is about 9.5 EUR below Medium and Large, which are within 0.40 EUR of each other. The Medium and Large difference is small."
+  ]
+}
+```

@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, p.sku, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, p.sku, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), by_cat AS (SELECT cp.category, d.fiscal_year, SUM(n.net_sales) AS net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current WHERE d.fiscal_period = 8 AND d.fiscal_year IN ('FY2025/26','FY2024/25') AND cp.category IN ('Garden','Electrical') GROUP BY 1, 2) SELECT ty.category, 8 AS fiscal_period, ly.net_sales AS net_sales_fy2024_25, ty.net_sales AS net_sales_fy2025_26, ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct FROM by_cat ty JOIN by_cat ly ON ly.category = ty.category AND ly.fiscal_year = 'FY2024/25' WHERE ty.fiscal_year = 'FY2025/26' ORDER BY 1",
+  "result": {
+    "columns": ["category", "fiscal_period", "net_sales_fy2024_25", "net_sales_fy2025_26", "growth_pct"],
+    "rows": [
+      ["Electrical", 8, 162418.96, 171210.97, 5.4],
+      ["Garden", 8, 36765.02, 36813.07, 0.1]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: EUR excluding VAT, after returns, with returns deducted on their return date",
+    "Web sales recognised on the Helsinki dispatch date, delivered and collected orders only",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Fiscal calendar: period 8 is fiscal weeks 31 to 34, 4 weeks (24 Nov to 21 Dec 2025; 25 Nov to 22 Dec 2024)",
+    "Prior year lined up by fiscal week and period number, not by calendar date",
+    "As-is reporting: categories taken from the current product version, so outdoor lighting sits in Electrical in both years",
+    "Growth % = (FY2025/26 / FY2024/25 - 1) x 100",
+    "Control total: my all-category period 8 net sales equal rpt_daily_store_sales for both years (1,435,696.60 and 1,373,188.97, gap 0.00)"
+  ],
+  "assumptions": [
+    "The request was received 5 Oct 2026, in FY2026/27. I read 'last year' as FY2025/26, the most recently completed fiscal year, and 'the year before' as FY2024/25. This matches how earlier accepted requests were read.",
+    "'Period 8' means fiscal period 8 of each fiscal year.",
+    "Net sales on the company definition (excluding VAT, after returns), because the request did not say otherwise.",
+    "As-is category hierarchy, because the request did not ask for as-was.",
+    "Web sales are included, since the category figures cover the whole company. Both categories are reported as separate rows, not combined."
+  ],
+  "caveats": [
+    "Correction applied: outdoor lighting moved from Garden to Electrical on 27 Oct 2025, which is before FY2025/26 P8 but after FY2024/25 P8. I restated FY2024/25 on the current hierarchy so both years are like for like. This moves 19,504.55 EUR of FY2024/25 P8 outdoor lighting sales into Electrical.",
+    "On the old as-was categories, FY2024/25 P8 would show Electrical 142,914.41 and Garden 56,269.57, which would make Garden look about 35% down and Electrical about 20% up. That would come purely from the reclassification, not from trading. These as-was figures are my own derived estimate and were not produced by a separate query.",
+    "Garden is flat year on year (+0.1%, about 48 EUR). This is a December period, when garden sales are seasonally low.",
+    "Both periods are fully loaded and complete. Week 53 is not involved because it falls in period 12.",
+    "I did not use rpt.v_daily_sales or rpt.v_weekly_store_sales, because they omit web sales from 3 Nov 2025 onward, which falls inside FY2025/26 P8.",
+    "The control-total check was done on all categories together, since rpt_daily_store_sales has no product dimension. The Garden and Electrical rows are not individually reconciled to it.",
+    "I found no duplicate sales_line_id values in either period."
+  ]
+}
+```

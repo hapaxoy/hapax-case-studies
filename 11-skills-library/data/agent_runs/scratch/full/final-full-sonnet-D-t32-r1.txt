@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "SELECT s.store_id, cs.store_name, d.fiscal_year, d.fiscal_period, SUM(f.quantity) AS units_sold FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id = 108 AND cp.subcategory = 'Interior Paint' AND cp.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3 GROUP BY 1, 2, 3, 4",
+  "result": {
+    "columns": ["store_id", "store_name", "fiscal_year", "fiscal_period", "units_sold"],
+    "rows": [[108, "Lahti", "FY2026/27", 3, 194]]
+  },
+  "definitions_applied": [
+    "Units sold = quantity on sales lines, by sale date, before returns",
+    "Fiscal calendar: FY2026/27 P3 = 29 Jun to 2 Aug 2026 (weeks 9 to 13), taken from dim_date",
+    "Store identified by store_id (108), not by name match, using the store version on the sale date",
+    "Product category read as-is: subcategory taken from the current dim_product version (is_current)",
+    "Store 999 and category ZZ Test excluded (no such rows in this result)",
+    "Staff purchases included, as in the company net sales definition",
+    "Control total: Lahti's all-product net sales before returns, receipts and units for 29 Jun to 2 Aug agree exactly with rpt_daily_store_sales (EUR 67,202.85, 1,048 receipts, 3,927 units)",
+    "No deprecated tables or views used; no channel_code used"
+  ],
+  "assumptions": [
+    "'Interior Paint' is the dim_product subcategory (category Paint &amp; Decorating). It has 125 product versions covering 123 SKUs, and no other subcategory or product name resembles it.",
+    "'Lahti store' is store 108 (store_key 13). A name search for 'lahti' also returns 'Tampere Lielahti' (store 116), a different store that I excluded.",
+    "'Period 3 of FY26/27' means FY2026/27 P3. It is complete (fully_loaded = true) and the warehouse is loaded through 4 October 2026.",
+    "'Units sold' means units on sales lines, not net of returns, because the dictionary defines units sold as the quantity on sales lines."
+  ],
+  "caveats": [
+    "Returns are not netted off. 6 of the 194 units were returned, on any date, so net of returns the figure would be 188. The returns come from fact_return_line, matched through sales_line_id. Say if you want the net figure instead.",
+    "The 194 units include 4 units bought by staff on staff-purchase receipts. Excluding them gives 190.",
+    "The Interior Paint subcategory is the same on every product version in the period, so as-is and as-was give the same figure.",
+    "Source rows are clean. The 142 lines in the period are unique on sales_line_id and on receipt_id with line_no, and none has zero or negative quantity.",
+    "The name search for the store matched two stores (Lahti and Tampere Lielahti). Only store 108 is counted."
+  ]
+}
+```

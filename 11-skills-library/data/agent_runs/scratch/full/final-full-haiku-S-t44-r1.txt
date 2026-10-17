@@ -1,0 +1,29 @@
+```json
+{
+  "sql": "WITH sales_data AS (SELECT p.category, COALESCE(SUM(f.net_amount), 0) as sales_net, COALESCE(SUM(f.standard_cost), 0) as cost_goods FROM fact_sales_line f JOIN dim_product p ON f.product_key = p.product_key JOIN dim_date d ON f.sale_date = d.calendar_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 6 AND p.category IN ('Garden', 'Electrical') GROUP BY p.category), return_data AS (SELECT p.category, COALESCE(SUM(r.refund_net), 0) as returns_net, COALESCE(SUM(r.standard_cost_returned), 0) as returns_cost FROM fact_return_line r JOIN dim_product p ON r.product_key = p.product_key JOIN dim_date d ON r.return_date = d.calendar_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 6 AND p.category IN ('Garden', 'Electrical') GROUP BY p.category) SELECT s.category, ROUND(s.sales_net - COALESCE(r.returns_net, 0), 2) as net_sales, ROUND(((s.sales_net - COALESCE(r.returns_net, 0) - (s.cost_goods - COALESCE(r.returns_cost, 0))) / (s.sales_net - COALESCE(r.returns_net, 0))) * 100, 2) as gross_margin_pct FROM sales_data s LEFT JOIN return_data r ON s.category = r.category ORDER BY s.category",
+  "result": {
+    "columns": ["category", "net_sales", "gross_margin_pct"],
+    "rows": [
+      ["Electrical", 186087.72, 41.61],
+      ["Garden", 148547.46, 39.47]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: sales net amount (after line discounts and VAT exclusion) minus refunds, both from recorded transactions",
+    "Gross margin percentage: (net sales - standard cost of goods sold) / net sales * 100, where COGS includes returned goods cost",
+    "Fiscal period: FY2025/26 Period 6 (22 Sep 2025 – 26 Oct 2025)",
+    "Standard cost: the standard unit cost from dim_product revalued each April"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year 2025/26 (the most recent complete fiscal year relative to today 15 Oct 2026)",
+    "Period 6 refers to fiscal period 6 within that fiscal year",
+    "Net sales includes both store and web channel transactions",
+    "Gross margin is calculated on the net sales value (excluding VAT) and gross cost (including cost of returns)"
+  ],
+  "caveats": [
+    "Gross margin calculated at the line level using standard cost; standard cost was last revalued in April 2026 and may not reflect actual COGS for all products if actual costs have changed",
+    "Web orders and store purchases are included without separation",
+    "Staff purchases (staff_purchase_flag = true) are included in the calculation"
+  ]
+}
+```

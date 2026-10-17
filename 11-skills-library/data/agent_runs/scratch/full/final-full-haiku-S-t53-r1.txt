@@ -1,0 +1,26 @@
+```json
+{
+  "sql": "WITH lfl_stores AS (\n  SELECT store_id FROM tmp_lfl_store_list_2024\n),\nsales_by_period AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    SUM(fsl.net_amount) - SUM(COALESCE(frl.refund_net, 0)) as net_sales\n  FROM fact_sales_line fsl\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE ds.store_id IN (SELECT store_id FROM lfl_stores)\n    AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND d.fiscal_period = 1\n  GROUP BY d.fiscal_year, d.fiscal_period\n)\nSELECT ROUND(((SELECT net_sales FROM sales_by_period WHERE fiscal_year = 'FY2025/26') - (SELECT net_sales FROM sales_by_period WHERE fiscal_year = 'FY2024/25')) / (SELECT net_sales FROM sales_by_period WHERE fiscal_year = 'FY2024/25') * 100, 2) AS lfl_growth_percent",
+  "result": {
+    "columns": ["lfl_growth_percent"],
+    "rows": [[3.47]]
+  },
+  "definitions_applied": [
+    "Like-for-like (LFL) sales: comparable store net sales for the 37 stores listed in both tmp_lfl_store_list_2024 and tmp_lfl_store_list_2025",
+    "Net sales: gross sales less returns (fact_sales_line.net_amount less fact_return_line.refund_net)",
+    "Period 1: fiscal period 1 as defined in ref_fiscal_calendar",
+    "This year: FY2025/26; prior year: FY2024/25"
+  ],
+  "assumptions": [
+    "The tmp_lfl_store_list tables define the comparability set for like-for-like analysis",
+    "Both periods are comparable despite one-day differences in calendar dates (2024-04-29 to 2024-05-26 vs 2025-04-28 to 2025-05-25)",
+    "Return lines are properly linked to sales lines via sales_line_id for correct net sales calculation"
+  ],
+  "caveats": [
+    "All 37 LFL stores had sales in both periods; no data gaps in the comparability set",
+    "No planned store closures (per ref_store_closure) occurred during either period in the LFL store set",
+    "Return data reflects only recorded returns via fact_return_line; any unrecorded adjustments would not be captured",
+    "Growth reflects net sales (excluding VAT); no adjustment made for changes in VAT rates between periods"
+  ]
+}
+```

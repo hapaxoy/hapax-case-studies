@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "WITH sales AS (SELECT f.sales_line_id, f.net_amount, st.format FROM fact_sales_line f JOIN dim_store st ON st.store_key = f.store_key WHERE f.sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22' AND f.channel_code = 'ST' AND st.store_id &lt; 900), refunds AS (SELECT sales_line_id, sum(refund_net) AS refund_net FROM fact_return_line GROUP BY sales_line_id) SELECT s.format AS store_format, round(100 * sum(coalesce(r.refund_net, 0)) / sum(s.net_amount), 2) AS return_rate_pct FROM sales s LEFT JOIN refunds r USING (sales_line_id) GROUP BY s.format ORDER BY s.format",
+  "result": {
+    "columns": ["store_format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: 'last year' is FY2025/26, and period 2 is 2025-05-26 to 2025-06-22 (ref_fiscal_calendar, fully loaded)",
+    "Goods sold in the period: sales lines with sale_date in that window, in the stores only",
+    "Returns attributed to the original sale: a refund counts against the period and store format of the sales line it returns, whenever it was booked (via fact_return_line.sales_line_id)",
+    "Return rate = refund_net (ex VAT) divided by net_amount (ex VAT, after line discounts)",
+    "Store format taken from dim_store through the sales line's store_key, the store version in force at the sale date",
+    "Stores only: pseudo-locations are left out (web shop 900, training store 999)"
+  ],
+  "assumptions": [
+    "'Last year' means the last full fiscal year before the request date of 2026-10-05, which is FY2025/26. The current year is FY2026/27, and the FY2025/26 year started on 2025-04-28.",
+    "'Return rate' is read as value: refunds ex VAT as a percentage of net sales ex VAT. The request does not say whether it means value or units. Unit rates for the same sales are Large 2.37%, Medium 2.43%, Small 2.39%. Line-count rates are Large 3.22%, Medium 3.25%, Small 3.29%.",
+    "'By store format' means the three store formats in the warehouse (Large, Medium, Small). The web shop is not a store, so it has no row in the table.",
+    "Staff purchases are included. That matches how the company's daily sales report (rpt_daily_store_sales) counts net sales: its P2 total, 1,101,367.56 EUR, equals the store total with staff purchases in. Excluding them would give Large 4.45%, Medium 4.56%, Small 4.30%.",
+    "A return from a different store or on a different channel still counts against the store format where the goods were sold."
+  ],
+  "caveats": [
+    "The warehouse comment for dim_store.format says 'Hyper, Standard or Express'. The data actually holds Large, Medium, Small, plus Web and Training for the pseudo-locations. I used the values in the data.",
+    "Corrections made: I left out the Training store (999). It has 126 sales lines in P2 (2,222 EUR, mostly staff purchases) and no returns. I also left out web sales (store 900), which have a 12.23% value return rate in the same period and are not a store format.",
+    "Source checks passed: no duplicate sales or return lines, no returns without a matching sale, no returns dated before the sale or larger than the sale quantity, and refund amounts agree with the sales line value pro rata. The 141 rows in stg_return_line_load are already in fact_return_line and all relate to later sales, not P2 2025.",
+    "The period is fully matured. The longest sale-to-return gap in the data is 56 days and the data runs to 2026-10-04, so no P2 2025 returns are still to come.",
+    "All stores in P2 trade 26 days, with no gaps and no refit closures. The format of every store is the same in both store versions, so the 2025-04-28 region and version changes do not affect this result.",
+    "Differences between formats are small (4.28% to 4.53%). The figures are the headline rates over about 53,000 sales lines and have not been tested for significance."
+  ]
+}
+```

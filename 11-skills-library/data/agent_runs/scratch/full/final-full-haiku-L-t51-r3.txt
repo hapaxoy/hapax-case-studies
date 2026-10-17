@@ -1,0 +1,39 @@
+Perfect! I have the uplift analysis. Let me verify the calculation and prepare the final response.
+
+The results show:
+- **Targeted members** (those who received the campaign): 23,818 members with average spend of €9.34 per member
+- **Holdout members** (control group): 2,747 members with average spend of €7.94 per member
+- **Uplift**: €1.41 per member (the difference: 9.34 - 7.94)
+
+The overlap check confirms 0 members in both groups, which is correct for a properly constructed holdout.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 15 AS campaign_id\n),\ncampaign AS (\n    SELECT c.campaign_id, c.campaign_name, c.start_date, c.end_date + 7 AS window_end\n    FROM dim_campaign c JOIN params ON params.campaign_id = c.campaign_id\n),\ntargeted AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    JOIN params ON params.campaign_id = e.campaign_id\n),\nholdout AS (\n    SELECT DISTINCT h.member_id\n    FROM campaign_holdout h\n    JOIN params ON params.campaign_id = h.campaign_id\n),\nmembers AS (\n    SELECT member_id, 'targeted' AS member_group FROM targeted\n    UNION ALL\n    SELECT member_id, 'holdout' FROM holdout\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nmember_sales AS (\n    SELECT m.member_id, SUM(f.net_amount) AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_member m  ON m.member_key = f.member_key\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign.start_date AND campaign.window_end\n    GROUP BY 1\n),\nby_group AS (\n    SELECT mb.member_group, COUNT(*) AS members, AVG(COALESCE(ms.net_sales, 0)) AS mean_net_sales\n    FROM members mb\n    LEFT JOIN member_sales ms ON ms.member_id = mb.member_id\n    GROUP BY 1\n)\nSELECT member_group, ROUND(mean_net_sales, 2) AS mean_net_sales_per_member\nFROM by_group\nWHERE member_group IN ('targeted', 'holdout')\nUNION ALL\nSELECT 'uplift (targeted - holdout)',\n       ROUND(MAX(CASE WHEN member_group = 'targeted' THEN mean_net_sales END)\n           - MAX(CASE WHEN member_group = 'holdout' THEN mean_net_sales END), 2)\nFROM by_group",
+  "result": {
+    "columns": ["group", "average_spend_eur"],
+    "rows": [
+      ["targeted members", 9.34],
+      ["holdout members", 7.94],
+      ["uplift", 1.41]
+    ]
+  },
+  "definitions_applied": [
+    "Campaign uplift (DEF-UPLIFT): mean net sales per targeted member minus mean per holdout member",
+    "Net sales scope (DEF-NET-SALES-SCOPE): net sales before returns, excludes store 999 and category ZZ Test",
+    "Web recognition (DEF-WEB-RECOGNITION): web sales recognised on dispatch date in Helsinki time (delivered or collected orders)",
+    "Member versions (REG-MEMBER-VERSIONS): member_key on exposure date linked to current member_id",
+    "Campaign window: start_date through end_date plus 7 days (2025-11-24 through 2025-12-07)"
+  ],
+  "assumptions": [
+    "Campaign identification: matched 'Black Week 2025' exactly by name; found campaign_id 15 active 2025-11-24 to 2025-11-30",
+    "Member groups: targeted = distinct member_id with at least one exposure; holdout = members in campaign_holdout table (no overlap by design)",
+    "Members with zero sales in the window: counted as zero spend in the average (both groups include non-purchasing members)"
+  ],
+  "caveats": [
+    "No data issues detected; overlap check returned zero (correct for holdout design)",
+    "Uplift interpretation: the €1.41 per-member difference is 17.8% higher spend in the targeted group (1.41 / 7.94)",
+    "Campaign window extends 7 days beyond end_date per the template standard; dates are 2025-11-24 through 2025-12-07"
+  ]
+}
+```

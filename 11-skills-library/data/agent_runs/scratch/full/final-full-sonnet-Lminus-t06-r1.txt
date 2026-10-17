@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH sold_lines AS (SELECT f.sales_line_id, f.net_amount, s.format FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT l.format AS store_format, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct FROM sold_lines l LEFT JOIN refunds r USING (sales_line_id) GROUP BY 1 ORDER BY 1",
+  "result": {
+    "columns": ["store_format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28],
+      ["Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: refunded net (refund_net) divided by sold net (net_amount), both excluding VAT",
+    "Sale-week cohort: sold lines selected by the fiscal period of the sale date; refunds matched to the sold line through sales_line_id, whenever and wherever they were booked",
+    "Fiscal calendar: FY2025/26 period 2 (Monday 26 May 2025 to Sunday 22 June 2025, fiscal weeks 5 to 8)",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Web shop is store 900 with format Web and is shown as its own format row",
+    "Format taken from dim_store on the sale line's store version (each store has the same format in every version)",
+    "Staff purchases included, as in net sales",
+    "Warehouse tables used: fact_sales_line, fact_return_line, dim_store, dim_product, dim_date. No deprecated, staging, backup or tmp objects used."
+  ],
+  "assumptions": [
+    "\"Last year\" is read as the previous fiscal year, FY2025/26. The request was received on 5 Oct 2026, in FY2026/27. Past requests in the same position (May 2026 onwards) took FY2025/26. So \"period 2 last year\" is FY2025/26 P02, not FY2024/25 P02.",
+    "\"Goods sold in period 2\" is read as the sale-week cohort: sold in P2, with returns counted back to the sale however late they came.",
+    "\"Store format\" is read as the format values in dim_store (Large, Medium, Small). The web shop is included as the Web row because its format in dim_store is Web. Drop that row if you want physical stores only.",
+    "Rates are in percent units, rounded to 2 decimals. Sold and refunded values are net of VAT."
+  ],
+  "caveats": [
+    "The cohort is complete. P2 sales ended on 22 Jun 2025 and the latest return on those sales is 23 Jul 2025, a lag of at most 33 days. The warehouse is loaded to 4 Oct 2026.",
+    "Web returns at 12.23% are about three times the store rates. Web refunds follow the original web line even when the return was posted to the web shop. This is a real channel difference on the company definition, not a data error.",
+    "Store 999 and ZZ Test lines were excluded. Store 999 carried EUR 2,222.21 of sales in the period and web ZZ Test lines EUR 3.82. They were excluded because the house rule leaves them out of all sales reporting, not because they were a data fault.",
+    "Checks found no problem needing correction. No duplicate sales or return lines, and the same refund is not on more than one line. No return pre-dates its sale, none exceeds the sold quantity or net value, and no web lines belong to cancelled orders. I did not use the rpt_daily_store_sales control total, because it covers net sales after returns on return dates and not a sale-week return rate.",
+    "Do not use dim_store.format as documented in the column comment (Hyper, Standard, Express). The actual values are Large, Medium, Small, Web and Training."
+  ]
+}
+```

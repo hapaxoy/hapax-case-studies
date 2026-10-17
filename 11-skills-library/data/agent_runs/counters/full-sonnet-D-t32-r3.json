@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t32-r3",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T32",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "b73c166f3b9972bfcd9369f8eda05e7d0993d3f60faa8fe4c431d9a6f1cd896b",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:51:02",
+   "statement": "SELECT 'store' k, CAST(store_key AS VARCHAR) a, CAST(store_id AS VARCHAR) b, store_name c, city d, CAST(valid_from AS VARCHAR) e, CAST(valid_to AS VARCHAR) f FROM dim_store WHERE city ILIKE '%lahti%' OR store_name ILIKE '%lahti%'\nUNION ALL\nSELECT 'prod', category, subcategory, CAST(count(*) AS VARCHAR), CAST(count(distinct sku) AS VARCHAR), '', '' FROM dim_product WHERE category ILIKE '%paint%' OR subcategory ILIKE '%paint%' OR subcategory ILIKE '%interior%' GROUP BY 2,3\nUNION ALL\nSELECT 'period', fiscal_year, CAST(fiscal_period AS VARCHAR), CAST(period_start_date AS VARCHAR), CAST(period_end_date AS VARCHAR), CAST(fully_loaded AS VARCHAR), '' FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "k | a | b | c | d | e | f\nstore | 13 | 108 | Lahti | Lahti | 2000-01-01 | 9999-12-31\nstore | 22 | 116 | Tampere Lielahti | Tampere | 2000-01-01 | 9999-12-31\nprod | Paint & Decorating | Interior Paint | 125 | 123 |  | \nprod | Paint & Decorating | Brushes & Rollers | 100 | 100 |  | \nprod | Paint & Decorating | Exterior Paint | 85 | 85 |  | \nprod | Paint & Decorating | Wallpaper & Decor Film | 78 | 77 |  | \nperiod | FY2026/27 | 3 | 2026-06-29 | 2026-08-02 | true | \n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:51:08",
+   "statement": "SELECT 'multi' k, CAST(p.sku AS VARCHAR) a, p.subcategory b, p.category c, CAST(p.valid_from AS VARCHAR) d, CAST(p.valid_to AS VARCHAR) e, CAST(p.is_current AS VARCHAR) f, p.product_name g\nFROM dim_product p WHERE p.sku IN (SELECT sku FROM dim_product GROUP BY sku HAVING count(*)>1 ) AND p.sku IN (SELECT sku FROM dim_product WHERE subcategory='Interior Paint')\nUNION ALL\nSELECT 'dups', CAST(count(*) AS VARCHAR), CAST(count(DISTINCT (receipt_id, line_no)) AS VARCHAR), CAST(count(DISTINCT sales_line_id) AS VARCHAR), CAST(sum(quantity) AS VARCHAR), CAST(min(sale_date) AS VARCHAR), CAST(max(sale_date) AS VARCHAR), CAST(max(etl_loaded_at) AS VARCHAR)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE s.store_id=108 AND p.subcategory='Interior Paint' AND f.sale_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "k | a | b | c | d | e | f | g\nmulti | 100963 | Interior Paint | Paint & Decorating | 2000-01-01 | 2025-07-06 | false | Interior Paint Tuulikki 594\nmulti | 100963 | Interior Paint | Paint & Decorating | 2025-07-07 | 9999-12-31 | true | Interior Paint Tuulikki 594\nmulti | 101047 | Interior Paint | Paint & Decorating | 2000-01-01 | 2024-09-08 | false | Interior Paint Peltola 502\nmulti | 101047 | Interior Paint | Paint & Decorating | 2024-09-09 | 9999-12-31 | true | Interior Paint Peltola 502\ndups | 142 | 142 | 142 | 194 | 2026-06-29 | 2026-08-02 | 2026-08-03 01:00:00\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:51:14",
+   "statement": "WITH f AS (\n  SELECT f.sale_date d, sum(f.quantity) u, count(*) n, sum(f.net_amount) net\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE s.store_id=108 AND p.category<>'ZZ Test' AND f.sale_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02' GROUP BY 1),\nr AS (SELECT business_date d, units_sold, net_sales_before_returns nb FROM rpt_daily_store_sales WHERE store_id=108 AND business_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02')\nSELECT coalesce(f.d,r.d) d, f.u, r.units_sold, f.net, r.nb, f.n FROM f FULL JOIN r ON f.d=r.d ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 35,
+   "output_preview": "d | u | units_sold | net | nb | n\n2026-06-29 | 108 | 108 | 1492.76 | 1492.76 | 68\n2026-06-30 | 107 | 107 | 1566.96 | 1566.96 | 63\n2026-07-01 | 133 | 133 | 1872.72 | 1872.72 | 81\n2026-07-02 | 83 | 83 | 918.70 | 918.70 | 46\n2026-07-03 | 203 | 203 | 3571.29 | 3571.29 | 118\n2026-07-04 | 145 | 145 | 2325.80 | 2325.80 | 88\n2026-07-05 | 83 | 83 | 1404.14 | 1404.14 | 49\n2026-07-06 | 68 | 68 | 1215.16 | 1215.16 | 35\n2026-07-07 | 128 | 128 | 2274.16 | 2274.16 | 73\n2026-07-08 | 121 | 121 | 2194.81 | 2194.81 | 78\n2026-07-09 | 174 | 174 | 2690.22 | 2690.22 | 104\n2026-07-10 | 127 | 127 | 2050.04 | 2050.04 | 73\n2026-07-11 | 120 | 120 | 1952.63 | 1952.63 | 73\n2026-07-12 | 104 | 104 | 2075.26 | 2075.26 | 57\n2026-07-13 | 92 | 92 | 1937.38 | 1937.38 | 52\n2026-07-14 | 112 | 112 | 1735.16 | 1735.16 | 70\n2026-07-15 | 130 | 130 | 1643.64 | 1643.64 | 76\n2026-07-16 | 87 | 87 | 1300.69 | 1300.69 | 50\n2026-07-17 | 134 | 134 | 2343.25 | 2343.25 | 84\n2026-07-18 | 159 | 159 | 2977.78 | 2977.78 | 102\n2026-07-19 | 76 | 76 | 1990.18 | 1990.18 | 57\n2026-07-20 | 75 | 75 | 1384.26 | 1384.26 | 40\n2026-07-21 | 105 | 105 | 1940.65 | 1940.65 | 64\n2026-07-22 | 56 | 56 | 974.83 | 974.83 | 38\n2026-07-23 | 107 | 107 | 2069.06 | 2069.06 | 67\n2026-07-24 | 140 | 140 | 2652.34 | 2652.34 | 83\n2026-07-25 | 112 | 112 | 2470.61 | 2470.61 | 81\n2026-07-26 | 76 | 76 | 1525.20 | 1525.20 | 50\n2026-07-27 | 87 | 87 | 1173.68 | 1173.68 | 50\n2026-07-28 | 65 | 65 | 1561.42 | 1561.42 | 43\n2026-07-29 | 106 | 106 | 1819.96 | 1819.96 | 67\n2"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:51:20",
+   "statement": "SELECT cs.store_id, cs.store_name, d.fiscal_year, d.fiscal_period AS period, cp.subcategory,\n       SUM(f.quantity) AS units_sold,\n       SUM(CASE WHEN p.subcategory = cp.subcategory THEN f.quantity ELSE 0 END) AS units_aswas,\n       SUM(CASE WHEN f.staff_purchase_flag THEN f.quantity ELSE 0 END) AS staff_units,\n       MIN(f.quantity) AS minq, COUNT(*) AS lines,\n       (SELECT SUM(r.quantity_returned) FROM fact_return_line r JOIN fact_sales_line f2 ON f2.sales_line_id=r.sales_line_id JOIN dim_store s2 ON s2.store_key=f2.store_key JOIN dim_product p2 ON p2.product_key=f2.product_key JOIN dim_product cp2 ON cp2.sku=p2.sku AND cp2.is_current JOIN dim_date d2 ON d2.calendar_date=f2.sale_date WHERE s2.store_id=108 AND cp2.subcategory='Interior Paint' AND d2.fiscal_year='FY2026/27' AND d2.fiscal_period=3) AS units_returned_later\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nJOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE s.store_id = 108 AND cp.category <> 'ZZ Test' AND cp.subcategory = 'Interior Paint'\n  AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3\nGROUP BY 1,2,3,4,5\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | fiscal_year | period | subcategory | units_sold | units_aswas | staff_units | minq | lines | units_returned_later\n108 | Lahti | FY2026/27 | 3 | Interior Paint | 194 | 194 | 4 | 1 | 142 | 6\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,31 @@
+```json
+{
+  "sql": "WITH active AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE f.sale_date &gt; DATE '2025-12-21' - 364 AND f.sale_date &lt;= DATE '2025-12-21'\n      AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT m.tier, count(DISTINCT a.member_id) AS active_members\nFROM active a\nLEFT JOIN dim_member m ON m.member_id = a.member_id AND m.valid_from &lt;= DATE '2025-12-21' AND m.valid_to &gt;= DATE '2025-12-21'\nGROUP BY 1 ORDER BY CASE m.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 WHEN 'Gold' THEN 3 ELSE 4 END",
+  "result": {
+    "columns": ["tier", "active_members"],
+    "rows": [["Basic", 14654], ["Silver", 10971], ["Gold", 3901]]
+  },
+  "definitions_applied": [
+    "Active member: at least one purchase in the trailing 52 fiscal weeks ending with, and including, the as-of week (sale_date &gt; as-of Sunday - 364 and &lt;= as-of Sunday), in any channel",
+    "Distinct member_id counted, not member_key",
+    "Tier read from the dim_member version valid on the as-of Sunday (valid_from &lt;= date &lt;= valid_to)",
+    "Store 999 and category ZZ Test filtered out of the purchases",
+    "Staff purchases included",
+    "Fiscal calendar from ref_fiscal_calendar: FY2025/26 P08 ends Sunday 21 December 2025",
+    "Deprecated objects (stg_, bak_, tmp_, _old tables, rpt.v_ views, channel_code) not used"
+  ],
+  "assumptions": [
+    "'Last year' read as FY2025/26 (the fiscal year before the current FY2026/27 on the request date, 7 October 2026), following the 12 to 27 May 2026 precedent (REQ-D04, D08, D28, D35). 'End of period 8' is therefore Sunday 21 December 2025, the last day of FY2025/26 P08 (24 Nov to 21 Dec 2025).",
+    "The trailing window is 22 December 2024 to 21 December 2025 inclusive.",
+    "Web purchases are dated on sale_date (the order date), as in the accepted active-member queries (REQ-D29, D30). Cancelled and still-processing web orders have no sales lines, so they do not count as purchases.",
+    "Returns are ignored: a member counts as active if they made a purchase, even if they later returned it.",
+    "Every active member had a tier version valid on 21 December 2025, so the three tiers add up to all active members (29,526)."
+  ],
+  "caveats": [
+    "Duplicate loads in fact_sales_line: 418 receipt_id and line_no pairs in the window appear twice (for example store key 22 on 15 September 2025, loaded 16 and 23 September 2025). This does not change a distinct member count, so no correction was needed here. It would double-count sales values, receipts and units in any other request.",
+    "The window excludes store 999 and ZZ Test. In the window, no member-linked lines were in either, so this filter did not change the total.",
+    "Counts are as at the as-of date. Tier is the tier on 21 December 2025, not the member's current tier.",
+    "The figures are as-of 21 December 2025 and do not use data after that date (the warehouse is loaded through 4 October 2026)."
+  ]
+}
+```

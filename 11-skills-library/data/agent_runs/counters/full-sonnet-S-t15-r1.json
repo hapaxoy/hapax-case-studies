@@ -1,0 +1,121 @@
+{
+ "run_id": "full-sonnet-S-t15-r1",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T15",
+ "budget": 30,
+ "used": 12,
+ "refused": 0,
+ "packet_sha256": "0054378e9feb01e6ea511269f3b40ed719a4c9d46c7e651131fc1b9534cd3659",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:07:52",
+   "statement": "SELECT status, count(*) n, count(DISTINCT web_order_id) d, min(order_ts_utc), max(order_ts_utc) FROM fact_web_order WHERE order_ts_utc >= '2025-11-30 12:00' AND order_ts_utc < '2025-12-02 12:00' GROUP BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | n | d | min(order_ts_utc) | max(order_ts_utc)\ndelivered | 338 | 338 | 2025-11-30T12:06:09 | 2025-12-02T11:56:30\ncancelled | 22 | 22 | 2025-11-30T16:42:37 | 2025-12-01T21:27:52\ncollected | 124 | 124 | 2025-11-30T12:23:44 | 2025-12-02T11:27:24\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:07:57",
+   "statement": "SELECT status,\n count(*) FILTER (WHERE CAST(order_ts_utc AS DATE)=DATE '2025-12-01') utc_date,\n count(*) FILTER (WHERE CAST(timezone('Europe/Helsinki', timezone('UTC', order_ts_utc)) AS DATE)=DATE '2025-12-01') hel_date,\n count(*) FILTER (WHERE order_ts_utc >= '2025-11-30 22:00' AND order_ts_utc < '2025-12-01 22:00') hel_manual,\n count(DISTINCT web_order_id) FILTER (WHERE order_ts_utc >= '2025-11-30 22:00' AND order_ts_utc < '2025-12-01 22:00') hel_distinct\nFROM fact_web_order GROUP BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "status | utc_date | hel_date | hel_manual | hel_distinct\ncollected | 81 | 87 | 87 | 87\nprocessing | 0 | 0 | 0 | 0\ncancelled | 17 | 19 | 19 | 19\ndelivered | 193 | 239 | 239 | 239\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:07:58",
+   "statement": "SELECT count(*) n, count(DISTINCT web_order_id) d, min(order_ts_utc), max(order_ts_utc) FROM fact_web_order\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | min(order_ts_utc) | max(order_ts_utc)\n94876 | 94876 | 2024-04-28T21:24:15 | 2026-10-04T20:56:59\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:03",
+   "statement": "WITH o AS (SELECT * FROM fact_web_order WHERE order_ts_utc >= '2025-11-30 22:00' AND order_ts_utc < '2025-12-01 22:00'),\ns AS (SELECT receipt_id, count(*) lines, min(sale_date) sd, max(sale_date) sd2, sum(gross_amount) g FROM fact_sales_line WHERE channel_code='WB' GROUP BY 1)\nSELECT o.status, count(*) n, count(s.receipt_id) with_lines, sum(CASE WHEN s.lines<>o.line_count THEN 1 ELSE 0 END) linecount_mismatch, sum(CASE WHEN abs(s.g-o.order_total_gross)>0.01 THEN 1 ELSE 0 END) total_mismatch, sum(CASE WHEN o.member_key IS NULL THEN 1 ELSE 0 END) guests, sum(CASE WHEN o.login_state='guest' THEN 1 ELSE 0 END) guest_state\nFROM o LEFT JOIN s ON s.receipt_id=o.web_order_id GROUP BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | n | with_lines | linecount_mismatch | total_mismatch | guests | guest_state\ncollected | 87 | 0 | 0 | 0 | 26 | 26\ncancelled | 19 | 0 | 0 | 0 | 5 | 5\ndelivered | 239 | 0 | 0 | 0 | 77 | 77\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:05",
+   "statement": "SELECT CAST(order_ts_utc AS DATE) d, count(*) n FROM fact_web_order WHERE order_ts_utc >= '2025-11-20' AND order_ts_utc < '2025-12-10' GROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "d | n\n2025-11-20 | 121\n2025-11-21 | 110\n2025-11-22 | 102\n2025-11-23 | 136\n2025-11-24 | 125\n2025-11-25 | 133\n2025-11-26 | 132\n2025-11-27 | 187\n2025-11-28 | 377\n2025-11-29 | 126\n2025-11-30 | 200\n2025-12-01 | 291\n2025-12-02 | 155\n2025-12-03 | 145\n2025-12-04 | 146\n2025-12-05 | 138\n2025-12-06 | 140\n2025-12-07 | 150\n2025-12-08 | 162\n2025-12-09 | 159\n(20 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:08",
+   "statement": "SELECT channel_code, channel_id, count(*) lines, count(DISTINCT receipt_id) receipts, min(sale_ts_utc), max(sale_ts_utc), min(receipt_id), max(receipt_id) FROM fact_sales_line WHERE sale_date BETWEEN '2025-11-30' AND '2025-12-02' GROUP BY 1,2\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_code | channel_id | lines | receipts | min(sale_ts_utc) | max(sale_ts_utc) | min(receipt_id) | max(receipt_id)\nNULL | 3 | 312 | 161 | 2025-11-29T22:14:14 | 2025-12-02T21:37:16 | 90055737 | 90056380\nNULL | 2 | 922 | 456 | 2025-11-29T22:34:57 | 2025-12-02T21:59:54 | 90055739 | 90056382\nNULL | 1 | 4902 | 2105 | 2025-11-30T10:00:30 | 2025-12-02T18:57:58 | 10375745 | 10377849\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:09",
+   "statement": "SELECT min(web_order_id), max(web_order_id), min(line_count), max(line_count) FROM fact_web_order WHERE order_ts_utc >= '2025-11-30 22:00' AND order_ts_utc < '2025-12-01 22:00'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min(web_order_id) | max(web_order_id) | min(line_count) | max(line_count)\n90055882 | 90056226 | 1 | 5\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:12",
+   "statement": "SELECT * FROM dim_channel\n",
+   "n": 8,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_id | channel_name | channel_group | legacy_channel_code\n1 | Store | store | ST\n2 | Web home delivery | web | WB\n3 | Click and collect | web | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:15",
+   "statement": "WITH o AS (SELECT * FROM fact_web_order WHERE order_ts_utc >= '2025-11-30 22:00' AND order_ts_utc < '2025-12-01 22:00'),\ns AS (SELECT receipt_id, channel_id, count(*) lines, sum(gross_amount) g FROM fact_sales_line WHERE channel_id IN (2,3) GROUP BY 1,2)\nSELECT o.status, s.channel_id, count(*) n, count(s.receipt_id) with_lines, sum(CASE WHEN s.lines<>o.line_count THEN 1 ELSE 0 END) lc_mis, sum(CASE WHEN abs(s.g-o.order_total_gross)>0.01 THEN 1 ELSE 0 END) tot_mis\nFROM o LEFT JOIN s ON s.receipt_id=o.web_order_id GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 9,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | channel_id | n | with_lines | lc_mis | tot_mis\ncancelled | NULL | 19 | 0 | 0 | 0\ncollected | 3 | 87 | 87 | 0 | 0\ndelivered | 2 | 239 | 239 | 0 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:19",
+   "statement": "SELECT count(DISTINCT s.receipt_id) orphan_receipts, min(s.sale_ts_utc), max(s.sale_ts_utc)\nFROM fact_sales_line s LEFT JOIN fact_web_order o ON o.web_order_id=s.receipt_id\nWHERE s.channel_id IN (2,3) AND o.web_order_id IS NULL\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orphan_receipts | min(s.sale_ts_utc) | max(s.sale_ts_utc)\n0 | NULL | NULL\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:21",
+   "statement": "SELECT count(*) FROM stg_web_order_load WHERE order_ts_utc >= '2025-11-30 22:00' AND order_ts_utc < '2025-12-01 22:00'\n",
+   "n": 11,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "count_star()\n0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:22",
+   "statement": "SELECT date_trunc('hour', timezone('Europe/Helsinki', timezone('UTC', order_ts_utc))) h, count(*) FROM fact_web_order WHERE order_ts_utc >= '2025-11-30 22:00' AND order_ts_utc < '2025-12-01 22:00' GROUP BY 1 ORDER BY 1\n",
+   "n": 12,
+   "ok": true,
+   "rows": 22,
+   "output_preview": "h | count_star()\n2025-12-01T00:00:00 | 58\n2025-12-01T01:00:00 | 3\n2025-12-01T02:00:00 | 1\n2025-12-01T05:00:00 | 1\n2025-12-01T06:00:00 | 4\n2025-12-01T07:00:00 | 6\n2025-12-01T08:00:00 | 15\n2025-12-01T09:00:00 | 13\n2025-12-01T10:00:00 | 9\n2025-12-01T11:00:00 | 12\n2025-12-01T12:00:00 | 19\n2025-12-01T13:00:00 | 11\n2025-12-01T14:00:00 | 15\n2025-12-01T15:00:00 | 20\n2025-12-01T16:00:00 | 11\n2025-12-01T17:00:00 | 10\n2025-12-01T18:00:00 | 14\n2025-12-01T19:00:00 | 27\n2025-12-01T20:00:00 | 22\n2025-12-01T21:00:00 | 36\n2025-12-01T22:00:00 | 22\n2025-12-01T23:00:00 | 16\n(22 rows)"
+  }
+ ]
+}

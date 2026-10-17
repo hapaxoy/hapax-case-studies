@@ -1,0 +1,31 @@
+Perfect! The query check passed. Now let me prepare the final answer. The data shows the return share (percentage of sales that were returned) by store format for period 2 of FY2025/26.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net \n    FROM fact_return_line \n    GROUP BY 1\n)\nSELECT l.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_share_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.format;",
+  "result": {
+    "columns": ["format", "return_share_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28],
+      ["Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate on the sale-week cohort (returns matched to the original sale through sales_line_id, attributed to the week the item was sold)",
+    "Net sales excluding VAT (after returns)",
+    "Store 999 and category ZZ Test excluded from all sales metrics"
+  ],
+  "assumptions": [
+    "Period 2 last year interpreted as FY2025/26 P02 (the most recent completed fiscal period 2 as of the request date 2026-10-06)",
+    "Store format assigned on the sale date from the current store dimension version",
+    "Return share calculated as returned net amount divided by sold net amount"
+  ],
+  "caveats": [
+    "Return cohort may not be complete: some sales from P02 (2025-05-26 to 2025-06-22) may have returns arriving up to 30 days later (through approximately 2025-07-22), and the warehouse is loaded through 2026-10-04, so this cohort is fully loaded and complete",
+    "Web channel shows significantly higher return rate (12.23%) compared to physical stores (4.28-4.53%), typical for e-commerce",
+    "Return amounts are refund_net values from fact_return_line; this measures financial value returned, not unit quantities"
+  ]
+}
+```

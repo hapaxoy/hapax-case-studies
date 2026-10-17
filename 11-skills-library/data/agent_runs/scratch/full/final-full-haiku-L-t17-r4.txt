@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH sold_lines AS (\n    SELECT f.sales_line_id, cp.subcategory, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    JOIN dim_date d ON d.calendar_date = f.sale_date\n    WHERE s.store_id &lt;&gt; 999 \n      AND p.category &lt;&gt; 'ZZ Test'\n      AND cp.category = 'Garden'\n      AND d.fiscal_year = 'FY2025/26'\n      AND d.fiscal_week BETWEEN 1 AND 13\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net \n    FROM fact_return_line \n    GROUP BY 1\n)\nSELECT l.subcategory,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / NULLIF(SUM(l.net_amount), 0), 2) AS return_rate\nFROM sold_lines l\nLEFT JOIN refunds r ON l.sales_line_id = r.sales_line_id\nGROUP BY 1\nORDER BY 1;",
+  "result": {
+    "columns": ["subcategory", "return_rate"],
+    "rows": [
+      ["Barbecue &amp; Grills", 7.26],
+      ["Edible Plants &amp; Seeds", 0.96],
+      ["Garden Furniture", 12.87],
+      ["Garden Tools", 5.35],
+      ["Outdoor Lighting", 0.0],
+      ["Plants &amp; Flowers", 2.74],
+      ["Pots &amp; Planters", 3.86],
+      ["Soil &amp; Fertiliser", 1.58]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: sum of refund_net divided by sum of net_amount, on the sale-week cohort (returns attributed to the fiscal week of original sale, whenever the return occurred)",
+    "As-is reporting: current product category and subcategory applied to historical sales",
+    "Exclusions: store 999 (training store) and ZZ Test category excluded; staff purchases included in base; store-level figures reconcilable with rpt_daily_store_sales"
+  ],
+  "assumptions": [
+    "Q1 of last year interpreted as Q1 of FY2025/26 (fiscal weeks 1-13, 28 April 2025 to 27 July 2025), the most recent completed Q1 as of the request date",
+    "Return rate expressed in percent units (7.26 = 7.26%)",
+    "All sales channels included (physical stores and web)"
+  ],
+  "caveats": [
+    "Outdoor Lighting (0.0% return rate, 375.00 EUR net sales): 2 SKUs (100916 Outdoor Lighting Lumiko 455, 100917 Outdoor Lighting Ahvenisto 492) retain Garden category in current product versions. The majority of outdoor lighting SKUs (59 with Q1 sales) have current versions in Electrical category following the 27 October 2025 category move. The mixed categorisation of a minority of outdoor lighting products may warrant data review.",
+    "Return cohort is complete: Q1 sales ended 27 July 2025, returns arrive within 30 days, warehouse loaded through 4 October 2026."
+  ]
+}
+```

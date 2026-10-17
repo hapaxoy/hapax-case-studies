@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t35-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T35",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "4d48c2846cc7c58bd865271586ff0483ad354d08d7a8adb79f4f4002e2396b4f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:58:58",
+   "statement": "SELECT 'cal' k, fiscal_period_label a, CAST(period_start_date AS VARCHAR) b, CAST(period_end_date AS VARCHAR) c, CAST(fully_loaded AS VARCHAR) d FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=5\nUNION ALL\nSELECT 'store', CAST(store_key AS VARCHAR)||' id '||CAST(store_id AS VARCHAR), store_name||' / '||city, region||' '||format, CAST(valid_from AS VARCHAR)||'..'||CAST(valid_to AS VARCHAR) FROM dim_store WHERE city ILIKE '%Helsinki%' OR store_name ILIKE '%Pit%'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "k | a | b | c | d\ncal | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | true\nstore | 1 id 101 | Helsinki Vuosaari / Helsinki | South Medium | 2000-01-01..2025-04-27\nstore | 2 id 101 | Helsinki Vuosaari / Helsinki | Capital Region Medium | 2025-04-28..9999-12-31\nstore | 3 id 102 | Helsinki Pitäjänmäki / Helsinki | South Large | 2000-01-01..2025-04-27\nstore | 4 id 102 | Helsinki Pitäjänmäki / Helsinki | Capital Region Large | 2025-04-28..9999-12-31\nstore | 15 id 110 | Turku Kupittaa / Turku | South Large | 2000-01-01..9999-12-31\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:59:03",
+   "statement": "WITH lines AS (\n  SELECT f.sales_line_id, f.quantity, p.sku, cp.product_name, cp.category, cp.subcategory, f.channel_code, f.staff_purchase_flag\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE s.store_id = 102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT sku, product_name, category, SUM(quantity) units, COUNT(*) n_rows, COUNT(DISTINCT sales_line_id) n_lines, SUM(CASE WHEN staff_purchase_flag THEN quantity ELSE 0 END) staff_units, SUM(CASE WHEN channel_code='WB' THEN quantity ELSE 0 END) wb_units\nFROM lines GROUP BY ALL ORDER BY units DESC LIMIT 8\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "sku | product_name | category | units | n_rows | n_lines | staff_units | wb_units\n101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | 52 | 14 | 14 | 0 | 0\n101778 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | 44 | 13 | 13 | 0 | 0\n102244 | Batteries & Bulbs Havu Pro 791 | Electrical | 42 | 19 | 19 | 2 | 0\n102233 | Batteries & Bulbs Havu Pro 384 | Electrical | 30 | 12 | 12 | 0 | 0\n103670 | Storage Boxes Vesikko 753 | Cleaning & Household | 30 | 17 | 17 | 0 | 0\n103545 | Cleaning Products Poutaranta Home 928 | Cleaning & Household | 29 | 15 | 15 | 0 | 0\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | 29 | 14 | 14 | 0 | 0\n102213 | Batteries & Bulbs Kuusela 444 | Electrical | 29 | 12 | 12 | 0 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:59:09",
+   "statement": "WITH l AS (\n  SELECT f.* FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\n  WHERE s.store_id=102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27')\nSELECT (SELECT SUM(quantity) FROM l) units_all, (SELECT COUNT(*) FROM l) rows_, (SELECT COUNT(DISTINCT (receipt_id, line_no)) FROM l) distinct_receipt_line,\n (SELECT COUNT(DISTINCT sales_line_id) FROM l) distinct_id, (SELECT SUM(units_sold) FROM rpt_daily_store_sales WHERE store_id=102 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') rpt_units,\n (SELECT MIN(sale_date)||' '||MAX(sale_date) FROM l) dates,\n (SELECT COUNT(*) FROM l WHERE quantity<=0) nonpos_qty,\n (SELECT SUM(quantity) FROM l WHERE sku_is_test) x\nFROM (SELECT 1) t, LATERAL (SELECT 0 sku_is_test) z\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "units_all | rows_ | distinct_receipt_line | distinct_id | rpt_units | dates | nonpos_qty | x\n3740 | 2121 | 2121 | 2121 | 3740 | 2026-08-31 2026-09-27 | 0 | NULL\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH period_sales AS (\n  SELECT\n    f.sales_line_id,\n    f.net_amount,\n    s.format\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_product p ON f.product_key = p.product_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_week BETWEEN 5 AND 8\n    AND s.store_id &lt; 900\n    AND p.category != 'ZZ Test'\n)\nSELECT\n  ps.format,\n  COALESCE(SUM(r.refund_net), 0) / SUM(ps.net_amount) * 100 AS return_rate_pct\nFROM period_sales ps\nLEFT JOIN fact_return_line r ON ps.sales_line_id = r.sales_line_id\nGROUP BY ps.format\nORDER BY ps.format",
+  "result": {
+    "columns": ["format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: refund_net divided by net_amount, grouped by fiscal week of original sale (sale-week cohort)",
+    "Fiscal period: P2 FY2025/26 (fiscal weeks 5–8, 26 May to 22 June 2025)",
+    "Store scope: physical stores only (store_id &lt; 900), excluding web and training stores",
+    "Product scope: excludes test articles (category ZZ Test)",
+    "Net sales: excluding VAT, after returns"
+  ],
+  "assumptions": [
+    "Period 2 last year interpreted as P2 FY2025/26, since request date 2026-10-06 falls in FY2026/27; precedent from requests D04, D08, D28, D35",
+    "Share interpreted as return rate: the percentage of sales that came back",
+    "Return rate cohort is by sale date (fiscal week of original purchase), not return date"
+  ],
+  "caveats": [
+    "Store format values are Large, Medium, Small (not Hyper, Standard, Express as per schema documentation)",
+    "Staff purchases are included per company definition",
+    "Return rate is a snapshot of current warehouse data; additional returns may arrive for P2 sales after the warehouse load date"
+  ]
+}
+```

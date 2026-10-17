@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t26-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T26",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "6e702b281c8e4cdf75875ae328cbaae5ca8f6f44b37480b74d23a12568099a0f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:15:13",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2026/27 --as-of 2026-10-07",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2026/27    as of: 2026-10-07    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P02\n  fiscal_weeks                       5-8\n  start_date                         2026-06-01\n  end_date                           2026-06-28\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-06-28\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:15:20",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain store_id --period FY2026/27 P02 --control --control-stores physical --value-col net_sales",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 38 rows, 7 columns: rank, store_id, store_name, format, trading_days, net_sales, net_sales_per_trading_day\n\n== Duplicate keys ==\n  [PASS] Unique at grain (store_id): 38 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-06-01 to 2026-06-28 (28 days; fiscal: FY2026/27 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 3 only in UTC; fact_sales_line.sale_ts_utc: 11 rows in the range only in Helsinki time, 6 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2026-06-01 to 2026-06-28, stores: physical, at level: store_id.\n  [INFO] Result total 1,063,916.20; control total 1,063,916.20; gap 0.00.\n  [PASS] No gap above 0.01 at level store_id.\n\n== Preview (first 10 rows) ==\n  rank | store_id | store_name | format | trading_days | net_sales | net_sales_per_trading_day\n  1 | 115 | Tampere Hervanta | Large | 26 | 72687.05 | 2796.0\n  2 | 102 | Helsinki Pit�j�nm�ki | Large | 26 | 55562.42 | 2137.0\n  3 | 108 | Lahti | Large | 26 | 4689"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:15:32",
+   "statement": "SELECT 'dup_lines' AS chk, COUNT(*) AS n, SUM(c-1) AS extra FROM (\n  SELECT receipt_id, line_no, COUNT(*) c FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1,2 HAVING COUNT(*)>1)\nUNION ALL\nSELECT 'dup_sales_line_id', COUNT(*), SUM(c-1) FROM (\n  SELECT sales_line_id, COUNT(*) c FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL\nSELECT 'dup_return_id', COUNT(*), SUM(c-1) FROM (\n  SELECT return_line_id, COUNT(*) c FROM fact_return_line WHERE return_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL\nSELECT 'kuopio_sales_in_refit', COUNT(*), SUM(f.net_amount) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=125 AND f.sale_date BETWEEN DATE '2026-06-15' AND DATE '2026-06-28'\nUNION ALL\nSELECT 'sales_on_closed_days', COUNT(*), SUM(f.net_amount) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_date d ON d.calendar_date=f.sale_date WHERE s.store_id<900 AND NOT d.is_trading_day AND f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28'\nUNION ALL\nSELECT 'neg_or_zero_qty_lines', COUNT(*), SUM(f.net_amount) FROM fact_sales_line f WHERE f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' AND (f.quantity<=0 OR f.net_amount<=0)\nUNION ALL\nSELECT 'stores_current_physical', COUNT(*), NULL FROM dim_store WHERE is_current AND store_id<900\nUNION ALL\nSELECT 'stores_with_multi_current', COUNT(*), NULL FROM (SELECT store_id FROM dim_store WHERE is_current GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL\nSELECT 'lines_store_999_or_test', COUNT(*), SUM(f.net_amount) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' AND (s.store_id=999 OR p.category='ZZ Test')\n",
+   "n": 3,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "chk | n | extra\ndup_lines | 0 | NULL\ndup_sales_line_id | 0 | NULL\ndup_return_id | 0 | NULL\nkuopio_sales_in_refit | 0 | NULL\nsales_on_closed_days | 0 | NULL\nneg_or_zero_qty_lines | 0 | NULL\nstores_current_physical | 39 | NULL\nstores_with_multi_current | 0 | NULL\nlines_store_999_or_test | 121 | 2385.03\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:15:40",
+   "statement": "WITH params AS (SELECT DATE '2026-06-01' AS s, DATE '2026-06-28' AS e),\ntrading_days AS (\n  SELECT cs.store_id, COUNT(*) AS trading_days\n  FROM dim_store cs CROSS JOIN (SELECT d.calendar_date FROM dim_date d, params p WHERE d.calendar_date BETWEEN p.s AND p.e AND d.is_trading_day) pd\n  WHERE cs.is_current AND cs.store_id < 900\n    AND (cs.open_date IS NULL OR cs.open_date <= pd.calendar_date)\n    AND (cs.close_date IS NULL OR cs.close_date >= pd.calendar_date)\n    AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n  GROUP BY 1),\nnet_lines AS (\n  SELECT f.sale_date AS d, s.store_id, f.net_amount AS v FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE s.store_id<900 AND p.category<>'ZZ Test'\n  UNION ALL\n  SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key WHERE s.store_id<900 AND p.category<>'ZZ Test'),\nss AS (SELECT n.store_id, SUM(n.v) AS net_sales FROM net_lines n, params p WHERE n.d BETWEEN p.s AND p.e GROUP BY 1)\nSELECT RANK() OVER (ORDER BY ss.net_sales/td.trading_days DESC) AS rank, cs.store_id, cs.store_name, cs.format, cs.region, td.trading_days, ss.net_sales, ROUND(ss.net_sales/td.trading_days,2) AS per_day,\n (SELECT COUNT(*) FROM ss) AS n_ss, (SELECT COUNT(*) FROM trading_days) AS n_td\nFROM ss JOIN trading_days td USING (store_id) JOIN dim_store cs ON cs.store_id=ss.store_id AND cs.is_current\nORDER BY rank\n",
+   "n": 4,
+   "ok": true,
+   "rows": 38,
+   "output_preview": "rank | store_id | store_name | format | region | trading_days | net_sales | per_day | n_ss | n_td\n1 | 115 | Tampere Hervanta | Large | West | 26 | 72687.05 | 2795.66 | 38 | 38\n2 | 102 | Helsinki Pitäjänmäki | Large | Capital Region | 26 | 55562.42 | 2137.02 | 38 | 38\n3 | 108 | Lahti | Large | South | 26 | 46899.91 | 1803.84 | 38 | 38\n4 | 104 | Vantaa Tammisto | Large | Capital Region | 26 | 46414.81 | 1785.19 | 38 | 38\n5 | 131 | Oulu Kaakkuri | Large | North | 26 | 46021.68 | 1770.06 | 38 | 38\n6 | 116 | Tampere Lielahti | Large | West | 26 | 45485.54 | 1749.44 | 38 | 38\n7 | 125 | Kuopio | Large | East | 14 | 23993.71 | 1713.84 | 38 | 38\n8 | 110 | Turku Kupittaa | Large | South | 26 | 44380.38 | 1706.94 | 38 | 38\n9 | 117 | Tampere Kaleva | Medium | West | 26 | 40769.32 | 1568.05 | 38 | 38\n10 | 118 | Nokia | Medium | West | 26 | 38036.56 | 1462.94 | 38 | 38\n11 | 119 | Pori | Medium | West | 26 | 37060.06 | 1425.39 | 38 | 38\n12 | 124 | Jyväskylä Palokka | Medium | East | 26 | 34403.16 | 1323.2 | 38 | 38\n13 | 101 | Helsinki Vuosaari | Medium | Capital Region | 26 | 34229.86 | 1316.53 | 38 | 38\n14 | 132 | Oulu Linnanmaa | Medium | North | 26 | 32347.31 | 1244.13 | 38 | 38\n15 | 121 | Vaasa | Medium | West | 26 | 31852.44 | 1225.09 | 38 | 38\n16 | 128 | Lappeenranta | Medium | East | 26 | 31703.61 | 1219.37 | 38 | 38\n17 | 126 | Joensuu | Medium | East | 26 | 31643.91 | 1217.07 | 38 | 38\n18 | 136 | Tampere Lamminpää | Medium | West | 26 | 30503.73 | 1173.22 | 38 | 38\n19 | 107 | Hyvink"
+  }
+ ]
+}

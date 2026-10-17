@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t18-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T18",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "2a6cf86a7da9817c8818d70ce87701a2da7b19c39831427bf5c06b3179170ff7",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:09:48",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5-P8 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5-P8 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P05, FY2025/26 P06, FY2025/26 P07, FY2025/26 P08\n  fiscal_weeks                       18-34\n  start_date                         2025-08-25\n  end_date                           2025-12-21\n  weeks                              17\n  days                               119\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 18 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:09:54",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS web_net_sales, COUNT(*) AS n_rows\nFROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY 1, 2 ORDER BY 2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | web_net_sales | n_rows\nFY2025/26 | 5 | 145626.90 | 5602\nFY2025/26 | 6 | 175588.62 | 7111\nFY2025/26 | 7 | 154977.27 | 6537\nFY2025/26 | 8 | 225265.08 | 9825\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:09:56",
+   "statement": "SELECT d.fiscal_period, COUNT(*) AS lines, COUNT(DISTINCT (f.receipt_id, f.line_no)) AS distinct_lines, COUNT(DISTINCT f.sales_line_id) AS distinct_ids, COUNT(DISTINCT f.etl_loaded_at) AS loads, SUM(f.net_amount) AS net_lines_by_orderdate\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE s.store_id=900 AND d.fiscal_year='FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_period | lines | distinct_lines | distinct_ids | loads | net_lines_by_orderdate\n5 | 5323 | 5323 | 5323 | 28 | 158124.35\n6 | 6750 | 6750 | 6750 | 35 | 194176.17\n7 | 6203 | 6203 | 6203 | 28 | 166510.02\n8 | 9553 | 9553 | 9553 | 28 | 249084.84\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:10:02",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain business_date --start 2025-08-25 --end 2025-12-21 --control --control-stores web --value-col web_net_sales",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 119 rows, 2 columns: business_date, web_net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (business_date): 119 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-08-25 to 2025-12-21 (119 days; fiscal: FY2025/26 P05, FY2025/26 P08, FY2025/26 P07, FY2025/26 P06).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 8 rows in the range only in Helsinki time, 13 only in UTC; fact_sales_line.sale_ts_utc: 15 rows in the range only in Helsinki time, 24 only in UTC.\n  [INFO] Result covers 2025-08-25 to 2025-12-21 on business_date (119 distinct dates).\n  [PASS] Every day of the requested range is present, none outside it.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared web_net_sales with rpt_daily_store_sales.net_sales, 2025-08-25 to 2025-12-21, stores: web, at level: business_date.\n  [INFO] Result total 701,457.87; control total 701,457.87; gap 0.00.\n  [PASS] No gap above 0.01 at level business_date.\n\n== Preview (first 10 rows) ==\n  business_date | web_net_sales\n  2025-08-25 | 10388.53\n  2025-08-26 | 5815.82\n  2025-08-27 | 9236.23\n  2025-08-28 | 6715.41\n  2025-08-29 | 4270.26\n  2025-08-30 | 4933.30\n  2025-08-31 | -220.42\n  2025-09-01 | 10323.57\n  2025-09-02 | 494"
+  }
+ ]
+}

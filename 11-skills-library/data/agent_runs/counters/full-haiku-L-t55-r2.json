@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-L-t55-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T55",
+ "budget": 30,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "5e1d2418836adcca530c808c4fef3eb5311134e4381eafeb710183a104ee5aa5",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:21:42",
+   "statement": "fiscal-calendar/scripts/fiscal.py periods 9 to 11 last year",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'periods 9 to 11 last year'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:21:46",
+   "statement": "fiscal-calendar/scripts/fiscal.py P9-P11 FY2024/25",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P9-P11 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P09, FY2024/25 P10, FY2024/25 P11\n  fiscal_weeks                       35-47\n  start_date                         2024-12-23\n  end_date                           2025-03-23\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-03-23\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 35 AND 47)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:21:57",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, \n           f.member_key, \n           f.net_amount\n    FROM fact_sales_line f\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE f.channel_code = 'WB'\n)\nSELECT d.fiscal_year,\n       d.fiscal_period,\n       SUM(l.net_amount) AS web_sales_before_returns,\n       SUM(CASE WHEN l.member_key IS NOT NULL THEN l.net_amount ELSE 0 END) AS member_web_sales,\n       ROUND(100.0 * SUM(CASE WHEN l.member_key IS NOT NULL THEN l.net_amount ELSE 0 END) / SUM(l.net_amount), 1) AS member_share_pct\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.business_date\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 9 AND 11\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | web_sales_before_returns | member_web_sales | member_share_pct\nFY2024/25 | 9 | 167662.15 | 114507.23 | 68.3\nFY2024/25 | 10 | 114338.89 | 80837.79 | 70.7\nFY2024/25 | 11 | 119433.93 | 79663.24 | 66.7\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:22:03",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [WARN] channel_code stops being filled from 3 November 2025 (REG-MIGRATION). Tell web lines apart by store_id = 900 (REG-STORE-900); for click-and-collect use fact_web_order.fulfilment_type.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n  [WARN] Sales lines used without a filter on category 'ZZ Test' (REG-TEST-SKU, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.2 s.\n\n== Row count ==\n  [PASS] 3 rows, 5 columns: fiscal_year, fiscal_period, web_sales_before_returns, member_web_sales, member_share_pct\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  fiscal_year | fiscal_period | web_sales_before_returns | member_web_sales | member_share_pct\n  FY2024/25 | 9 | 167662.15 | 114507.23 | 68.3\n  FY2024/25 | 10 | 114338.89 | 80837.79 | 70.7\n  FY2024/25 | 11 | 119433.93 | 79663.24 | 66.7\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:10",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, \n           f.member_key, \n           f.net_amount\n    FROM fact_sales_line f\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE f.channel_code = 'WB'\n      AND s.store_id <> 999\n      AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year,\n       d.fiscal_period,\n       SUM(l.net_amount) AS web_sales_before_returns,\n       SUM(CASE WHEN l.member_key IS NOT NULL THEN l.net_amount ELSE 0 END) AS member_web_sales,\n       ROUND(100.0 * SUM(CASE WHEN l.member_key IS NOT NULL THEN l.net_amount ELSE 0 END) / SUM(l.net_amount), 1) AS member_share_pct\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.business_date\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 9 AND 11\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | web_sales_before_returns | member_web_sales | member_share_pct\nFY2024/25 | 9 | 167658.65 | 114507.23 | 68.3\nFY2024/25 | 10 | 114338.89 | 80837.79 | 70.7\nFY2024/25 | 11 | 119433.93 | 79663.24 | 66.7\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:22:16",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [WARN] channel_code stops being filled from 3 November 2025 (REG-MIGRATION). Tell web lines apart by store_id = 900 (REG-STORE-900); for click-and-collect use fact_web_order.fulfilment_type.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.2 s.\n\n== Row count ==\n  [PASS] 3 rows, 5 columns: fiscal_year, fiscal_period, web_sales_before_returns, member_web_sales, member_share_pct\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  fiscal_year | fiscal_period | web_sales_before_returns | member_web_sales | member_share_pct\n  FY2024/25 | 9 | 167658.65 | 114507.23 | 68.3\n  FY2024/25 | 10 | 114338.89 | 80837.79 | 70.7\n  FY2024/25 | 11 | 119433.93 | 79663.24 | 66.7\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

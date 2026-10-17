@@ -1,0 +1,35 @@
+Perfect! Now I have the corrected analysis. Let me prepare the final response.
+
+```json
+{
+  "sql": "WITH sales_grouped AS (\n  SELECT \n    d.fiscal_year,\n    CASE \n      WHEN s.store_id = 900 THEN 'Web'\n      WHEN s.region IN ('Capital Region', 'South') THEN \n        CASE WHEN d.fiscal_year = 'FY2025/26' THEN 'South/Capital Region (merged)' \n             ELSE 'South' END\n      ELSE s.region\n    END AS region_display,\n    ROUND(SUM(f.net_amount), 2) as net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  WHERE d.fiscal_quarter = 3 \n    AND d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  GROUP BY d.fiscal_year,\n    CASE \n      WHEN s.store_id = 900 THEN 'Web'\n      WHEN s.region IN ('Capital Region', 'South') THEN \n        CASE WHEN d.fiscal_year = 'FY2025/26' THEN 'South/Capital Region (merged)' \n             ELSE 'South' END\n      ELSE s.region\n    END\n)\nSELECT \n  COALESCE(fy26.region_display, fy25.region_display) as region,\n  COALESCE(fy26.net_sales, 0) as sales_fy2025_26,\n  COALESCE(fy25.net_sales, 0) as sales_fy2024_25,\n  CASE \n    WHEN COALESCE(fy25.net_sales, 0) = 0 THEN NULL\n    ELSE ROUND((COALESCE(fy26.net_sales, 0) - COALESCE(fy25.net_sales, 0)) / COALESCE(fy25.net_sales, 0) * 100, 2)\n  END as growth_percent\nFROM sales_grouped fy26\nFULL OUTER JOIN sales_grouped fy25 \n  ON (fy26.region_display = 'South/Capital Region (merged)' AND fy25.region_display = 'South')\n    OR (fy26.region_display = fy25.region_display AND fy26.region_display NOT IN ('South/Capital Region (merged)'))\n  AND fy25.fiscal_year = 'FY2024/25'\nWHERE fy26.fiscal_year = 'FY2025/26'\nORDER BY CASE WHEN COALESCE(fy26.region_display, fy25.region_display) = 'Web' THEN 0 ELSE 1 END,\n         COALESCE(fy26.region_display, fy25.region_display)",
+  "result": {
+    "columns": ["region", "sales_fy2025_26", "sales_fy2024_25", "growth_percent"],
+    "rows": [
+      ["Web", 626744.66, 487738.80, 28.5],
+      ["East", 623413.38, 688085.27, -9.4],
+      ["Head office", 6887.98, 6479.40, 6.31],
+      ["North", 430390.67, 403062.74, 6.78],
+      ["South/Capital Region (merged)", 1317568.45, 1214939.94, 8.45],
+      ["West", 1044244.67, 994191.81, 5.03]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: fact_sales_line.net_amount (excluding VAT)",
+    "Fiscal quarter: calendar-aligned quarters per ref_fiscal_calendar",
+    "Regional sales: grouped by dim_store.region",
+    "Web shop: all sales through store_id 900 (Tuomimetsä web shop)"
+  ],
+  "assumptions": [
+    "Web shop sales reported separately as requested, including both channel_code WB and NULL entries for store 900",
+    "Fiscal year basis: FY2025/26 (Oct 2025 - Sep 2026) is 'last year' and FY2024/25 (Oct 2024 - Sep 2025) is 'the year before'",
+    "Q3 defined as fiscal_quarter = 3 per the fiscal calendar",
+    "Growth percentage: (FY2025/26 - FY2024/25) / FY2024/25 × 100"
+  ],
+  "caveats": [
+    "Regional restructuring: Five stores (101, 102, 103, 104, 105: Helsinki Vuosaari, Helsinki Pitäjänmäki, Espoo Lommila, Vantaa Tammisto, Kerava) were reassigned from region 'South' to region 'Capital Region' effective 2025-04-28. FY2025/26 Q3 sales are reported under the new region. To enable year-over-year comparison, South and Capital Region figures are merged for FY2025/26.",
+    "Data quality issue in FY2025/26: Web shop sales (store 900) show 21,898 lines with NULL channel_code (EUR 588,457.57) and 1,426 lines with channel_code WB (EUR 38,287.09). Both are included in the Web total. The NULL channel_code appears to be a data loading anomaly.",
+    "Head office (store 999) and Training store sales are included in the results as received from fact_sales_line."
+  ]
+}
+```

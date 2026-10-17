@@ -1,0 +1,35 @@
+Now let me create the final answer. I'll format the result table with clear column names.
+
+```json
+{
+  "sql": "WITH store_sales AS (\n  SELECT \n    d.fiscal_year,\n    s.region,\n    SUM(rds.net_sales) as net_sales\n  FROM rpt_daily_store_sales rds\n  LEFT JOIN dim_date d ON rds.business_date = d.calendar_date\n  LEFT JOIN dim_store s ON rds.store_id = s.store_id AND d.calendar_date &gt;= s.valid_from AND d.calendar_date &lt;= s.valid_to\n  WHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND d.fiscal_quarter = 3\n    AND rds.store_id &lt; 900\n  GROUP BY d.fiscal_year, s.region\n),\nweb_sales AS (\n  SELECT \n    d.fiscal_year,\n    'Web shop' as region,\n    SUM(fsl.net_amount - COALESCE(frl.refund_net, 0)) as net_sales\n  FROM fact_sales_line fsl\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  LEFT JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  WHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND d.fiscal_quarter = 3\n    AND fsl.channel_code = 'WB'\n  GROUP BY d.fiscal_year\n),\ncombined_sales AS (\n  SELECT fiscal_year, region, net_sales FROM store_sales\n  UNION ALL\n  SELECT fiscal_year, region, net_sales FROM web_sales\n),\npivoted AS (\n  SELECT \n    region,\n    SUM(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales ELSE 0 END) as fy2525_sales,\n    SUM(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales ELSE 0 END) as fy2425_sales\n  FROM combined_sales\n  GROUP BY region\n)\nSELECT \n  region,\n  ROUND(fy2525_sales, 2) as q3_fy2525_net_sales,\n  ROUND(fy2425_sales, 2) as q3_fy2425_net_sales,\n  CASE \n    WHEN fy2425_sales != 0 THEN ROUND((fy2525_sales - fy2425_sales) / fy2425_sales * 100, 1)\n    ELSE NULL\n  END as growth_percentage\nFROM pivoted\nORDER BY region",
+  "result": {
+    "columns": ["region", "q3_fy2525_net_sales", "q3_fy2425_net_sales", "growth_percentage"],
+    "rows": [
+      ["Capital Region", 527026.01, 0.00, null],
+      ["East", 597583.01, 659319.32, -9.4],
+      ["North", 413618.24, 387519.62, 6.7],
+      ["South", 729021.20, 1163921.84, -37.4],
+      ["Web shop", 34335.23, 440057.54, -92.2],
+      ["West", 997953.07, 952479.50, 4.8]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales from rpt_daily_store_sales (store sales, net of returns) for physical stores excluding pseudo-locations (store_id &lt; 900)",
+    "Web shop sales from fact_sales_line with channel_code = 'WB', net of returns from fact_return_line",
+    "Q3 defined by fiscal_quarter = 3 (FY2025/26: 2025-10-27 to 2026-01-25; FY2024/25: 2024-10-28 to 2025-01-26)",
+    "Growth percentage calculated as (current period - prior period) / prior period × 100"
+  ],
+  "assumptions": [
+    "Last year = FY2025/26 Q3 (most recent completed fiscal year); the year before = FY2024/25 Q3",
+    "Web shop treated as a separate line from regional stores, using fact_sales_line channel_code = 'WB' (not store_id = 900)",
+    "Store sales sourced from rpt_daily_store_sales rather than fact_sales_line to use the maintained Data &amp; Analytics report",
+    "All amounts in EUR excluding VAT (net basis), as defined by the warehouse"
+  ],
+  "caveats": [
+    "Capital Region is new as of FY2025/26 P01 (2025-04-28); no prior-year data exists for comparison. The 0.00 value indicates the region did not operate in Q3 FY2024/25.",
+    "Web shop sales declined 92% year-over-year, from EUR 440,057.54 to EUR 34,335.23. This substantial drop warrants investigation into whether it reflects a genuine business change or a data issue.",
+    "Southern region sales declined 37% (EUR 1,163,921.84 to EUR 729,021.20) and Eastern region declined 9% (EUR 659,319.32 to EUR 597,583.01). Only North (+6.7%) and West (+4.8%) regions showed growth."
+  ]
+}
+```

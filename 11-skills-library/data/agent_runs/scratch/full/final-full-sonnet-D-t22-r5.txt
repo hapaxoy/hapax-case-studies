@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH targeted AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure x JOIN dim_member m ON m.member_key = x.member_key WHERE x.campaign_id = 19), web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), lines AS (SELECT m.member_id, COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.net_amount FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id AND s.store_id = 900 WHERE s.store_id <> 999 AND p.category <> 'ZZ Test') SELECT (SELECT count(*) FROM targeted) AS members_contacted, SUM(l.net_amount) AS net_spend_eur FROM lines l JOIN targeted t ON t.member_id = l.member_id WHERE l.business_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24'",
+  "result": {
+    "columns": ["campaign_id", "campaign_name", "members_contacted", "net_spend_eur"],
+    "rows": [[19, "Spring Garden Launch 2026", 15001, 190687.59]]
+  },
+  "definitions_applied": [
+    "Targeted member: at least one exposure row in the campaign, counted as distinct member_id through dim_member (not member_key)",
+    "Spend: net sales before returns (net_amount, excluding VAT) on lines linked to the member, the same basis as the campaign uplift definition",
+    "Web lines dated on the Helsinki dispatch date (fact_web_order, status delivered or collected); store lines on sale_date",
+    "Web identified by store_id 900, not channel_code",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Members linked from the sales line's member_key to member_id via dim_member",
+    "Campaign table dim_campaign (current), not the bak_ table; no deprecated objects used"
+  ],
+  "assumptions": [
+    "The mailing is campaign_id 19, Spring Garden Launch 2026 (4 to 24 May 2026, email+sms). It is the only 2026 campaign with that name.",
+    "'Contacted' means any contact row in fact_campaign_exposure, whether or not it was delivered or opened. 14,814 of the 15,001 members had at least one contact delivered.",
+    "'Spend' is net of VAT and before returns, per the campaign definitions. Gross (including VAT) spend would be 238,805.59 EUR. Refunds are not deducted.",
+    "The spend window is 4 to 24 May 2026 inclusive, exactly as requested. The standard campaign uplift window (campaign plus seven days) was not applied because the request names its own dates.",
+    "Spend is the combined total for all contacted members, in stores and online, not a per-member average. 2,605 of the contacted members bought something in the window.",
+    "Helsinki dates, with the web dispatch-date rule applied to online purchases."
+  ],
+  "caveats": [
+    "dim_campaign records a mailing list of 16,624 with 1,597 held out, which implies about 15,027 contactable members. The exposure table has 15,001 distinct members, 26 fewer. I could not explain the gap from the warehouse. The count I report is members actually contacted.",
+    "The 15,001 members appear under 15,063 member_keys (31,685 contact rows, two channels). Counting keys or rows would overstate the figure, so I counted distinct member_id.",
+    "Checked: no holdout member appears among the contacted members, no contacted member lacks marketing consent in their version, all contacts fall in 4 to 24 May Helsinki time, and there are no duplicate sales lines, orphaned web lines or negative lines in the window.",
+    "Of the 190,687.59 EUR, 35,168.92 EUR is web, dated on dispatch. Orders placed in the window but dispatched after 24 May are not in the figure. There are no processing orders in this period.",
+    "The total is not checked against rpt_daily_store_sales, because that control table has no member dimension and the control does not apply to a member subset.",
+    "Spend is not an uplift. It includes purchases that would have happened anyway. Incrementality needs the holdout comparison, which was not requested."
+  ]
+}
+```

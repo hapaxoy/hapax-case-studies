@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-L-t04-r5",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T04",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "3242e0cac5e8b18894616d3da2ed222cf0dfbad626f3cbb49cc61f8d61d18043",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:16:39",
+   "statement": "fiscal-calendar/scripts/fiscal.py August 2024",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'August 2024'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:16:58",
+   "statement": "-- Store sales including VAT, before returns, for August and September 2024\n-- Using web dispatch date for web orders, sale date for store orders\nWITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 \n    AND p.category <> 'ZZ Test'\n    AND YEAR(COALESCE(w.dispatch_date, f.sale_date)) = 2024\n    AND MONTH(COALESCE(w.dispatch_date, f.sale_date)) IN (8, 9)\n)\nSELECT \n    YEAR(business_date) AS year,\n    MONTH(business_date) AS month,\n    SUM(gross_amount) AS gross_sales_incl_vat\nFROM sales_lines\nGROUP BY YEAR(business_date), MONTH(business_date)\nORDER BY year, month;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "year | month | gross_sales_incl_vat\n2024 | 8 | 1538645.88\n2024 | 9 | 1369219.80\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:07",
+   "statement": "-- Check: store sales (physical stores only) vs web sales\nWITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           s.store_id,\n           f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE p.category <> 'ZZ Test'\n    AND YEAR(COALESCE(w.dispatch_date, f.sale_date)) = 2024\n    AND MONTH(COALESCE(w.dispatch_date, f.sale_date)) IN (8, 9)\n)\nSELECT \n    MONTH(business_date) AS month,\n    CASE WHEN store_id < 900 THEN 'Physical Stores' WHEN store_id = 900 THEN 'Web' ELSE 'Other' END AS channel,\n    SUM(gross_amount) AS gross_sales_incl_vat\nFROM sales_lines\nWHERE store_id <> 999\nGROUP BY MONTH(business_date), store_id\nORDER BY month, store_id;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 77,
+   "output_preview": "month | channel | gross_sales_incl_vat\n8 | Physical Stores | 45141.21\n8 | Physical Stores | 69212.86\n8 | Physical Stores | 34496.03\n8 | Physical Stores | 44216.81\n8 | Physical Stores | 15069.66\n8 | Physical Stores | 15832.05\n8 | Physical Stores | 36153.81\n8 | Physical Stores | 67817.40\n8 | Physical Stores | 36964.16\n8 | Physical Stores | 64403.59\n8 | Physical Stores | 29246.90\n8 | Physical Stores | 15665.49\n8 | Physical Stores | 15556.41\n8 | Physical Stores | 30521.59\n8 | Physical Stores | 90963.46\n8 | Physical Stores | 56832.49\n8 | Physical Stores | 51753.40\n8 | Physical Stores | 40542.99\n8 | Physical Stores | 46016.73\n8 | Physical Stores | 13453.47\n8 | Physical Stores | 44958.13\n8 | Physical Stores | 42928.65\n8 | Physical Stores | 15133.03\n8 | Physical Stores | 43402.93\n8 | Physical Stores | 50352.76\n8 | Physical Stores | 44058.95\n8 | Physical Stores | 34694.96\n8 | Physical Stores | 47118.12\n8 | Physical Stores | 15892.13\n8 | Physical Stores | 16977.57\n8 | Physical Stores | 61640.79\n8 | Physical Stores | 40095.58\n8 | Physical Stores | 16537.62\n8 | Physical Stores | 25282.83\n8 | Physical Stores | 12342.22\n8 | Physical Stores | 13743.30\n8 | Physical Stores | 20061.81\n8 | Web | 173563.99\n9 | Physical Stores | 39907.61\n9 | Physical Stores | 58417.83\n9 | Physical Stores | 30311.06\n9 | Physical Stores | 52703.70\n9 | Physical Stores | 13424.57\n9 | Physical Stores | 15097.89\n9 | Physical Stores | 37301.18\n9 | Physical Stores | 53159.88\n9 | Physical Stores | 30720.92\n9 | Physical St"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:16",
+   "statement": "-- Aggregate by month and channel\nWITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           s.store_id,\n           f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999\n    AND p.category <> 'ZZ Test'\n    AND YEAR(COALESCE(w.dispatch_date, f.sale_date)) = 2024\n    AND MONTH(COALESCE(w.dispatch_date, f.sale_date)) IN (8, 9)\n)\nSELECT \n    MONTH(business_date) AS month,\n    CASE WHEN store_id < 900 THEN 'Physical Stores' WHEN store_id = 900 THEN 'Web' ELSE 'Other' END AS channel,\n    SUM(gross_amount) AS gross_sales_incl_vat\nFROM sales_lines\nGROUP BY MONTH(business_date), CASE WHEN store_id < 900 THEN 'Physical Stores' WHEN store_id = 900 THEN 'Web' ELSE 'Other' END\nORDER BY month, channel;\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "month | channel | gross_sales_incl_vat\n8 | Physical Stores | 1365081.89\n8 | Web | 173563.99\n9 | Physical Stores | 1208912.16\n9 | Web | 160307.64\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:27",
+   "statement": "-- Check data coverage: number of sales lines, receipts, and stores in August and September 2024\nWITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           s.store_id,\n           f.receipt_id,\n           f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999\n    AND p.category <> 'ZZ Test'\n    AND YEAR(COALESCE(w.dispatch_date, f.sale_date)) = 2024\n    AND MONTH(COALESCE(w.dispatch_date, f.sale_date)) IN (8, 9)\n)\nSELECT \n    MONTH(business_date) AS month,\n    COUNT(*) AS line_count,\n    COUNT(DISTINCT receipt_id) AS receipt_count,\n    COUNT(DISTINCT store_id) AS store_count,\n    SUM(gross_amount) AS total_gross_incl_vat\nFROM sales_lines\nGROUP BY MONTH(business_date)\nORDER BY month;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "month | line_count | receipt_count | store_count | total_gross_incl_vat\n8 | 47139 | 20730 | 38 | 1538645.88\n9 | 43531 | 19241 | 39 | 1369219.80\n(2 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:17:46",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.2 s.\n\n== Row count ==\n  [PASS] 2 rows, 2 columns: month, gross_sales_incl_vat\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 2 rows) ==\n  month | gross_sales_incl_vat\n  8 | 1538645.88\n  9 | 1369219.80\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

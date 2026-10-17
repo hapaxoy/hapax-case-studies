@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS web_net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date WHERE n.store_id = 900 AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY 1, 2 ORDER BY 1, 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_net_sales"],
+    "rows": [
+      ["FY2025/26", 5, 145626.90],
+      ["FY2025/26", 6, 175588.62],
+      ["FY2025/26", 7, 154977.27],
+      ["FY2025/26", 8, 225265.08]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Returns reduce net sales on their own return date, not the original sale date",
+    "Web sales recognised on the Helsinki dispatch date (delivered and collected orders only), not the order date",
+    "Cancelled and still-processing orders are not web sales",
+    "Web identified by store_id 900, not channel_code (channel_code is not filled from the 3 Nov 2025 platform migration)",
+    "Click-and-collect counts as web",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Fiscal periods from dim_date (4-4-5 pattern, weeks Monday to Sunday)",
+    "Helsinki time for the dispatch date, converted from UTC"
+  ],
+  "assumptions": [
+    "Read 'last year' as FY2025/26, the fiscal year before the current FY2026/27 at the request date of 6 Oct 2026. Earlier accepted requests read it the same way.",
+    "Read 'periods 5 to 8' as FY2025/26 P05 (25 Aug to 21 Sep 2025), P06 (22 Sep to 26 Oct 2025), P07 (27 Oct to 23 Nov 2025) and P08 (24 Nov to 21 Dec 2025). I gave one figure per period because the request says 'in each of'.",
+    "Read 'what the web shop sold, net' as the company net sales definition for the web shop (store 900): sales excluding VAT, less web refunds booked to the web shop.",
+    "Figures are in EUR excluding VAT. Week 53 is not involved, because it falls in P12."
+  ],
+  "caveats": [
+    "No data corrections were needed. Checks found no duplicate sales, return or web-order keys, no web lines outside store 900, no delivered or collected orders without a dispatch time, and no sales lines on cancelled or processing orders.",
+    "The result matches rpt_daily_store_sales for store 900 exactly in all four periods (145,626.90, 175,588.62, 154,977.27 and 225,265.08).",
+    "Period 7 includes the 3 Nov 2025 web-platform migration. channel_code is empty from that date and the legacy views rpt.v_daily_sales and rpt.v_weekly_store_sales leave out web sales from it. I used store 900 and did not use those views, so the figures are complete.",
+    "Test articles (ZZ Test) and store 999 were excluded. The warehouse has 19 ZZ Test lines on the web shop, and they would have slightly inflated web sales if left in.",
+    "Web refunds are booked where they are processed. Web orders returned at a physical store (for example stores 115, 131, 108 and 102) reduce that store's net sales and not the web shop's. This is the company definition, so the web figures above are not reduced by those in-store returns.",
+    "Web sales sit on the dispatch date, so an order placed late in one period and dispatched in the next counts in the later period. For click-and-collect the date is when the order was ready for collection.",
+    "Returns can arrive up to 30 days after a sale. Period 8 (ended 21 Dec 2025) is long past that window, so the figures will not move."
+  ]
+}
+```

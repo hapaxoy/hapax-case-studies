@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t13-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T13",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "5019caa6181032495c1ebc2b8664f2e18deb52cb6978b180d6d5d00ca1148ba8",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:07",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, weeks_in_period, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' ORDER BY 2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | fully_loaded\nFY2026/27 | 1 | FY2026/27 P01 | 2026-05-04 | 2026-05-31 | 4 | true\nFY2026/27 | 2 | FY2026/27 P02 | 2026-06-01 | 2026-06-28 | 4 | true\nFY2026/27 | 3 | FY2026/27 P03 | 2026-06-29 | 2026-08-02 | 5 | true\nFY2026/27 | 4 | FY2026/27 P04 | 2026-08-03 | 2026-08-30 | 4 | true\nFY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | 4 | true\nFY2026/27 | 6 | FY2026/27 P06 | 2026-09-28 | 2026-11-01 | 5 | false\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:08",
+   "statement": "SELECT format, count(*) versions, count(distinct store_id) stores, min(store_id), max(store_id) FROM dim_store GROUP BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | versions | stores | min(store_id) | max(store_id)\nWeb | 1 | 1 | 900 | 900\nTraining | 1 | 1 | 999 | 999\nLarge | 10 | 8 | 102 | 131\nSmall | 14 | 13 | 105 | 139\nMedium | 21 | 18 | 101 | 136\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:11",
+   "statement": "SELECT count(*) n, count(distinct sales_line_id) ids, count(distinct (receipt_id, line_no)) rl, count(distinct receipt_id) receipts, min(sale_date), max(sale_date), min(etl_loaded_at), max(etl_loaded_at), sum(net_amount) net\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | ids | rl | receipts | min(sale_date) | max(sale_date) | min(etl_loaded_at) | max(etl_loaded_at) | net\n48107 | 48107 | 48107 | 21311 | 2026-08-03 | 2026-08-30 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00 | 1273257.17\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:13",
+   "statement": "SELECT store_id, count(distinct format) nf, count(distinct region) nr, string_agg(distinct format, ',') FROM dim_store GROUP BY 1 HAVING count(distinct format)>1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "store_id | nf | nr | string_agg(DISTINCT format, ',')\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:19",
+   "statement": "WITH l AS (\n SELECT f.receipt_id, f.sale_date, s.store_id, f.staff_purchase_flag, p.category, f.channel_code, f.net_amount, f.quantity\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30')\nSELECT 'receipts spanning >1 store/date' k, count(*) v FROM (SELECT receipt_id FROM l GROUP BY 1 HAVING count(distinct store_id)>1 OR count(distinct sale_date)>1)\nUNION ALL SELECT 'receipts mixed staff flag', count(*) FROM (SELECT receipt_id FROM l GROUP BY 1 HAVING count(distinct staff_purchase_flag)>1)\nUNION ALL SELECT 'lines store>=900', count(*) FROM l WHERE store_id>=900\nUNION ALL SELECT 'lines store 999', count(*) FROM l WHERE store_id=999\nUNION ALL SELECT 'lines ZZ Test', count(*) FROM l WHERE category='ZZ Test'\nUNION ALL SELECT 'lines staff', count(*) FROM l WHERE staff_purchase_flag\nUNION ALL SELECT 'lines qty<=0 or net<=0', count(*) FROM l WHERE quantity<=0 OR net_amount<=0\nUNION ALL SELECT 'null staff flag', count(*) FROM l WHERE staff_purchase_flag IS NULL\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "k | v\nreceipts spanning >1 store/date | 0\nreceipts mixed staff flag | 0\nlines store>=900 | 6586\nlines store 999 | 127\nlines ZZ Test | 57\nlines staff | 737\nlines qty<=0 or net<=0 | 0\nnull staff flag | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:23",
+   "statement": "WITH params AS (SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period)\nSELECT s.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900\n  AND NOT f.staff_purchase_flag\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY 1\nORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | receipts | net_sales_before_returns | atv\nLarge | 6508 | 394865.46 | 60.67\nMedium | 8641 | 520763.45 | 60.27\nSmall | 2598 | 131841.05 | 50.75\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:39:26",
+   "statement": "WITH l AS (\n SELECT s.store_id, f.sale_date, sum(f.net_amount) net, count(distinct f.receipt_id) rc\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND p.category<>'ZZ Test'\n GROUP BY 1,2)\nSELECT count(*) mismatches, sum(l.net - r.net_sales_before_returns) net_gap, sum(l.rc - r.receipts) rc_gap\nFROM l FULL JOIN rpt_daily_store_sales r ON r.store_id=l.store_id AND r.business_date=l.sale_date\nWHERE r.business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND r.store_id<900\n  AND (abs(coalesce(l.net,0)-r.net_sales_before_returns)>0.005 OR coalesce(l.rc,0)<>r.receipts)\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mismatches | net_gap | rc_gap\n0 | NULL | NULL\n(1 row)"
+  }
+ ]
+}

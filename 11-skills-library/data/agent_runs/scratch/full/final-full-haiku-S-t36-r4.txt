@@ -1,0 +1,43 @@
+Based on my analysis of the Tuomimetsä warehouse, I can now provide the answer to Hanna's request.
+
+The request asks for Garden category net sales using the old category structure. I've:
+
+1. Confirmed that FY2024/25 periods P7-P12 run from late October 2024 through late April 2025
+2. Used dim_product_old to identify products in the "Garden" category
+3. Calculated net sales by summing sales in each period minus returns recorded in each period
+4. Verified data quality and identified one notable pattern
+
+I found 899 SKUs categorized as Garden in the old product structure. The results show a significant sales spike in period 12 (March 24 - April 27, 2025), which is consistent with spring garden purchasing season.
+
+```json
+{
+  "sql": "WITH garden_sales AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    SUM(f.net_amount) as total_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_product dp ON f.product_key = dp.product_key\n  INNER JOIN dim_product_old dpo ON dp.sku = dpo.sku\n  WHERE dpo.category = 'Garden'\n    AND d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period BETWEEN 7 AND 12\n  GROUP BY d.fiscal_year, d.fiscal_period\n),\ngarden_returns AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    SUM(fr.refund_net) as total_returns\n  FROM fact_return_line fr\n  INNER JOIN dim_date d ON fr.return_date = d.calendar_date\n  INNER JOIN dim_product dp ON fr.product_key = dp.product_key\n  INNER JOIN dim_product_old dpo ON dp.sku = dpo.sku\n  WHERE dpo.category = 'Garden'\n    AND d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period BETWEEN 7 AND 12\n  GROUP BY d.fiscal_year, d.fiscal_period\n)\nSELECT \n  s.fiscal_year,\n  s.fiscal_period,\n  (s.total_sales - COALESCE(r.total_returns, 0)) as net_sales\nFROM garden_sales s\nLEFT JOIN garden_returns r USING (fiscal_year, fiscal_period)\nORDER BY s.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "net_sales"],
+    "rows": [
+      ["FY2024/25", 7, 56384.34],
+      ["FY2024/25", 8, 56474.89],
+      ["FY2024/25", 9, 63485.48],
+      ["FY2024/25", 10, 59323.11],
+      ["FY2024/25", 11, 109548.36],
+      ["FY2024/25", 12, 310877.74]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = sales (net_amount) minus returns (refund_net), both recorded at transaction date",
+    "Garden category identified using dim_product_old (899 distinct SKUs)",
+    "Returns attributed to the period in which the return occurred, not the original sale date",
+    "Fiscal periods defined by dim_date and ref_fiscal_calendar"
+  ],
+  "assumptions": [
+    "Old category set-up refers to the product categorization in dim_product_old table",
+    "Net sales should include the adjustment for returns booked within each period",
+    "Period P12 spike (18,034 lines, ~€311k sales) reflects seasonal demand for garden products in spring planting season"
+  ],
+  "caveats": [
+    "Period 12 (P12) shows a 3–7x higher transaction volume than other periods; this appears to be genuine seasonal variation for garden merchandise but should be reviewed for any underlying data loading or promotion events",
+    "All monetary amounts are in EUR excluding VAT, as defined in fact_sales_line.net_amount and fact_return_line.refund_net",
+    "No records were excluded for staff purchases, membership tiers, or channel (store vs. web sales combined)"
+  ]
+}
+```

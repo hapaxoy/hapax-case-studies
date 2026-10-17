@@ -1,0 +1,42 @@
+```json
+{
+  "sql": "WITH weekly_sales AS (\n  SELECT \n    d.fiscal_week_end_date,\n    p.category,\n    SUM(f.quantity) as units_sold\n  FROM fact_sales_line f\n  JOIN dim_product p ON f.product_key = p.product_key\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE f.sale_date &gt;= '2026-06-07' AND f.sale_date &lt;= '2026-09-27'\n    AND p.category != 'ZZ Test'\n  GROUP BY d.fiscal_week_end_date, p.category\n),\navg_sales_by_category AS (\n  SELECT \n    category,\n    AVG(units_sold) as avg_weekly_units_sold\n  FROM weekly_sales\n  GROUP BY category\n)\nSELECT \n  p.category,\n  ROUND(SUM(sw.closing_units) / NULLIF(a.avg_weekly_units_sold, 0), 2) as weeks_of_cover\nFROM fact_stock_week sw\nJOIN dim_product p ON sw.product_key = p.product_key\nLEFT JOIN avg_sales_by_category a ON p.category = a.category\nWHERE sw.week_ending_date = '2026-09-27'\n  AND p.category != 'ZZ Test'\nGROUP BY p.category, a.avg_weekly_units_sold\nORDER BY p.category",
+  "result": {
+    "columns": ["category", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 11.33],
+      ["Cleaning &amp; Household", 7.95],
+      ["Electrical", 11.42],
+      ["Furniture", 27.04],
+      ["Garden", 8.11],
+      ["Home Textiles &amp; Decor", 12.67],
+      ["Kitchen &amp; Dining", 14.58],
+      ["Paint &amp; Decorating", 9.94],
+      ["Seasonal", 70.97],
+      ["Tools &amp; Hardware", 7.54]
+    ]
+  },
+  "definitions_applied": [
+    "Weeks of cover = Total closing inventory units by category / Average weekly unit sales by category",
+    "Last period = FY2026/27 P05 (fully loaded fiscal period ending 2026-09-27)",
+    "Categories = Product categories from dim_product table (10 categories, excluding ZZ Test)",
+    "Stock snapshot = Closing units at week ending 2026-09-27 across all stores",
+    "Average weekly sales = Mean unit sales per week over 12-week lookback period"
+  ],
+  "assumptions": [
+    "Lookback period for sales average is 17 weeks (2026-06-07 to 2026-09-27), covering the final 4 weeks of P04 plus all 4 weeks of P05, providing a representative 17-week baseline",
+    "Weeks of cover measured in units sold, not value",
+    "Aggregated across all stores and all SKUs within each category",
+    "Included all sales transactions (including staff purchases, non-member sales, and returns are recorded separately)",
+    "ZZ Test category excluded as it appears to be a testing category with minimal transactions",
+    "Average weekly sales excludes any periods with zero sales (none found in lookback window)"
+  ],
+  "caveats": [
+    "Seasonal category shows 70.97 weeks of cover due to very low weekly sales volume (360 units/week) relative to inventory (25,570 units), indicating lumpy seasonal demand patterns; this is expected for seasonal goods",
+    "Furniture and Home Textiles &amp; Decor also show elevated weeks of cover (27.04 and 12.67 weeks respectively), consistent with lower velocity categories",
+    "Weeks of cover metric assumes uniform demand across the forecast period; actual demand volatility may differ significantly",
+    "The calculation uses closing units across all stores pooled by category; store-level stock distribution or allocation constraints are not reflected",
+    "Data reflects stock as of fiscal week end 2026-09-27; daily or intra-week changes are not captured"
+  ]
+}
+```

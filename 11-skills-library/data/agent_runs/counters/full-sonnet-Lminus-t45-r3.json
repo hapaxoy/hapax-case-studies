@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t45-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T45",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "0734ba516a4fb328333ed563dc4c9f167d44b1d312e41805376c70f3db179b0d",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:47",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE '%tampere%' OR city ILIKE '%tammerfors%' OR store_name ILIKE '%tampere%' ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n21 | 115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | Tampere | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n23 | 117 | Tampere Kaleva | Tampere | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n42 | 136 | Tampere Lamminpää | Tampere | West | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n46 | 900 | Tuomimetsä web shop | Tampere | Online | Web | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n47 | 999 | Training store | Tampere | Head office | Training | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:53",
+   "statement": "SELECT m.home_store_id, count(*) AS rows_cur, count(DISTINCT m.member_id) AS members_cur, min(join_date) mn, max(join_date) mx,\n (SELECT count(*) FROM dim_member x WHERE x.is_current) AS all_cur_rows,\n (SELECT count(DISTINCT member_id) FROM dim_member) AS all_members,\n (SELECT count(*) FROM (SELECT member_id FROM dim_member WHERE is_current GROUP BY 1 HAVING count(*)>1)) AS dup_cur\nFROM dim_member m WHERE m.is_current AND m.home_store_id IN (115,116,117,136,900,999) GROUP BY ALL ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "home_store_id | rows_cur | members_cur | mn | mx | all_cur_rows | all_members | dup_cur\n115 | 2788 | 2788 | 2019-01-02 | 2026-10-02 | 60000 | 60000 | 0\n116 | 1721 | 1721 | 2019-01-02 | 2026-10-02 | 60000 | 60000 | 0\n117 | 1692 | 1692 | 2019-01-02 | 2026-10-04 | 60000 | 60000 | 0\n136 | 974 | 974 | 2019-01-12 | 2026-10-04 | 60000 | 60000 | 0\n900 | 12028 | 12028 | 2019-01-01 | 2026-10-04 | 60000 | 60000 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:24:59",
+   "statement": "WITH tam AS (SELECT member_id FROM dim_member WHERE is_current AND home_store_id IN (SELECT store_id FROM dim_store WHERE is_current AND city='Tampere' AND store_id<900)),\nact AS (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04' AND s.store_id<>999 AND p.category<>'ZZ Test')\nSELECT (SELECT count(*) FROM tam) AS members, (SELECT count(*) FROM tam WHERE member_id IN (SELECT member_id FROM act)) AS active_52w,\n (SELECT max(sale_date) FROM fact_sales_line) AS max_sale, (SELECT max(join_date) FROM dim_member) AS max_join\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members | active_52w | max_sale | max_join\n7175 | 4441 | 2026-10-04 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:25:03",
+   "statement": "SELECT count(DISTINCT m.member_id) AS loyalty_members_tampere\nFROM dim_member m\nWHERE m.is_current\n  AND m.home_store_id IN (SELECT store_id FROM dim_store WHERE is_current AND city = 'Tampere' AND store_id < 900)\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "loyalty_members_tampere\n7175\n(1 row)"
+  }
+ ]
+}

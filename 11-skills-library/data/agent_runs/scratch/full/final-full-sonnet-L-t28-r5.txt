@@ -1,0 +1,46 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2026-09-27' AS week_ending), closing AS (SELECT cp.category, SUM(fs.closing_units) AS closing_units FROM fact_stock_week fs JOIN dim_store s ON s.store_key = fs.store_key JOIN dim_product p ON p.product_key = fs.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current CROSS JOIN params WHERE fs.week_ending_date = params.week_ending AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' GROUP BY 1), sold AS (SELECT cp.category, SUM(f.quantity) AS units_sold_4w FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current CROSS JOIN params WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7 AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' GROUP BY 1) SELECT 'FY2026/27' AS fiscal_year, 5 AS fiscal_period, c.category, ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) AS weeks_of_cover FROM closing c LEFT JOIN sold s ON s.category = c.category ORDER BY c.category",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "weeks_of_cover"],
+    "rows": [
+      ["FY2026/27", 5, "Bathroom &amp; Plumbing", 11.6],
+      ["FY2026/27", 5, "Cleaning &amp; Household", 7.6],
+      ["FY2026/27", 5, "Electrical", 9.2],
+      ["FY2026/27", 5, "Furniture", 29.5],
+      ["FY2026/27", 5, "Garden", 16.4],
+      ["FY2026/27", 5, "Home Textiles &amp; Decor", 12.2],
+      ["FY2026/27", 5, "Kitchen &amp; Dining", 14.6],
+      ["FY2026/27", 5, "Paint &amp; Decorating", 12.6],
+      ["FY2026/27", 5, "Seasonal", 48.8],
+      ["FY2026/27", 5, "Tools &amp; Hardware", 7.7]
+    ]
+  },
+  "definitions_applied": [
+    "Last period = last completed fiscal period, FY2026/27 P05 (weeks 18-21, 31 Aug to 27 Sep 2026)",
+    "Closing stock = snapshot on the last week-ending Sunday of the period (27 Sep 2026), summed across stores and articles",
+    "Weeks of cover = closing stock units / average weekly units sold over the prior four fiscal weeks, for the same grouping (category)",
+    "Units sold = quantity on sales lines, by sale date",
+    "Store scope: physical stores only (store_id &lt; 900); web shop (900) and training store (999) excluded",
+    "Test articles (category ZZ Test) excluded",
+    "As-is product hierarchy: current category per SKU (outdoor lighting counted in Electrical)",
+    "Stock covers ranged articles in physical stores only; web stock is not in the table"
+  ],
+  "assumptions": [
+    "'Last period' read as FY2026/27 P05, the last complete period as of the request date of 7 Oct 2026 (warehouse loaded through 4 Oct 2026; P06 has only one week).",
+    "'End of last period' read as the closing snapshot of 27 Sep 2026, the final week-ending Sunday of P05.",
+    "'Prior four fiscal weeks' read literally per the stock skill: the four weeks before the snapshot week, 24 Aug to 20 Sep 2026 (fiscal weeks 14-17 of FY2026/27). This is not the four weeks of P05 itself, which would include the snapshot week.",
+    "Category is the company-wide figure across all physical stores, with no store breakdown, since the request asks for category only.",
+    "Category on the current (as-is) hierarchy, as the company default, since the request did not ask for as-was.",
+    "Units sold are gross sales quantities, not net of returns, per the company definition of units sold in the weeks-of-cover metric."
+  ],
+  "caveats": [
+    "No data problems needing correction were found. The 27 Sep 2026 snapshot has 27,143 rows, unique at store, article and week with a single ETL load, and no negative stock. The sales lines for 24 Aug to 27 Sep have no duplicate keys or non-positive quantities.",
+    "Filters applied: store 999 and web (store 900) rows are out of both stock and sales, and ZZ Test articles are out of both. In the sales window these removed 1,680 non-store lines and 18 test-article lines.",
+    "Seasonal (48.8 weeks) and Furniture (29.5 weeks) are far above the other categories because their recent sales rates are low relative to stock. Seasonal cover is probably overstated as a forward-looking figure, since the sales window is late summer and seasonal demand is lumpy. A four-week trailing rate is a poor guide for these two.",
+    "A different reading of 'prior four weeks' (the four weeks of P05 itself, 31 Aug to 27 Sep) would give somewhat different weeks of cover. The other reading was not computed.",
+    "Stock is the ranged-article snapshot only, so articles not ranged in a store are not in cover. Units sold in a store for an article it does not range would still be in the denominator.",
+    "The control total against rpt_daily_store_sales was not applied: it covers net sales by store, not units by category."
+  ]
+}
+```

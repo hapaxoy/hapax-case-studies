@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-L-t28-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T28",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "3b6397cb960338dca40413c8f44c530d6761bfbef0bf57f89c2e882efa7208ac",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:49:01",
+   "statement": "fiscal-calendar/scripts/fiscal.py last period",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: last period    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: 'Last period' = the last completed fiscal period (CAL-RELATIVE).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:13",
+   "statement": "WITH params AS (\n    SELECT DATE '2026-09-27' AS week_ending\n),\nclosing AS (\n    SELECT cp.category, SUM(fs.closing_units) AS closing_units\n    FROM fact_stock_week fs\n    JOIN dim_store s    ON s.store_key = fs.store_key\n    JOIN dim_product p  ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date = params.week_ending\n      AND s.store_id < 900 AND p.category <> 'ZZ Test'\n    GROUP BY 1\n),\nsold AS (\n    SELECT cp.category, SUM(f.quantity) AS units_sold_4w\n    FROM fact_sales_line f\n    JOIN dim_store s    ON s.store_key = f.store_key\n    JOIN dim_product p  ON p.product_key = f.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7\n      AND s.store_id < 900 AND p.category <> 'ZZ Test'\n    GROUP BY 1\n)\nSELECT c.category, c.closing_units,\n       ROUND(COALESCE(s.units_sold_4w, 0) / 4.0, 1) AS avg_weekly_units_sold,\n       CASE WHEN COALESCE(s.units_sold_4w, 0) = 0 THEN NULL\n            ELSE ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) END AS weeks_of_cover\nFROM closing c\nLEFT JOIN sold s ON s.category = c.category\nORDER BY c.category;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | closing_units | avg_weekly_units_sold | weeks_of_cover\nBathroom & Plumbing | 12237 | 1057.8 | 11.6\nCleaning & Household | 18212 | 2393.5 | 7.6\nElectrical | 23887 | 2601.3 | 9.2\nFurniture | 4963 | 168.0 | 29.5\nGarden | 45196 | 2751.3 | 16.4\nHome Textiles & Decor | 18354 | 1504.3 | 12.2\nKitchen & Dining | 14037 | 961.8 | 14.6\nPaint & Decorating | 18302 | 1453.8 | 12.6\nSeasonal | 25570 | 524.3 | 48.8\nTools & Hardware | 30399 | 3943.8 | 7.7\n(10 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:49:20",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 10 rows, 4 columns: category, closing_units, avg_weekly_units_sold, weeks_of_cover\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  category | closing_units | avg_weekly_units_sold | weeks_of_cover\n  Bathroom & Plumbing | 12237 | 1057.8 | 11.6\n  Cleaning & Household | 18212 | 2393.5 | 7.6\n  Electrical | 23887 | 2601.3 | 9.2\n  Furniture | 4963 | 168.0 | 29.5\n  Garden | 45196 | 2751.3 | 16.4\n  Home Textiles & Decor | 18354 | 1504.3 | 12.2\n  Kitchen & Dining | 14037 | 961.8 | 14.6\n  Paint & Decorating | 18302 | 1453.8 | 12.6\n  Seasonal | 25570 | 524.3 | 48.8\n  Tools & Hardware | 30399 | 3943.8 | 7.7\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

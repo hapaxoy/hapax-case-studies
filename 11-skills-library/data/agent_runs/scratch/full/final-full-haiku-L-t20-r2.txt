@@ -1,0 +1,33 @@
+Perfect! My query total (5,762,831.03) matches the control total exactly. Now let me prepare the final answer.
+
+```json
+{
+  "sql": "WITH net_sales AS (\n  -- Sales lines from FY2026/27 weeks 1-22\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    cs.region,\n    SUM(f.net_amount) AS sales_amount,\n    0 AS return_amount\n  FROM fact_sales_line f\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id &lt; 900\n    AND s.store_id != 999\n    AND cp.category != 'ZZ Test'\n  GROUP BY d.fiscal_year, d.fiscal_week, cs.region\n  \n  UNION ALL\n  \n  -- Return lines from FY2026/27 weeks 1-22\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    cs.region,\n    0 AS sales_amount,\n    SUM(r.refund_net) AS return_amount\n  FROM fact_return_line r\n  JOIN dim_date d ON d.calendar_date = r.return_date\n  JOIN dim_store s ON s.store_key = r.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id &lt; 900\n    AND s.store_id != 999\n  GROUP BY d.fiscal_year, d.fiscal_week, cs.region\n),\nregion_totals AS (\n  SELECT \n    region,\n    SUM(sales_amount) - SUM(return_amount) AS net_sales,\n    ROW_NUMBER() OVER (ORDER BY SUM(sales_amount) - SUM(return_amount) DESC) AS rank\n  FROM net_sales\n  GROUP BY region\n)\nSELECT \n  rank,\n  region,\n  ROUND(net_sales, 2) AS net_sales\nFROM region_totals\nORDER BY rank",
+  "result": {
+    "columns": ["rank", "region", "net_sales"],
+    "rows": [
+      [1, "West", 1815139.47],
+      [2, "South", 1309213.51],
+      [3, "East", 959424.31],
+      [4, "Capital Region", 948667.50],
+      [5, "North", 730386.24]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns, with returns netted on their return date",
+    "Stores only: store_id &lt; 900 (excludes web shop store 900 and training store 999)",
+    "As-is reporting: current region hierarchy (Capital Region includes stores that joined in April 2025)",
+    "Exclusions: test articles (category ZZ Test) filtered out"
+  ],
+  "assumptions": [
+    "This year = fiscal year FY2026/27 (4 May 2026 onwards)",
+    "Year-to-date = through the last loaded date in the warehouse (4 October 2026 / week 22)",
+    "Ranking is by net sales descending"
+  ],
+  "caveats": [
+    "Data is current through 4 October 2026. The request was received 6 October 2026, so two days of sales are not yet in the warehouse.",
+    "The five regions are North, South, East, West and Capital Region. Capital Region was created 28 April 2025 and includes stores 101, 102, 103, 104, 105. This query reports as-is (current hierarchy), so Capital Region totals include those stores for all history.",
+    "Test articles (category ZZ Test) have been excluded. Training store (999) has been excluded."
+  ]
+}
+```

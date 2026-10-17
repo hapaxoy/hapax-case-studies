@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), lines AS (SELECT m.member_id, f.net_amount, COALESCE(w.dispatch_date, f.sale_date) AS business_date FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_member m ON m.member_key = f.member_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND NOT (s.store_id = 900 AND w.web_order_id IS NULL)), win AS (SELECT * FROM lines WHERE business_date BETWEEN DATE '2025-11-24' AND DATE '2025-12-07'), tgt AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = 15), ho AS (SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id = 15), spend AS (SELECT member_id, SUM(net_amount) AS spend FROM win GROUP BY 1), t AS (SELECT AVG(COALESCE(spend, 0)) AS avg_spend FROM tgt LEFT JOIN spend USING (member_id)), h AS (SELECT AVG(COALESCE(spend, 0)) AS avg_spend FROM ho LEFT JOIN spend USING (member_id)) SELECT 15 AS campaign_id, 'Black Week 2025' AS campaign_name, ROUND(t.avg_spend, 2) AS avg_spend_targeted_eur, ROUND(h.avg_spend, 2) AS avg_spend_holdout_eur, ROUND(t.avg_spend - h.avg_spend, 2) AS uplift_eur FROM t, h",
+  "result": {
+    "columns": ["campaign_id", "campaign_name", "avg_spend_targeted_eur", "avg_spend_holdout_eur", "uplift_eur"],
+    "rows": [[15, "Black Week 2025", 9.34, 7.94, 1.41]]
+  },
+  "definitions_applied": [
+    "Campaign uplift: mean net sales per targeted member minus mean per held-out member",
+    "Campaign window plus seven days: 24 Nov 2025 to 7 Dec 2025 (window 24-30 Nov, plus 7 days)",
+    "Targeted member: at least one exposure row in the campaign, reduced to distinct member_id through dim_member (23,818 members)",
+    "Holdout: campaign_holdout joined on member_id, not member_key (2,747 members); no member is in both groups",
+    "Members with no sales counted as zero in both averages",
+    "Net sales before returns, on lines linked to the member (member_key mapped to member_id)",
+    "Net sales excluding VAT (net_amount)",
+    "Web lines dated on the Helsinki dispatch date (delivered or collected orders only), not the order date",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases kept in (net sales definition includes them)",
+    "No deprecated tables or views used, and channel_code not used"
+  ],
+  "assumptions": [
+    "'Black Week 2025' is campaign_id 15 (24-30 Nov 2025, email+sms+push, all consenting members). Campaign 5 is Black Week 2024.",
+    "Spend is net sales before returns, excluding VAT, per the campaign uplift definition. Returns were not netted off, and the request did not ask for them to be.",
+    "Targeted means members with an exposure row, as defined. That is 23,818 members. The mailing list was 26,573 less the 2,747 held out, which would give 23,826. The 8-member difference is presumably list members with no contact row, so they are not counted as targeted.",
+    "Money is in EUR, rounded to 2 decimals. The unrounded uplift is 1.4055.",
+    "Averages are per member over the whole group, not per buyer."
+  ],
+  "caveats": [
+    "Corrections applied. Web lines were dated on the Helsinki dispatch date rather than the order date. Orders that were cancelled or still processing, or not yet dispatched, are not web sales and were left out.",
+    "Checks that found no problem. There is no overlap between targeted and holdout members. No exposure rows fall outside the campaign window or go to members without marketing consent. No sales lines are duplicated in the window. All members in both groups had joined by the campaign start and had consent on that day. The tier mix of the two groups is similar (Gold about 9% in each).",
+    "Before-returns net sales are used, so the uplift may be overstated if targeted members return more than holdout members. Returns were not measured here.",
+    "The uplift is small against the spread in spend. About 13.8% of targeted members bought in the window against 11.8% of held-out members, and most members in both groups spent nothing. No significance test was run, so the 1.41 EUR difference should be treated as an estimate.",
+    "The holdout is 2,747 of 26,573 on the mailing list (10.3%), slightly above the stated 10%.",
+    "The control total against rpt_daily_store_sales does not apply to a member subset, so it was not run."
+  ]
+}
+```

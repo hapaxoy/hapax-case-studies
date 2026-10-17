@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-L-t27-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T27",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "3aba808221a321750cde57b1c22d874605d2e8edbb83f46b24c76a1b17bb452c",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:19",
+   "statement": "WITH sales_data AS (\n  SELECT\n    f.sale_date,\n    CAST(SUBSTRING(TO_VARCHAR(f.sale_date), 6, 2) AS INTEGER) AS month,\n    s.region,\n    f.gross_amount\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date >= '2024-08-01'\n    AND f.sale_date <= '2024-09-30'\n    AND s.store_id < 900  -- exclude web shop and training store\n    AND p.category != 'ZZ Test'  -- exclude test articles\n)\nSELECT\n  region,\n  SUM(CASE WHEN month = 8 THEN gross_amount ELSE 0 END) AS gross_august_2024,\n  SUM(CASE WHEN month = 9 THEN gross_amount ELSE 0 END) AS gross_september_2024\nFROM sales_data\nGROUP BY region\nORDER BY region\n",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Catalog Error: Scalar Function with name to_varchar does not exist!\nDid you mean \"to_quarters\"?\n\nLINE 4:     CAST(SUBSTRING(TO_VARCHAR(f.sale_date), 6, 2) AS INTEGER) AS month,\n                           ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:23",
+   "statement": "WITH sales_data AS (\n  SELECT\n    f.sale_date,\n    EXTRACT(MONTH FROM f.sale_date) AS month,\n    s.region,\n    f.gross_amount\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date >= '2024-08-01'\n    AND f.sale_date <= '2024-09-30'\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n)\nSELECT\n  region,\n  SUM(CASE WHEN month = 8 THEN gross_amount ELSE 0 END) AS gross_august_2024,\n  SUM(CASE WHEN month = 9 THEN gross_amount ELSE 0 END) AS gross_september_2024\nFROM sales_data\nGROUP BY region\nORDER BY region\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "region | gross_august_2024 | gross_september_2024\nEast | 296762.31 | 249751.64\nNorth | 175960.85 | 149625.27\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:38:31",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 4 rows, 3 columns: region, gross_august_2024, gross_september_2024\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 4 rows) ==\n  region | gross_august_2024 | gross_september_2024\n  East | 296762.31 | 249751.64\n  North | 175960.85 | 149625.27\n  South | 489776.38 | 445837.96\n  West | 402582.35 | 363697.29\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:39",
+   "statement": "-- Control total: net sales (excluding VAT) before returns by region for Aug-Sept 2024\nWITH sales_control AS (\n  SELECT\n    s.region,\n    EXTRACT(MONTH FROM f.sale_date) AS month,\n    SUM(f.net_amount) AS net_sales\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date >= '2024-08-01'\n    AND f.sale_date <= '2024-09-30'\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n  GROUP BY s.region, EXTRACT(MONTH FROM f.sale_date)\n)\nSELECT\n  region,\n  month,\n  net_sales,\n  ROUND(net_sales * 1.255, 2) AS imputed_gross_with_25p5_vat\nFROM sales_control\nORDER BY region, month\n",
+   "n": 4,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "region | month | net_sales | imputed_gross_with_25p5_vat\nEast | 8 | 239523.83 | 300602.41\nEast | 9 | 199180.14 | 249971.08\nNorth | 8 | 142048.63 | 178271.03\nNorth | 9 | 119338.13 | 149769.35\nSouth | 8 | 395312.92 | 496117.71\nSouth | 9 | 355474.53 | 446120.54\nWest | 8 | 324922.53 | 407777.78\nWest | 9 | 290023.29 | 363979.23\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:46",
+   "statement": "-- Check VAT rate composition and verify gross amount calculation\nWITH rate_check AS (\n  SELECT\n    EXTRACT(MONTH FROM f.sale_date) AS month,\n    f.vat_rate,\n    COUNT(*) AS line_count,\n    SUM(f.net_amount) AS total_net,\n    SUM(f.gross_amount) AS total_gross,\n    SUM(f.gross_amount - f.net_amount) AS total_vat_collected\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date >= '2024-08-01'\n    AND f.sale_date <= '2024-09-30'\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n  GROUP BY EXTRACT(MONTH FROM f.sale_date), f.vat_rate\n  ORDER BY month, f.vat_rate\n)\nSELECT\n  month,\n  vat_rate,\n  line_count,\n  ROUND(total_net, 2) AS total_net,\n  ROUND(total_gross, 2) AS total_gross,\n  ROUND(total_vat_collected, 2) AS total_vat_collected\nFROM rate_check\n",
+   "n": 5,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "month | vat_rate | line_count | total_net | total_gross | total_vat_collected\n8 | 0.1000 | 54 | 1546.85 | 1701.57 | 154.72\n8 | 0.1400 | 1885 | 9406.75 | 10724.62 | 1317.87\n8 | 0.2400 | 40818 | 1090854.31 | 1352655.70 | 261801.39\n9 | 0.1000 | 57 | 1868.21 | 2055.10 | 186.89\n9 | 0.1400 | 1128 | 5570.91 | 6351.26 | 780.35\n9 | 0.2550 | 38049 | 956576.97 | 1200505.80 | 243928.83\n(6 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:38:52",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain region --control",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 4 rows, 3 columns: region, gross_august_2024, gross_september_2024\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 4 keys.\n\n== Control total (rpt_daily_store_sales) ==\n  [FAIL] --control needs the requested range (--start/--end or --period).\n\n== Preview (first 4 rows) ==\n  region | gross_august_2024 | gross_september_2024\n  East | 296762.31 | 249751.64\n  North | 175960.85 | 149625.27\n  South | 489776.38 | 445837.96\n  West | 402582.35 | 363697.29\n\nResult: FAILED - fix before sending\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:38:58",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain region --control --start 2024-08-01 --end 2024-09-30",
+   "n": 7,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 4 rows, 3 columns: region, gross_august_2024, gross_september_2024\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 4 keys.\n\n== Date coverage ==\n  [INFO] Requested 2024-08-01 to 2024-09-30 (61 days; fiscal: FY2024/25 P05, FY2024/25 P06, FY2024/25 P04).\n  [WARN] Requested range is not whole fiscal weeks (Monday to Sunday) (CAL-YEAR). Fine for daily requests; check it for weekly or period figures.\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 1 rows in the range only in Helsinki time, 2 only in UTC; fact_web_order.dispatch_ts_utc: 7 rows in the range only in Helsinki time, 13 only in UTC; fact_sales_line.sale_ts_utc: 1 rows in the range only in Helsinki time, 4 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [FAIL] Value column not found; give --value-col (columns: region, gross_august_2024, gross_september_2024).\n\n== Preview (first 4 rows) ==\n  region | gross_august_2024 | gross_september_2024\n  East | 296762.31 | 249751.64\n  North | 175960.85 | 149625.27\n  South | 489776.38 | 445837.96\n  West | 402582.35 | 363697.29\n"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:09",
+   "statement": "-- Verify grand total and net sales control\nSELECT\n  'GROSS SALES' AS metric,\n  SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 8 THEN f.gross_amount ELSE 0 END) AS august_total,\n  SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 9 THEN f.gross_amount ELSE 0 END) AS september_total,\n  SUM(f.gross_amount) AS combined_total\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date >= '2024-08-01'\n  AND f.sale_date <= '2024-09-30'\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\nUNION ALL\nSELECT\n  'NET SALES' AS metric,\n  SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 8 THEN f.net_amount ELSE 0 END) AS august_total,\n  SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 9 THEN f.net_amount ELSE 0 END) AS september_total,\n  SUM(f.net_amount) AS combined_total\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date >= '2024-08-01'\n  AND f.sale_date <= '2024-09-30'\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\n",
+   "n": 8,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "metric | august_total | september_total | combined_total\nGROSS SALES | 1365081.89 | 1208912.16 | 2573994.05\nNET SALES | 1101807.91 | 964016.09 | 2065824.00\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:39:15",
+   "statement": "SELECT\n  region,\n  SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 8 THEN f.gross_amount ELSE 0 END) AS gross_sales_august_2024,\n  SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 9 THEN f.gross_amount ELSE 0 END) AS gross_sales_september_2024\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date >= '2024-08-01'\n  AND f.sale_date <= '2024-09-30'\n  AND s.store_id < 900\n  AND p.category != 'ZZ Test'\nGROUP BY s.region\nORDER BY s.region\n",
+   "n": 9,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "region | gross_sales_august_2024 | gross_sales_september_2024\nEast | 296762.31 | 249751.64\nNorth | 175960.85 | 149625.27\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(4 rows)"
+  }
+ ]
+}

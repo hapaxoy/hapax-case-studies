@@ -1,0 +1,69 @@
+Based on the validated query against the Tuomimetsä warehouse, here is the store league table for period 2 FY2025/26:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2025-05-26' AS start_date, DATE '2025-06-22' AS end_date\n),\nperiod_days AS (\n    SELECT d.calendar_date FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date BETWEEN params.start_date AND params.end_date AND d.is_trading_day\n),\ntrading_days AS (\n    SELECT cs.store_id, COUNT(*) AS trading_days\n    FROM dim_store cs\n    CROSS JOIN period_days pd\n    WHERE cs.is_current AND cs.store_id < 900\n      AND (cs.open_date IS NULL OR cs.open_date <= pd.calendar_date)\n      AND (cs.close_date IS NULL OR cs.close_date >= pd.calendar_date)\n      AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                      WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n    GROUP BY 1\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nstore_sales AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY ss.net_sales / td.trading_days DESC) AS rank, cs.store_id, cs.store_name, cs.format,\n       td.trading_days, ss.net_sales, ROUND(ss.net_sales / td.trading_days, 0) AS net_sales_per_trading_day\nFROM store_sales ss\nJOIN trading_days td ON td.store_id = ss.store_id\nJOIN dim_store cs    ON cs.store_id = ss.store_id AND cs.is_current\nORDER BY rank",
+  "result": {
+    "columns": ["rank", "store_id", "store_name", "format", "trading_days", "net_sales", "net_sales_per_trading_day"],
+    "rows": [
+      [1, 115, "Tampere Hervanta", "Large", 26, 67349.15, 2590],
+      [2, 102, "Helsinki Pitäjänmäki", "Large", 26, 55860.66, 2148],
+      [3, 108, "Lahti", "Large", 26, 44190.85, 1700],
+      [4, 116, "Tampere Lielahti", "Large", 26, 44030.28, 1693],
+      [5, 131, "Oulu Kaakkuri", "Large", 26, 43902.35, 1689],
+      [6, 110, "Turku Kupittaa", "Large", 26, 43320.63, 1666],
+      [7, 104, "Vantaa Tammisto", "Large", 26, 41753.32, 1606],
+      [8, 125, "Kuopio", "Large", 26, 39139.74, 1505],
+      [9, 117, "Tampere Kaleva", "Medium", 26, 37878.72, 1457],
+      [10, 121, "Vaasa", "Medium", 26, 37558.24, 1445],
+      [11, 119, "Pori", "Medium", 26, 36385.27, 1399],
+      [12, 128, "Lappeenranta", "Medium", 26, 35633.18, 1371],
+      [13, 101, "Helsinki Vuosaari", "Medium", 26, 34066.47, 1310],
+      [14, 124, "Jyväskylä Palokka", "Medium", 26, 32696.54, 1258],
+      [15, 118, "Nokia", "Medium", 26, 32175.72, 1238],
+      [16, 132, "Oulu Linnanmaa", "Medium", 26, 30194.27, 1161],
+      [17, 126, "Joensuu", "Medium", 26, 29473.43, 1134],
+      [18, 122, "Seinäjoki", "Medium", 26, 27540.58, 1059],
+      [19, 136, "Tampere Lamminpää", "Medium", 26, 27295.10, 1050],
+      [20, 107, "Hyvinkää", "Medium", 26, 26584.74, 1022],
+      [21, 109, "Hämeenlinna", "Medium", 26, 26106.65, 1004],
+      [22, 114, "Kouvola", "Medium", 26, 24580.69, 945],
+      [23, 111, "Turku Härmälä", "Medium", 26, 23845.46, 917],
+      [24, 103, "Espoo Lommila", "Medium", 26, 23565.97, 906],
+      [25, 127, "Mikkeli", "Medium", 26, 21756.47, 837],
+      [26, 134, "Rovaniemi", "Medium", 26, 16861.29, 649],
+      [27, 139, "Raahe", "Small", 26, 14095.32, 542],
+      [28, 130, "Kotka", "Small", 26, 13744.32, 529],
+      [29, 133, "Kemi", "Small", 26, 12666.19, 487],
+      [30, 105, "Kerava", "Small", 26, 11041.83, 425],
+      [31, 112, "Raisio", "Small", 26, 10619.65, 408],
+      [32, 138, "Iisalmi", "Small", 26, 10243.94, 394],
+      [33, 123, "Kokkola", "Small", 26, 10168.42, 391],
+      [34, 137, "Lohja", "Small", 26, 10140.52, 390],
+      [35, 106, "Porvoo", "Small", 26, 10055.56, 387],
+      [36, 113, "Salo", "Small", 26, 9933.47, 382],
+      [37, 129, "Savonlinna", "Small", 26, 9737.24, 375],
+      [38, 135, "Kajaani", "Small", 26, 9399.25, 362],
+      [39, 120, "Rauma", "Small", 26, 9285.87, 357]
+    ]
+  },
+  "definitions_applied": [
+    "DEF-STORE-LEAGUE: ranking by net sales per trading day",
+    "DEF-STORE-SCOPE: physical stores only (store_id < 900)",
+    "DEF-NET-SALES: net amount excluding VAT, after returns",
+    "DEF-NET-SALES-SCOPE: exclude store 999 and ZZ Test category",
+    "CAL-CLOSED-DAYS: trading days exclude closed holidays (dim_date.is_trading_day)",
+    "REG-REFITS: refit closures removed from trading-day count (ref_store_closure)"
+  ],
+  "assumptions": [
+    "Period 2 this year = FY2025/26 P02 (26 May to 22 June 2025)",
+    "Store league table grain is store_id; one row per store",
+    "Staff purchases are included in net sales per company definition"
+  ],
+  "caveats": [
+    "Query validated against rpt_daily_store_sales control total with zero gap (1,044,877.35 EUR)",
+    "All 39 physical stores had identical 26 trading days; no store was closed or in refit during P02",
+    "Store openings (136 Tampere Lamminpää on 2 Sep 2024, 137 Lohja on 4 Nov 2024) occurred before P02; store 129 Savonlinna remains open in P02 (closed 25 Jan 2026)"
+  ]
+}
+```

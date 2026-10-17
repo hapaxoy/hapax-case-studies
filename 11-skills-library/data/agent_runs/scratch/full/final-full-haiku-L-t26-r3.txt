@@ -1,0 +1,69 @@
+Perfect! The validation passes. Now I have all the information I need to prepare the final JSON response.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2026-06-01' AS start_date,\n           DATE '2026-06-28' AS end_date\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT n.store_id, cs.store_name, SUM(n.net_sales) AS net_sales\nFROM net_lines n\nCROSS JOIN params\nJOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\nWHERE n.business_date BETWEEN params.start_date AND params.end_date\nGROUP BY n.store_id, cs.store_name\nORDER BY net_sales DESC;",
+  "result": {
+    "columns": ["store_id", "store_name", "net_sales"],
+    "rows": [
+      [900, "Tuomimetsä web shop", 230731.44],
+      [115, "Tampere Hervanta", 72687.05],
+      [102, "Helsinki Pitäjänmäki", 55562.42],
+      [108, "Lahti", 46899.91],
+      [104, "Vantaa Tammisto", 46414.81],
+      [131, "Oulu Kaakkuri", 46021.68],
+      [116, "Tampere Lielahti", 45485.54],
+      [110, "Turku Kupittaa", 44380.38],
+      [117, "Tampere Kaleva", 40769.32],
+      [118, "Nokia", 38036.56],
+      [119, "Pori", 37060.06],
+      [124, "Jyväskylä Palokka", 34403.16],
+      [101, "Helsinki Vuosaari", 34229.86],
+      [132, "Oulu Linnanmaa", 32347.31],
+      [121, "Vaasa", 31852.44],
+      [128, "Lappeenranta", 31703.61],
+      [126, "Joensuu", 31643.91],
+      [136, "Tampere Lamminpää", 30503.73],
+      [107, "Hyvinkää", 28716.89],
+      [109, "Hämeenlinna", 28110.63],
+      [114, "Kouvola", 26338.80],
+      [122, "Seinäjoki", 26034.82],
+      [127, "Mikkeli", 24615.83],
+      [103, "Espoo Lommila", 24610.32],
+      [125, "Kuopio", 23993.71],
+      [111, "Turku Härmälä", 21796.60],
+      [134, "Rovaniemi", 20895.20],
+      [137, "Lohja", 15917.24],
+      [130, "Kotka", 14730.87],
+      [133, "Kemi", 13279.13],
+      [139, "Raahe", 12908.75],
+      [106, "Porvoo", 11141.96],
+      [112, "Raisio", 11024.52],
+      [123, "Kokkola", 11011.25],
+      [105, "Kerava", 10480.14],
+      [138, "Iisalmi", 10396.29],
+      [135, "Kajaani", 9615.26],
+      [120, "Rauma", 9429.48],
+      [113, "Salo", 8866.76]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales (company definition): net amount excluding VAT, after returns, with store 999 and category ZZ Test excluded",
+    "Web sales recognition: dispatch date in Helsinki time, excluding cancelled and processing orders",
+    "Returns: reduce net sales on the return date at the location where processed",
+    "Store hierarchy: as-is (current store names and structure)",
+    "Store scope: includes web shop (900) alongside physical stores"
+  ],
+  "assumptions": [
+    "Interpreted 'period 2 this year' as P2 of FY2026/27 (fiscal period 2 running 1 June to 28 June 2026)",
+    "Interpreted 'store ranking' as ranking by net sales in descending order",
+    "Included all sales locations including the web shop, since the request did not specify physical stores only",
+    "Applied as-is reporting (current store names and regions, not the hierarchy as it stood on each sale date)"
+  ],
+  "caveats": [
+    "Kuopio (store 125) had a scheduled refit closure from 15 June to 26 July 2026, affecting sales for the latter half of period 2; its net sales of 23,993.71 EUR reflect only the first half of the period",
+    "Web sales revenue of 230,731.44 EUR is the largest single location and is recognized on dispatch date (not order date) in Helsinki time zone",
+    "Control total check passed: result sum of 1,294,647.64 EUR matches rpt_daily_store_sales exactly"
+  ]
+}
+```

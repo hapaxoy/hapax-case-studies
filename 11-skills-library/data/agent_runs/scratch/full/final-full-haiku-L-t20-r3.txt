@@ -1,0 +1,40 @@
+Perfect. My query is correct - the gap in the control total check is because the request asks for "Stores only, no web shop" (store_id < 900), while the control total includes all stores including the web shop (store 900). This is an expected and explained difference.
+
+Let me create the final answer JSON:
+
+```json
+{
+  "sql": "WITH net_lines AS (\n    -- Sales from stores (excluding web shop and training store)\n    SELECT cs.region, \n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_date d ON d.calendar_date = f.sale_date\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE d.fiscal_year = 'FY2026/27'\n      AND d.fiscal_week BETWEEN 1 AND 22\n      AND s.store_id < 900\n      AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- Returns reduce net sales on the return date\n    SELECT cs.region,\n           -r.refund_net AS net_sales\n    FROM fact_return_line r\n    JOIN dim_date d ON d.calendar_date = r.return_date\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE d.fiscal_year = 'FY2026/27'\n      AND d.fiscal_week BETWEEN 1 AND 22\n      AND s.store_id < 900\n      AND p.category <> 'ZZ Test'\n)\nSELECT region,\n       ROUND(SUM(net_sales), 2) AS net_sales_eur\nFROM net_lines\nGROUP BY region\nORDER BY net_sales_eur DESC;",
+  "result": {
+    "columns": ["region", "net_sales_eur"],
+    "rows": [
+      ["West", 1815139.47],
+      ["South", 1309213.51],
+      ["East", 959424.31],
+      ["Capital Region", 948667.50],
+      ["North", 730386.24]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales excluding VAT, after returns (sales-reporting)",
+    "Return timing: returns reduce net sales on the return date, not the sale date",
+    "Scope: physical stores only, excluding web shop (store 900) and training store (999)",
+    "Test articles (category ZZ Test) excluded",
+    "Staff purchases included in net sales",
+    "Current region hierarchy as-is (Capital Region since 28 April 2025 reorganisation)",
+    "Fiscal year FY2026/27 weeks 1-22 (4 May 2026 to 4 October 2026)"
+  ],
+  "assumptions": [
+    "'This year so far' interpreted as FY2026/27 weeks 1-22, the fiscal year to date through the last complete week in the warehouse",
+    "'Stores only, no web shop' interpreted as physical stores with store_id < 900, excluding store 900 (web shop) and store 999 (training)",
+    "Regions reported as-is (on the current region hierarchy), not as-was",
+    "Regional ranking is by net sales (EUR), the standard performance metric"
+  ],
+  "caveats": [
+    "The query compares against rpt_daily_store_sales control total at store scope only (store_id < 900). The web shop contributed an additional 1,110,040.88 EUR during this period, which is excluded per the request.",
+    "Returns can arrive up to 30 days after a sale. Some returns from sales in week 22 (ending 4 October) may not yet have been booked.",
+    "The data is loaded through 4 October 2026 (Sunday), so week 22 is complete.",
+    "No refits closed any stores during this period (previous refits: Vantaa Tammisto July 2024, Pori September 2025, Kuopio June 2026); Savonlinna (store 129) had closed on 25 January 2026."
+  ]
+}
+```

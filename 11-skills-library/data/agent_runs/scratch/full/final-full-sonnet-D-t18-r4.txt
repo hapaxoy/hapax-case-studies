@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, SUM(n.net_sales) AS web_net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_net_sales"],
+    "rows": [
+      ["FY2025/26", 5, 145626.90],
+      ["FY2025/26", 6, 175588.62],
+      ["FY2025/26", 7, 154977.27],
+      ["FY2025/26", 8, 225265.08]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = net amount excluding VAT, after returns",
+    "Web sales recognised on the Helsinki dispatch date (fact_web_order joined on receipt_id = web_order_id), not the order date",
+    "Cancelled and processing orders excluded (only delivered and collected orders have sales lines)",
+    "Returns reduce net sales on their own return date, booked to the web shop (store_id 900)",
+    "Web identified by store_id 900, not channel_code (which is empty from 3 November 2025)",
+    "Click-and-collect counted as web",
+    "Category ZZ Test excluded",
+    "Fiscal calendar: periods taken from dim_date.fiscal_period and fiscal_year, with whole fiscal periods",
+    "Control total checked against rpt_daily_store_sales for store 900: agrees exactly for all four periods (sales before returns, returns and net)"
+  ],
+  "assumptions": [
+    "'Last year' read as FY2025/26 (the fiscal year before the current FY2026/27), following the accepted readings of 12 to 27 May 2026 (REQ-D04, D08, D28, D35). Request dated 6 October 2026.",
+    "Periods 5 to 8 are FY2025/26 P05 to P08: 25 Aug 2025 to 21 Dec 2025. All four are fully loaded; P06 has 5 weeks, P05, P07 and P08 have 4 weeks each, so P06 is not comparable in size to the others.",
+    "Net means excluding VAT and after returns (company definition), shown per period with no total row since none was requested.",
+    "Figures are as-is; the web shop is a single pseudo-store (Online), so no regional or category hierarchy affects the result."
+  ],
+  "caveats": [
+    "Test-article filter changed the total only trivially: one ZZ Test web line (EUR 5.50 net) in the Aug 2025 to Jan 2026 window was excluded. Store 999 is not part of the web shop.",
+    "Web returns processed in physical stores are booked to those stores under company rules and are not deducted from the web shop figures. They amount to about EUR 5,495 (P5), 4,784 (P6), 4,901 (P7) and 4,545 (P8) of net refunds on web-sold lines (111, 121, 125 and 144 return lines). If Finance wants web sales net of every refund on web-sold goods, subtract these amounts from the figures above.",
+    "The web platform migrated on 3 November 2025, which falls in P07: channel_code is empty after that date, so web was identified by store_id 900, which is consistent across the migration. The deprecated views rpt.v_daily_sales and rpt.v_weekly_store_sales would understate web sales from that date and were not used.",
+    "The migration date and the Black Friday week fall inside P07 and P08 respectively; no adjustments were made for them.",
+    "Returns can arrive up to 30 days after sale, but net sales is dated on the return date, so the figures are not affected by returns still to come on late-period sales, though later periods will carry returns from these sales."
+  ]
+}
+```

@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t13-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T13",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "821b80a4c1c648b3d3ecf30e0eecaad757041633fb766188f64edaa356e7c824",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:07:18",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:07:29",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS first_period, 4 AS last_period\n)\nSELECT cs.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900                         -- stores only: no web, no training store\n  AND NOT f.staff_purchase_flag                -- staff purchases are out of ATV\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1\nORDER BY atv DESC;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | receipts | net_sales_before_returns | atv\nLarge | 6508 | 394865.46 | 60.67\nMedium | 8641 | 520763.45 | 60.27\nSmall | 2598 | 131841.05 | 50.75\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:07:33",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY format;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:07:40",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 4 columns: format, receipts, net_sales_before_returns, atv\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  format | receipts | net_sales_before_returns | atv\n  Large | 6508 | 394865.46 | 60.67\n  Medium | 8641 | 520763.45 | 60.27\n  Small | 2598 | 131841.05 | 50.75\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:07:48",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS first_period, 4 AS last_period\n)\nSELECT cs.format,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900                         -- stores only: no web, no training store\n  AND NOT f.staff_purchase_flag                -- staff purchases are out of ATV\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1\nORDER BY atv DESC;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | atv\nLarge | 60.67\nMedium | 60.27\nSmall | 50.75\n(3 rows)"
+  }
+ ]
+}

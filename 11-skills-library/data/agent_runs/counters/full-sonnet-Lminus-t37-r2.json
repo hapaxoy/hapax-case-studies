@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t37-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T37",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "e89f3fe696ea2ad37c8f0543b93fa6e698d3291cf09b5cd3d19ef82eb639e548",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:08:14",
+   "statement": "SELECT 'store' AS k, store_key::VARCHAR AS a, store_id::VARCHAR AS b, store_name AS c, city AS d, valid_from::VARCHAR AS e, valid_to::VARCHAR AS f, is_current::VARCHAR AS g FROM dim_store WHERE store_name ILIKE '%Palokka%' OR city ILIKE '%Jyv%'\nUNION ALL\nSELECT 'prod', product_key::VARCHAR, sku::VARCHAR, product_name, category, valid_from::VARCHAR, valid_to::VARCHAR, is_current::VARCHAR FROM dim_product WHERE sku = 100011\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "k | a | b | c | d | e | f | g\nstore | 30 | 124 | Jyväskylä Palokka | Jyväskylä | 2000-01-01 | 9999-12-31 | true\nprod | 11 | 100011 | Plants & Flowers Kuusela 570 | Garden | 2000-01-01 | 9999-12-31 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:08:18",
+   "statement": "SELECT week_ending_date, store_key, product_key, closing_units, closing_value, receipts_units, adjustment_units, etl_loaded_at\nFROM fact_stock_week\nWHERE store_key = 30 AND product_key = 11 AND week_ending_date >= DATE '2026-08-31'\nORDER BY week_ending_date, etl_loaded_at\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | store_key | product_key | closing_units | closing_value | receipts_units | adjustment_units | etl_loaded_at\n2026-09-06 | 30 | 11 | 16 | 67.84 | 0 | 0 | 2026-09-07T01:00:00\n2026-09-13 | 30 | 11 | 13 | 55.12 | 0 | 0 | 2026-09-14T01:00:00\n2026-09-20 | 30 | 11 | 13 | 55.12 | 0 | 0 | 2026-09-21T01:00:00\n2026-09-27 | 30 | 11 | 11 | 46.64 | 0 | 0 | 2026-09-28T01:00:00\n2026-10-04 | 30 | 11 | 11 | 46.64 | 0 | 0 | 2026-10-05T01:00:00\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:08:25",
+   "statement": "WITH wk AS (\n  SELECT DISTINCT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date FROM dim_date WHERE calendar_date IN (DATE '2026-10-08', DATE '2026-10-04')\n),\nsales AS (\n  SELECT d.fiscal_week_end_date AS wk_end, SUM(f.quantity) AS units_sold\n  FROM fact_sales_line f JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE f.store_key = 30 AND f.product_key = 11 AND f.sale_date >= DATE '2026-09-07'\n  GROUP BY 1\n),\ncnt AS (\n  SELECT week_ending_date, COUNT(*) AS rows_, COUNT(DISTINCT store_key) AS stores, MAX(etl_loaded_at) AS loaded\n  FROM fact_stock_week WHERE week_ending_date >= DATE '2026-09-20' GROUP BY 1\n)\nSELECT 'wk' AS k, fiscal_year AS a, fiscal_week::VARCHAR AS b, fiscal_week_start_date::VARCHAR AS c, fiscal_week_end_date::VARCHAR AS d FROM wk\nUNION ALL SELECT 'sales', wk_end::VARCHAR, units_sold::VARCHAR, NULL, NULL FROM sales\nUNION ALL SELECT 'cnt', week_ending_date::VARCHAR, rows_::VARCHAR, stores::VARCHAR, loaded::VARCHAR FROM cnt\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "k | a | b | c | d\nwk | FY2026/27 | 22 | 2026-09-28 | 2026-10-04\nsales | 2026-09-13 | 3 | NULL | NULL\nsales | 2026-09-27 | 2 | NULL | NULL\ncnt | 2026-09-27 | 27143 | 38 | 2026-09-28 01:00:00\ncnt | 2026-09-20 | 27143 | 38 | 2026-09-21 01:00:00\ncnt | 2026-10-04 | 27143 | 38 | 2026-10-05 01:00:00\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:08:32",
+   "statement": "SELECT s.store_id, s.store_name, p.sku, p.product_name, d.fiscal_year, d.fiscal_week, fs.week_ending_date, SUM(fs.closing_units) AS closing_units\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key = fs.store_key\nJOIN dim_product p ON p.product_key = fs.product_key\nJOIN dim_date d ON d.calendar_date = fs.week_ending_date\nWHERE s.store_id = 124 AND p.sku = 100011 AND fs.week_ending_date = DATE '2026-10-04'\nGROUP BY ALL\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | sku | product_name | fiscal_year | fiscal_week | week_ending_date | closing_units\n124 | Jyväskylä Palokka | 100011 | Plants & Flowers Kuusela 570 | FY2026/27 | 22 | 2026-10-04 | 11\n(1 row)"
+  }
+ ]
+}

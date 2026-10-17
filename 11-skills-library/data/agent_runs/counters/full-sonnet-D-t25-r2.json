@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-D-t25-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T25",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "842f2305bb9a4b37e722497b6d0769874e07dcd746312adf6e3d21aea3d12984",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:56",
+   "statement": "SELECT fiscal_year, MIN(calendar_date) s, MAX(calendar_date) e, COUNT(*) FROM dim_date WHERE fiscal_year IN ('FY2025/26','FY2026/27') GROUP BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | s | e | count_star()\nFY2025/26 | 2025-04-28 | 2026-05-03 | 371\nFY2026/27 | 2026-05-04 | 2026-10-04 | 154\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:57",
+   "statement": "SELECT COUNT(*) versions, COUNT(DISTINCT member_id) members, COUNT(DISTINCT member_key) keys, MIN(join_date), MAX(join_date), SUM(CASE WHEN join_date > valid_from THEN 1 ELSE 0 END) jd_after_vf, COUNT(DISTINCT (member_id, join_date)) idjd FROM dim_member\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "versions | members | keys | min(join_date) | max(join_date) | jd_after_vf | idjd\n89314 | 60000 | 89314 | 2019-01-01 | 2026-10-04 | 0 | 60000\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:02",
+   "statement": "WITH first_v AS (\n  SELECT *, ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) rn FROM dim_member\n)\nSELECT f.home_store_id, cs.store_name, cs.region, cs.format, COUNT(*) n,\n  SUM(CASE WHEN f.valid_from <> f.join_date THEN 1 ELSE 0 END) first_vf_ne_jd\nFROM first_v f LEFT JOIN dim_store cs ON cs.store_id=f.home_store_id AND cs.is_current\nWHERE f.rn=1 AND f.join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03'\nGROUP BY ALL ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "home_store_id | store_name | region | format | n | first_vf_ne_jd\n101 | Helsinki Vuosaari | Capital Region | Medium | 351 | 0\n102 | Helsinki Pitäjänmäki | Capital Region | Large | 597 | 0\n103 | Espoo Lommila | Capital Region | Medium | 281 | 0\n104 | Vantaa Tammisto | Capital Region | Large | 485 | 0\n105 | Kerava | Capital Region | Small | 147 | 0\n106 | Porvoo | South | Small | 171 | 0\n107 | Hyvinkää | South | Medium | 287 | 0\n108 | Lahti | South | Large | 500 | 0\n109 | Hämeenlinna | South | Medium | 295 | 0\n110 | Turku Kupittaa | South | Large | 500 | 0\n111 | Turku Härmälä | South | Medium | 261 | 0\n112 | Raisio | South | Small | 156 | 0\n113 | Salo | South | Small | 133 | 0\n114 | Kouvola | South | Medium | 249 | 0\n115 | Tampere Hervanta | West | Large | 696 | 0\n116 | Tampere Lielahti | West | Large | 459 | 0\n117 | Tampere Kaleva | West | Medium | 447 | 0\n118 | Nokia | West | Medium | 373 | 0\n119 | Pori | West | Medium | 342 | 0\n120 | Rauma | West | Small | 144 | 0\n121 | Vaasa | West | Medium | 344 | 0\n122 | Seinäjoki | West | Medium | 331 | 0\n123 | Kokkola | West | Small | 167 | 0\n124 | Jyväskylä Palokka | East | Medium | 309 | 0\n125 | Kuopio | East | Large | 484 | 0\n126 | Joensuu | East | Medium | 378 | 0\n127 | Mikkeli | East | Medium | 289 | 0\n128 | Lappeenranta | East | Medium | 330 | 0\n129 | Savonlinna | East | Small | 113 | 0\n130 | Kotka | East | Small | 143 | 0\n131 | Oulu Kaakkuri | North | Large | 536 | 0\n132 | Oulu Linnanmaa | North | Medium | 311 | 0\n133 | Kemi | Nor"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:09",
+   "statement": "SELECT (SELECT COUNT(*) FROM (SELECT member_id, valid_from FROM dim_member GROUP BY 1,2 HAVING COUNT(*)>1)) dup_vf,\n (SELECT COUNT(*) FROM dim_member WHERE member_id IN (SELECT member_id FROM dim_member GROUP BY 1 HAVING SUM(CASE WHEN is_current THEN 1 ELSE 0 END)<>1)) bad_current,\n (SELECT COUNT(DISTINCT member_id) FROM dim_member WHERE join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03') total_new,\n (SELECT COUNT(*) FROM dim_member m WHERE join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03' AND NOT EXISTS (SELECT 1 FROM dim_member x WHERE x.member_id=m.member_id AND x.valid_from=m.join_date)) nofirst\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_vf | bad_current | total_new | nofirst\n0 | 0 | 14854 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:13",
+   "statement": "WITH first_version AS (\n  SELECT member_id, join_date, home_store_id,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS version_no\n  FROM dim_member\n)\nSELECT f.home_store_id AS store_id, cs.store_name, COUNT(DISTINCT f.member_id) AS new_members\nFROM first_version f\nJOIN dim_store cs ON cs.store_id = f.home_store_id AND cs.is_current\nWHERE f.version_no = 1\n  AND f.join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03'\nGROUP BY 1, 2\nORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "store_id | store_name | new_members\n101 | Helsinki Vuosaari | 351\n102 | Helsinki Pitäjänmäki | 597\n103 | Espoo Lommila | 281\n104 | Vantaa Tammisto | 485\n105 | Kerava | 147\n106 | Porvoo | 171\n107 | Hyvinkää | 287\n108 | Lahti | 500\n109 | Hämeenlinna | 295\n110 | Turku Kupittaa | 500\n111 | Turku Härmälä | 261\n112 | Raisio | 156\n113 | Salo | 133\n114 | Kouvola | 249\n115 | Tampere Hervanta | 696\n116 | Tampere Lielahti | 459\n117 | Tampere Kaleva | 447\n118 | Nokia | 373\n119 | Pori | 342\n120 | Rauma | 144\n121 | Vaasa | 344\n122 | Seinäjoki | 331\n123 | Kokkola | 167\n124 | Jyväskylä Palokka | 309\n125 | Kuopio | 484\n126 | Joensuu | 378\n127 | Mikkeli | 289\n128 | Lappeenranta | 330\n129 | Savonlinna | 113\n130 | Kotka | 143\n131 | Oulu Kaakkuri | 536\n132 | Oulu Linnanmaa | 311\n133 | Kemi | 157\n134 | Rovaniemi | 237\n135 | Kajaani | 133\n136 | Tampere Lamminpää | 304\n137 | Lohja | 155\n138 | Iisalmi | 157\n139 | Raahe | 170\n900 | Tuomimetsä web shop | 2932\n(40 rows)"
+  }
+ ]
+}

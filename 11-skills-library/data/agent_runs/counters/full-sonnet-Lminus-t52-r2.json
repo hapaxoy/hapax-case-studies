@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t52-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T52",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "7aaa31809fd1732fa5da5e0e85c517873f41e70db422b985dc689ee0a3253db0",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:55",
+   "statement": "SELECT 'store' AS k, CAST(store_key AS VARCHAR) a, CAST(store_id AS VARCHAR) b, store_name c, city d, CAST(valid_from AS VARCHAR) e, CAST(valid_to AS VARCHAR) f, CAST(is_current AS VARCHAR) g, CAST(close_date AS VARCHAR) h FROM dim_store WHERE store_name ILIKE '%it_j_nm_ki%' OR city ILIKE '%it_j_nm_ki%' OR store_id = 102\nUNION ALL\nSELECT 'period', fiscal_year, CAST(fiscal_period AS VARCHAR), fiscal_period_label, CAST(period_start_date AS VARCHAR), CAST(period_end_date AS VARCHAR), CAST(fully_loaded AS VARCHAR), CAST(weeks_in_period AS VARCHAR), NULL FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=5\nUNION ALL\nSELECT 'closure', CAST(store_id AS VARCHAR), closure_type, CAST(closure_start_date AS VARCHAR), CAST(closure_end_date AS VARCHAR), NULL,NULL,NULL,NULL FROM ref_store_closure WHERE store_id=102\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "k | a | b | c | d | e | f | g | h\nstore | 3 | 102 | Helsinki Pitäjänmäki | Helsinki | 2000-01-01 | 2025-04-27 | false | NULL\nstore | 4 | 102 | Helsinki Pitäjänmäki | Helsinki | 2025-04-28 | 9999-12-31 | true | NULL\nperiod | FY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | true | 4 | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:58:00",
+   "statement": "WITH sold AS (\n  SELECT cp.sku, cp.product_name, cp.category, SUM(f.quantity) AS units_sold, COUNT(*) AS n_lines, COUNT(DISTINCT f.sales_line_id) AS n_distinct_lines\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE s.store_id = 102 AND p.category <> 'ZZ Test'\n    AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n  GROUP BY 1,2,3\n), ret AS (\n  SELECT p.sku, SUM(r.quantity_returned) AS units_returned\n  FROM fact_return_line r\n  JOIN dim_store s ON s.store_key = r.store_key\n  JOIN dim_product p ON p.product_key = r.product_key\n  WHERE s.store_id = 102 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n  GROUP BY 1\n)\nSELECT sd.*, COALESCE(rt.units_returned,0) AS units_returned, sd.units_sold - COALESCE(rt.units_returned,0) AS net_units\nFROM sold sd LEFT JOIN ret rt USING (sku)\nORDER BY units_sold DESC, sku LIMIT 10\n",
+   "n": 2,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "sku | product_name | category | units_sold | n_lines | n_distinct_lines | units_returned | net_units\n101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | 52 | 14 | 14 | 0 | 52\n101778 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | 44 | 13 | 13 | 0 | 44\n102244 | Batteries & Bulbs Havu Pro 791 | Electrical | 42 | 19 | 19 | 1 | 41\n102233 | Batteries & Bulbs Havu Pro 384 | Electrical | 30 | 12 | 12 | 0 | 30\n103670 | Storage Boxes Vesikko 753 | Cleaning & Household | 30 | 17 | 17 | 0 | 30\n102213 | Batteries & Bulbs Kuusela 444 | Electrical | 29 | 12 | 12 | 0 | 29\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | 29 | 14 | 14 | 1 | 28\n103545 | Cleaning Products Poutaranta Home 928 | Cleaning & Household | 29 | 15 | 15 | 0 | 29\n101680 | Fixings & Fasteners Havu 723 | Tools & Hardware | 28 | 7 | 7 | 0 | 28\n100727 | Soil & Fertiliser Havu 662 | Garden | 27 | 12 | 12 | 0 | 27\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:58:06",
+   "statement": "WITH l AS (\n  SELECT f.* FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\n  WHERE s.store_id=102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT 'lines' k, COUNT(*) a, COUNT(DISTINCT sales_line_id) b, SUM(quantity) c, COUNT(DISTINCT sale_date) d, MIN(sale_date) e, MAX(sale_date) f, COUNT(DISTINCT (receipt_id, line_no)) g FROM l\nUNION ALL\nSELECT 'rpt', COUNT(*), COUNT(DISTINCT business_date), SUM(units_sold), SUM(receipts), MIN(business_date), MAX(business_date), NULL FROM rpt_daily_store_sales WHERE store_id=102 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "k | a | b | c | d | e | f | g\nlines | 2121 | 2121 | 3740 | 28 | 2026-08-31 | 2026-09-27 | 2121\nrpt | 28 | 28 | 3740 | 923 | 2026-08-31 | 2026-09-27 | NULL\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:58:11",
+   "statement": "SELECT sku, product_name, category, subcategory, brand, CAST(valid_from AS VARCHAR) vf, CAST(valid_to AS VARCHAR) vt, is_current, CAST(delisted_on AS VARCHAR) dl FROM dim_product WHERE sku IN (101624,101778,102244) ORDER BY sku, valid_from\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "sku | product_name | category | subcategory | brand | vf | vt | is_current | dl\n101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | Fixings & Fasteners | Raudikko | 2000-01-01 | 9999-12-31 | true | NULL\n101778 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | Fixings & Fasteners | Nordhem | 2000-01-01 | 9999-12-31 | true | NULL\n102244 | Batteries & Bulbs Havu Pro 791 | Electrical | Batteries & Bulbs | Havu Pro | 2000-01-01 | 9999-12-31 | true | NULL\n(3 rows)"
+  }
+ ]
+}

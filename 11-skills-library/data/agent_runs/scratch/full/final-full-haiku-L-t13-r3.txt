@@ -1,0 +1,24 @@
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS first_period, 4 AS last_period\n)\nSELECT cs.format,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id &lt; 900                         -- stores only: no web, no training store\n  AND NOT f.staff_purchase_flag                -- staff purchases are out of ATV\n  AND p.category &lt;&gt; 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1\nORDER BY atv DESC;",
+  "result": {
+    "columns": ["format", "atv"],
+    "rows": [
+      ["Large", 60.67],
+      ["Medium", 60.27],
+      ["Small", 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV (average transaction value): net sales before returns divided by the number of sales receipts",
+    "Store scope: physical stores only, excluding store 999 (training) and web shop (store 900)",
+    "Staff purchase exclusion: staff_purchase_flag = false",
+    "Test article exclusion: category &lt;&gt; 'ZZ Test'"
+  ],
+  "assumptions": [
+    "Period 4 this year read as FY2026/27 P04, the most recent completed period with that label as of the request date (following documented practice for relative period names without a year)",
+    "Store format breakdown includes all physical store formats in the warehouse: Large, Medium, Small"
+  ],
+  "caveats": []
+}
+```

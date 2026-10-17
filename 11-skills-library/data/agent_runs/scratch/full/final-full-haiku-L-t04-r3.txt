@@ -1,0 +1,26 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), sales_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.gross_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test') SELECT EXTRACT(MONTH FROM business_date) AS month, EXTRACT(YEAR FROM business_date) AS year, SUM(gross_amount) AS sales_incl_vat FROM sales_lines WHERE EXTRACT(YEAR FROM business_date) = 2024 AND EXTRACT(MONTH FROM business_date) IN (8, 9) GROUP BY EXTRACT(YEAR FROM business_date), EXTRACT(MONTH FROM business_date) ORDER BY year, month",
+  "result": {
+    "columns": ["month", "year", "sales_incl_vat"],
+    "rows": [
+      [8, 2024, 1538645.88],
+      [9, 2024, 1369219.80]
+    ]
+  },
+  "definitions_applied": [
+    "Sales including VAT: sum of gross_amount from fact_sales_line, which includes each line's own VAT rate",
+    "Web sales: recognised on Helsinki dispatch date, not order date",
+    "Store scope: excludes store 999 (training) and category ZZ Test",
+    "Before returns: gross sales without deducting refunds"
+  ],
+  "assumptions": [
+    "Interpreted calendar months August 2024 and September 2024 literally as all sales with calendar dates in those months",
+    "Total company figure: all physical stores and web aggregated together, not broken down by store or category"
+  ],
+  "caveats": [
+    "VAT rate changed on 1 September 2024 from 24% to 25.5% on general-rate items; every line carries its own rate so no flat-rate assumption needed",
+    "Verified against rpt_daily_store_sales control total: net sales before returns match exactly (August: 1241886.32, September: 1091919.49 EUR ex VAT)"
+  ]
+}
+```

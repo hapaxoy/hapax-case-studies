@@ -1,0 +1,34 @@
+Perfect! The query validation passed all checks. Now let me prepare the final answer in the required JSON format:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2026-02-23' AS start_date, DATE '2026-03-22' AS end_date\n),\nweekly_stock AS (\n    SELECT fs.week_ending_date, cp.category,\n           SUM(fs.closing_value) AS weekly_closing_value\n    FROM fact_stock_week fs\n    JOIN dim_store s    ON s.store_key = fs.store_key\n    JOIN dim_store cs   ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p  ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date BETWEEN params.start_date AND params.end_date\n      AND cs.region = 'West'\n      AND cs.store_id &lt; 900 \n      AND cp.category &lt;&gt; 'ZZ Test'\n    GROUP BY 1, 2\n)\nSELECT category,\n       ROUND(AVG(weekly_closing_value), 2) AS avg_stock_value\nFROM weekly_stock\nGROUP BY 1\nORDER BY 1;",
+  "result": {
+    "columns": ["category", "avg_stock_value"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 94390.92],
+      ["Cleaning &amp; Household", 30134.45],
+      ["Electrical", 85769.79],
+      ["Furniture", 174781.98],
+      ["Garden", 197181.16],
+      ["Home Textiles &amp; Decor", 54622.8],
+      ["Kitchen &amp; Dining", 70772.63],
+      ["Paint &amp; Decorating", 100598.68],
+      ["Seasonal", 81396.52],
+      ["Tools &amp; Hardware", 127286.39]
+    ]
+  },
+  "definitions_applied": [
+    "Closing stock: weekly snapshot values at standard cost, averaged across the fiscal weeks in the period",
+    "Store scope: physical stores only (store_id &lt; 900), excluding web and central warehouse",
+    "Product scope: excluding test articles (category = 'ZZ Test')",
+    "Region classification: as-is (current version)"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (fiscal year 28 April 2025 to 3 May 2026)",
+    "Period 11 means fiscal period 11 (fiscal weeks 44-47, 23 February to 22 March 2026)",
+    "Average stock value means average of weekly closing values across the four weeks in the period"
+  ],
+  "caveats": []
+}
+```

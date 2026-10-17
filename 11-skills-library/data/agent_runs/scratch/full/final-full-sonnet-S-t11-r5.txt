@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "WITH per AS (SELECT fiscal_year, period_start_date s, period_end_date e FROM ref_fiscal_calendar WHERE fiscal_period=8 AND fiscal_year IN ('FY2024/25','FY2025/26')), cur AS (SELECT sku, category cur_cat FROM dim_product WHERE is_current), sales AS (SELECT per.fiscal_year fy, c.cur_cat cat, f.net_amount amt FROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key JOIN cur c ON c.sku=p.sku JOIN dim_store st ON st.store_key=f.store_key JOIN per ON f.sale_date BETWEEN per.s AND per.e WHERE st.store_id&lt;&gt;999), rets AS (SELECT per.fiscal_year fy, c.cur_cat cat, -f.refund_net amt FROM fact_return_line f JOIN dim_product p ON p.product_key=f.product_key JOIN cur c ON c.sku=p.sku JOIN dim_store st ON st.store_key=f.store_key JOIN per ON f.return_date BETWEEN per.s AND per.e WHERE st.store_id&lt;&gt;999), u AS (SELECT * FROM sales UNION ALL SELECT * FROM rets) SELECT cat AS category, 8 AS fiscal_period, 'FY2024/25' AS prior_fiscal_year, round(sum(CASE WHEN fy='FY2024/25' THEN amt END),2) AS prior_net_sales, 'FY2025/26' AS fiscal_year, round(sum(CASE WHEN fy='FY2025/26' THEN amt END),2) AS net_sales, round(100.0*(sum(CASE WHEN fy='FY2025/26' THEN amt END)/sum(CASE WHEN fy='FY2024/25' THEN amt END)-1),2) AS growth_pct FROM u WHERE cat IN ('Garden','Electrical') GROUP BY cat ORDER BY cat",
+  "result": {
+    "columns": ["category", "fiscal_period", "prior_fiscal_year", "prior_net_sales", "fiscal_year", "net_sales", "growth_pct"],
+    "rows": [
+      ["Electrical", 8, "FY2024/25", 162500.27, "FY2025/26", 171286.19, 5.41],
+      ["Garden", 8, "FY2024/25", 37122.52, "FY2025/26", 36665.72, -1.23]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 8 taken from ref_fiscal_calendar (FY2024/25 P08 = 2024-11-25 to 2024-12-22; FY2025/26 P08 = 2025-11-24 to 2025-12-21), both 4 weeks and fully loaded",
+    "Net sales = line net_amount (EUR excluding VAT, after line discounts) minus refund_net on returns, with returns counted in the period of the return date, as in rpt_daily_store_sales",
+    "Channels: stores and web (home delivery and click and collect) both included. The FY2025/26 lines have a NULL channel_code and use channel_id instead, so no filter on channel_code was used",
+    "Product category taken from the current version of each SKU (dim_product.is_current), applied to both years, so the two periods use the same product hierarchy",
+    "Training store (store_id 999, head office) excluded",
+    "Staff purchases (staff_purchase_flag) kept in, as they are real sales at the real stores"
+  ],
+  "assumptions": [
+    "'Last year' and 'the year before' are read as fiscal years relative to the request date of 2026-10-05, which falls in FY2026/27. Last year is FY2025/26 and the year before is FY2024/25. Period 8 of the current year (December 2026) has not happened yet.",
+    "Growth is FY2025/26 P08 against FY2024/25 P08, in percent",
+    "'Net sales' means after returns, as in the company's daily net sales report, rather than sales before returns",
+    "Web sales are included in the category figures, since the request names no channel",
+    "Garden and Electrical are reported on the current category hierarchy (including the Outdoor Lighting move). The as-recorded figures are in the caveats."
+  ],
+  "caveats": [
+    "Correction 1, category reclassification: the Outdoor Lighting subcategory (about 70 SKUs) moved from Garden to Electrical on 2025-10-27. Read as recorded, FY2024/25 P08 has it in Garden and FY2025/26 P08 has it in Electrical. That gives Electrical +19.65% (143,159.94 to 171,286.19) and Garden -35.06% (56,462.85 to 36,665.72), which is mostly the move and not trading. I restated FY2024/25 to the current hierarchy, which moves about 19,340 of net sales (after returns) from Garden to Electrical. On the same basis, Electrical is +5.41% and Garden -1.23%. The two categories combined are 199,622.79 in FY2024/25 and 207,951.91 in FY2025/26 (+4.17%), the same on either basis. If Commercial wants the old Garden grouping instead, Outdoor Lighting would be counted in Garden in both years.",
+    "Correction 2, channel coding: FY2025/26 sales lines carry a NULL channel_code and use channel_id (1 store, 2 web home delivery, 3 click and collect) after the web-platform migration, while FY2024/25 uses channel_code ST/WB with a NULL channel_id. A filter on channel_code would silently drop all of FY2025/26. No channel filter was used. Web is about 14% of the period's sales in both years.",
+    "Correction 3, training store and test articles: store 999 (Training store, head office) holds test sales in both periods, including ZZ Test articles and flagged staff purchases. These lines were excluded. They total about 2.3k EUR in FY2024/25 P08 and 2.6k in FY2025/26 P08, and would otherwise have inflated Electrical and Garden slightly.",
+    "Garden and Electrical net sales include returns booked in the period, matched by return date and not by the date of the original sale.",
+    "The 'rpt.v_daily_sales' view and other reporting objects were not used as the source, because they depend on channel_code and on the as-recorded category. The figures were built from the fact tables.",
+    "Checked and not affecting this result: the duplicate sales lines (418 receipt/line pairs loaded twice, 836 rows, about 20.8k EUR) all fall in FY2025/26 P05 (2025-09-15 to 2025-09-21), not in period 8. Planned store refits (stores 104, 119, 125) do not overlap either period 8. Independence Day closure falls in both periods (Friday 2024-12-06, Saturday 2025-12-06) and is already reflected in the sales.",
+    "The growth rates cover one 4-week period each and are on net sales in EUR excluding VAT, with no adjustment for price changes, store openings or closures, or like-for-like store sets."
+  ]
+}
+```

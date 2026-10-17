@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t56-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T56",
+ "budget": 30,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "95650217e133bd081e85f6de4ea58d72fa837816854717bb0e681b4ea90fd864",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:48:28",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain business_date --start 2025-12-15 --end 2025-12-23 --control --control-stores web --value-col web_net_sales",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.2 s.\n\n== Row count ==\n  [PASS] 9 rows, 2 columns: business_date, web_net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (business_date): 9 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-12-15 to 2025-12-23 (9 days; fiscal: FY2025/26 P08, FY2025/26 P09).\n  [WARN] Requested range is not whole fiscal weeks (Monday to Sunday) (CAL-YEAR). Fine for daily requests; check it for weekly or period figures.\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 10 rows in the range only in Helsinki time, 4 only in UTC; fact_web_order.dispatch_ts_utc: 0 rows in the range only in Helsinki time, 19 only in UTC; fact_sales_line.sale_ts_utc: 24 rows in the range only in Helsinki time, 7 only in UTC.\n  [INFO] Result covers 2025-12-15 to 2025-12-23 on business_date (9 distinct dates).\n  [PASS] Every day of the requested range is present, none outside it.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared web_net_sales with rpt_daily_store_sales.net_sales, 2025-12-15 to 2025-12-23, stores: web, at level: business_date.\n  [INFO] Result total 93,720.40; control total 93,720.40; gap 0.00.\n  [PASS] No gap above 0.01 at level business_date.\n\n== Preview (first 9 rows) ==\n  business_date | web_net_sales\n  2025-12"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:48:37",
+   "statement": "WITH d AS (\n  SELECT CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dt, status, fulfilment_type, count(*) n\n  FROM fact_web_order WHERE dispatch_ts_utc IS NOT NULL GROUP BY 1,2,3),\no AS (\n  SELECT CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dt, count(*) orders, sum(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) canc, sum(CASE WHEN status='processing' THEN 1 ELSE 0 END) proc\n  FROM fact_web_order GROUP BY 1)\nSELECT o.dt, dayname(o.dt) dow, o.orders, o.canc, o.proc,\n (SELECT sum(n) FROM d WHERE d.dt=o.dt) dispatched,\n (SELECT sum(n) FROM d WHERE d.dt=o.dt AND fulfilment_type='click_and_collect') cc_dispatched\nFROM o WHERE o.dt BETWEEN DATE '2025-12-08' AND DATE '2025-12-28' ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 21,
+   "output_preview": "dt | dow | orders | canc | proc | dispatched | cc_dispatched\n2025-12-08 | Monday | 163 | 3 | 0 | 364 | 83\n2025-12-09 | Tuesday | 157 | 7 | 0 | 183 | 45\n2025-12-10 | Wednesday | 145 | 3 | 0 | 159 | 48\n2025-12-11 | Thursday | 156 | 7 | 0 | 126 | 27\n2025-12-12 | Friday | 126 | 6 | 0 | 153 | 42\n2025-12-13 | Saturday | 123 | 2 | 0 | 148 | 56\n2025-12-14 | Sunday | 170 | 9 | 0 | 9 | 1\n2025-12-15 | Monday | 244 | 11 | 0 | 248 | 61\n2025-12-16 | Tuesday | 315 | 9 | 0 | 211 | 67\n2025-12-17 | Wednesday | 234 | 10 | 0 | 271 | 76\n2025-12-18 | Thursday | 224 | 9 | 0 | 246 | 67\n2025-12-19 | Friday | 206 | 10 | 0 | 215 | 62\n2025-12-20 | Saturday | 135 | 3 | 0 | 203 | 46\n2025-12-21 | Sunday | 149 | 7 | 0 | 18 | 3\n2025-12-22 | Monday | 234 | 6 | 0 | 283 | 76\n2025-12-23 | Tuesday | 261 | 9 | 0 | 214 | 67\n2025-12-24 | Wednesday | 136 | 3 | 0 | 19 | 5\n2025-12-25 | Thursday | 150 | 8 | 0 | NULL | NULL\n2025-12-26 | Friday | 137 | 4 | 0 | NULL | NULL\n2025-12-27 | Saturday | 135 | 3 | 0 | 612 | 159\n2025-12-28 | Sunday | 169 | 15 | 0 | 62 | 18\n(21 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:48:46",
+   "statement": "WITH w AS (\n  SELECT o.web_order_id, o.status, CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) dd\n  FROM fact_web_order o WHERE o.status IN ('delivered','collected')\n   AND CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-12-15' AND DATE '2025-12-23')\nSELECT\n (SELECT count(*) FROM w) orders,\n (SELECT count(*) FROM w WHERE web_order_id NOT IN (SELECT receipt_id FROM fact_sales_line)) no_lines,\n (SELECT count(*) FROM (SELECT receipt_id, line_no FROM fact_sales_line f JOIN w ON w.web_order_id=f.receipt_id GROUP BY 1,2 HAVING count(*)>1)) dup_receipt_line,\n (SELECT count(*) FROM (SELECT sales_line_id FROM fact_sales_line f JOIN w ON w.web_order_id=f.receipt_id GROUP BY 1 HAVING count(*)>1)) dup_line_id,\n (SELECT count(*) FROM fact_sales_line f JOIN w ON w.web_order_id=f.receipt_id JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id<>900) web_lines_not_900,\n (SELECT count(*) FROM fact_sales_line f JOIN w ON w.web_order_id=f.receipt_id JOIN dim_product p ON p.product_key=f.product_key WHERE p.category='ZZ Test') test_lines,\n (SELECT count(*) FROM fact_sales_line f JOIN w ON w.web_order_id=f.receipt_id WHERE f.staff_purchase_flag) staff_lines,\n (SELECT count(*) FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key WHERE s.store_id=900 AND r.return_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23') returns900,\n (SELECT count(*) FROM (SELECT return_line_id FROM fact_return_line WHERE return_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23' GROUP BY 1 HAVING count(*)>1)) dup_returns\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | no_lines | dup_receipt_line | dup_line_id | web_lines_not_900 | test_lines | staff_lines | returns900 | dup_returns\n1909 | 0 | 0 | 0 | 0 | 0 | 0 | 168 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:48:51",
+   "statement": "SELECT count(*) lines, sum(CASE WHEN abs(f.net_amount*(1+f.vat_rate)-f.gross_amount)>0.02 THEN 1 ELSE 0 END) vat_mismatch,\n sum(CASE WHEN f.net_amount<=0 THEN 1 ELSE 0 END) nonpos, count(DISTINCT f.etl_loaded_at) loads, min(f.etl_loaded_at), max(f.etl_loaded_at)\nFROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id=f.receipt_id\nWHERE o.status IN ('delivered','collected') AND CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | vat_mismatch | nonpos | loads | min(f.etl_loaded_at) | max(f.etl_loaded_at)\n3813 | 0 | 0 | 13 | 2025-12-12T01:00:00 | 2025-12-24T01:00:00\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t50-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T50",
+ "budget": 30,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "6983a9e9b8a000c6fb38da6f1cdd05c762f8d36d9a3db6d097acd66a491d350e",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:41:07",
+   "statement": "fiscal-calendar/scripts/fiscal.py P6-P8 FY2025/26 --as-of 2026-10-09",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P6-P8 FY2025/26    as of: 2026-10-09    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P06, FY2025/26 P07, FY2025/26 P08\n  fiscal_weeks                       22-34\n  start_date                         2025-09-22\n  end_date                           2025-12-21\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 22 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:15",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n    SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales, 'sale' AS kind\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, o.fulfilment_type, -r.refund_net, 'return'\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n),\nctrl AS (\n    SELECT d.fiscal_period, SUM(c.net_sales) AS control_net\n    FROM rpt_daily_store_sales c JOIN dim_date d ON d.calendar_date = c.business_date\n    WHERE c.store_id = 900 AND d.fiscal_year='FY2025/26' AND d.fiscal_period BETWEEN 6 AND 8\n    GROUP BY 1\n)\nSELECT d.fiscal_period,\n       SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) AS cc_net,\n       SUM(l.net_sales) AS web_net,\n       SUM(CASE WHEN l.kind='return' THEN l.net_sales ELSE 0 END) AS returns,\n       MAX(ctrl.control_net) AS control_net,\n       ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 2) AS share\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.business_date\nJOIN ctrl ON ctrl.fiscal_period = d.fiscal_period\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 6 AND 8\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | cc_net | web_net | returns | control_net | share\n6 | 48901.47 | 175588.62 | -17601.93 | 175588.62 | 27.85\n7 | 39403.04 | 154977.27 | -12143.71 | 154977.27 | 25.43\n8 | 60899.16 | 225265.08 | -17821.30 | 225265.08 | 27.03\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:20",
+   "statement": "SELECT s.store_id, o.fulfilment_type, d.fiscal_period, COUNT(*) AS n, SUM(r.refund_net) AS refund_net\nFROM fact_return_line r\nJOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\nJOIN fact_web_order o ON o.web_order_id = f.receipt_id\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_date d ON d.calendar_date = r.return_date\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period BETWEEN 6 AND 8\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 3,
+   "ok": true,
+   "rows": 158,
+   "output_preview": "store_id | fulfilment_type | fiscal_period | n | refund_net\n101 | click_and_collect | 6 | 2 | 38.64\n101 | home_delivery | 6 | 1 | 21.00\n101 | home_delivery | 7 | 3 | 106.29\n101 | home_delivery | 8 | 2 | 57.92\n102 | click_and_collect | 6 | 1 | 14.26\n102 | click_and_collect | 7 | 2 | 157.62\n102 | click_and_collect | 8 | 4 | 120.99\n102 | home_delivery | 6 | 5 | 74.39\n102 | home_delivery | 7 | 3 | 44.93\n102 | home_delivery | 8 | 5 | 311.72\n103 | click_and_collect | 6 | 1 | 32.08\n103 | click_and_collect | 7 | 1 | 22.55\n103 | click_and_collect | 8 | 1 | 16.24\n103 | home_delivery | 6 | 3 | 66.43\n103 | home_delivery | 7 | 2 | 25.17\n104 | click_and_collect | 6 | 2 | 35.47\n104 | click_and_collect | 7 | 2 | 62.03\n104 | click_and_collect | 8 | 3 | 67.74\n104 | home_delivery | 6 | 6 | 513.72\n104 | home_delivery | 7 | 1 | 15.74\n104 | home_delivery | 8 | 4 | 91.10\n105 | click_and_collect | 7 | 1 | 4.24\n106 | home_delivery | 6 | 1 | 24.53\n106 | home_delivery | 7 | 1 | 20.31\n106 | home_delivery | 8 | 1 | 10.95\n107 | click_and_collect | 6 | 3 | 404.81\n107 | home_delivery | 6 | 5 | 161.25\n107 | home_delivery | 8 | 3 | 65.61\n108 | click_and_collect | 6 | 4 | 96.66\n108 | click_and_collect | 7 | 3 | 63.88\n108 | click_and_collect | 8 | 1 | 39.17\n108 | home_delivery | 6 | 5 | 234.43\n108 | home_delivery | 7 | 8 | 196.75\n108 | home_delivery | 8 | 7 | 233.16\n109 | click_and_collect | 6 | 1 | 227.42\n109 | click_and_collect | 8 | 1 | 7.60\n109 | home_delivery | 6 | 3 | 13.00\n109 | home_delivery | 7 | 1 | 2"
+  }
+ ]
+}

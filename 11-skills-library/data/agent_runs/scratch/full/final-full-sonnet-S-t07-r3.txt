@@ -1,0 +1,43 @@
+```json
+{
+  "sql": "WITH movements AS (SELECT p.sku, f.net_amount AS sales_net, f.standard_cost AS sales_cost, 0::DECIMAL(14,2) AS refund_net, 0::DECIMAL(14,2) AS cost_returned FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE f.sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND s.region = 'South' UNION ALL SELECT p.sku, 0, 0, r.refund_net, r.standard_cost_returned FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE r.return_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND s.region = 'South'), margin_by_sku AS (SELECT sku, sum(sales_net - sales_cost) - sum(refund_net - cost_returned) AS gross_margin FROM movements GROUP BY sku), names AS (SELECT sku, arg_max(product_name, valid_from) AS product_name FROM dim_product GROUP BY sku) SELECT row_number() OVER (ORDER BY m.gross_margin DESC) AS rank, m.sku, n.product_name, round(m.gross_margin, 2) AS gross_margin_eur FROM margin_by_sku m JOIN names n USING (sku) ORDER BY m.gross_margin DESC LIMIT 10",
+  "result": {
+    "columns": ["rank", "sku", "product_name", "gross_margin_eur"],
+    "rows": [
+      [1, 103075, "Cushions &amp; Throws Tuulikki 338", 3866.86],
+      [2, 100955, "Interior Paint Norvik 298", 3694.11],
+      [3, 101763, "Fixings &amp; Fasteners Nordhem 594", 3277.05],
+      [4, 103390, "Bedroom Peltola 793", 3048.27],
+      [5, 100953, "Interior Paint Tuulikki 224", 2611.47],
+      [6, 103062, "Cushions &amp; Throws Kuusela 657", 2247.58],
+      [7, 101398, "Power Tools Havu Pro 689", 2181.77],
+      [8, 102538, "Cookware Nordhem 469", 1693.80],
+      [9, 101369, "Power Tools Koivuranta 416", 1519.19],
+      [10, 102468, "Plumbing Parts Ahvenisto 279", 1476.60]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal quarter: Q4 of FY2024/25 is fiscal periods 10 to 12, 2025-01-27 to 2025-04-27 (ref_fiscal_calendar, fully loaded)",
+    "Gross margin = net sales excluding VAT minus standard cost of the units sold, in EUR",
+    "Returns deducted as in the company's daily net sales report: refund_net less standard_cost_returned, booked on the return date at the store where the return was made",
+    "Staff purchases kept in, because rpt_daily_store_sales includes them in net sales",
+    "Region taken from the store version in force on the sale or return date, through store_key",
+    "Products grouped by sku (stable across versions), not product_key, with the latest product name",
+    "Store-channel sales only: the web shop (store 900) and the training store (999) are not in South"
+  ],
+  "assumptions": [
+    "South region means the stores that were in South during the quarter. 14 stores: 101 to 113 and 137 Lohja. Stores 101 to 105 (Helsinki Vuosaari, Helsinki Pitäjänmäki, Espoo Lommila, Vantaa Tammisto, Kerava) moved to Capital Region on 2025-04-28, the day after the quarter ended. Kouvola (114) moved from East to South on the same date.",
+    "Top 10 means ranked by gross margin in EUR, not by margin percentage.",
+    "Gross margin is net of returns, as the company reports net sales. Before returns the order is nearly the same: Power Tools Koivuranta 416 would rank 9th at 1687.37 and Plumbing Parts Ahvenisto 279 would rank 11th at 1486.44, behind Bathroom Furniture Mäntylä 246 at 1509.11.",
+    "No overhead, freight or supplier rebates are included, as the warehouse holds only standard cost."
+  ],
+  "caveats": [
+    "The region basis changes the answer. Using today's region mapping (Capital Region stores out, Kouvola in), 8 of the 10 products stay in the top 10 but the order and values change: rank 1 Cushions &amp; Throws Tuulikki 338 falls to 2927.42, and Power Tools Koivuranta 416 drops out. Indoor Lighting Havu 419 (Electrical, margin 978.84 on that basis) and Smart Home Tuulikki 855 (935.46) are in the top 12 on that basis only. I used the regions as they stood in the quarter. If Commercial wants the current South, the query needs re-running.",
+    "dim_store holds two region versions for stores 101 to 105 and 114. Joining on store_id, or on the current version only, would put sales in the wrong region.",
+    "No duplicate sales or return lines, null values, cost mismatches or sales outside a product's listing dates were found in the quarter's South data. Line standard cost matches quantity times unit cost on all 41,850 South lines. Store sales and returns reconcile to rpt_daily_store_sales.",
+    "108 of the 1,528 South returns in the quarter were made at a different store than the original sale (store_key differs). They are counted at the returning store, which is how the company report books them.",
+    "Staff purchases (about 2,000 lines company-wide in the quarter) are included. Excluding them would lower some products' margins slightly.",
+    "Each SKU has a single product version in the quarter, so there is no cost revaluation within the period. The April standard-cost revaluation does not affect these figures."
+  ]
+}
+```

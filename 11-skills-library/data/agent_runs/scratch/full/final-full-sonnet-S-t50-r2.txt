@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH web_line AS (SELECT f.sales_line_id, f.sale_date, f.net_amount, o.fulfilment_type FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE f.channel_code = 'WB' OR f.channel_id IN (2, 3)), sales AS (SELECT d.fiscal_year, d.fiscal_period, w.fulfilment_type, w.net_amount AS amt FROM web_line w JOIN dim_date d ON d.calendar_date = w.sale_date), refunds AS (SELECT d.fiscal_year, d.fiscal_period, w.fulfilment_type, -r.refund_net AS amt FROM fact_return_line r JOIN web_line w ON w.sales_line_id = r.sales_line_id JOIN dim_date d ON d.calendar_date = r.return_date), net AS (SELECT * FROM sales UNION ALL SELECT * FROM refunds) SELECT fiscal_year, fiscal_period, round(100 * sum(CASE WHEN fulfilment_type = 'click_and_collect' THEN amt ELSE 0 END) / sum(amt), 1) AS click_and_collect_share_pct FROM net WHERE fiscal_year = 'FY2025/26' AND fiscal_period BETWEEN 6 AND 8 GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_and_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 6, 27.3],
+      ["FY2025/26", 7, 26.0],
+      ["FY2025/26", 8, 26.4]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: EUR excluding VAT (net_amount), after returns",
+    "Web shop sales: all web order lines, home delivery plus click-and-collect",
+    "Click-and-collect identified by fact_web_order.fulfilment_type, which matches channel_id 3 (Click and collect) in dim_channel",
+    "Returns deducted in the period in which the refund was booked (return_date), as in rpt_daily_store_sales",
+    "Fiscal periods taken from dim_date and ref_fiscal_calendar (period 7 is 27 Oct to 23 Nov 2025, period 8 is 24 Nov to 21 Dec 2025)",
+    "Cancelled web orders excluded (they have no sales lines)"
+  ],
+  "assumptions": [
+    "Last year means the last completed fiscal year, FY2025/26. Today is in FY2026/27, and periods 6 to 8 of FY2025/26 run from 22 Sep to 21 Dec 2025.",
+    "Share of the web shop's sales is click-and-collect net sales divided by all web net sales (home delivery plus click-and-collect), by value in EUR excluding VAT.",
+    "Sales are net of returns. Refunds are attributed to the channel of the original sales line and to the period of the return date.",
+    "No staff purchases appear among the web lines, so none were excluded."
+  ],
+  "caveats": [
+    "Channel coding changed at the web-platform migration. Web lines up to 2 Nov 2025 carry channel_code 'WB' with channel_id NULL. Lines from 3 Nov 2025 carry channel_code NULL with channel_id 2 (home delivery) or 3 (click and collect). Filtering on channel_code = 'WB' alone would miss most of period 7 and all of period 8. I used both codes and took click-and-collect from fact_web_order.fulfilment_type, so the period 7 figure covers both coding regimes.",
+    "Returns of web orders are booked at many physical stores as well as at the web shop pseudo-store (store 900). I linked every refund to its original web sales line through sales_line_id instead of filtering on the return store, so none are lost.",
+    "Before returns, the click-and-collect shares are 27.65% (P6), 26.63% (P7) and 26.56% (P8). Returns lower each share by 0.2 to 0.6 percentage points because click-and-collect is returned less than home delivery. If the requester wants gross sales rather than net, use those figures.",
+    "Cancelled web orders (483 over the three periods) have no sales lines and are not counted. Order and line counts reconcile (line_count and order_total_gross match the lines for every delivered or collected order). I found no duplicate sales, return or order IDs, and no orphan returns.",
+    "The stg_* load tables hold only 3 to 4 Oct 2026 data, so they do not affect these periods. The bak_, old and tmp tables were not used."
+  ]
+}
+```

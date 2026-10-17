@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH sales_dedup AS (SELECT * FROM fact_sales_line QUALIFY ROW_NUMBER() OVER (PARTITION BY receipt_id, line_no ORDER BY sales_line_id) = 1), net_lines AS (SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales FROM sales_dedup f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'), yr AS (SELECT n.store_id, SUM(n.net_sales) AS net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date WHERE d.fiscal_year = 'FY2025/26' GROUP BY 1) SELECT RANK() OVER (ORDER BY y.net_sales DESC) AS rank, y.store_id, cs.store_name, 'FY2025/26' AS fiscal_year, ROUND(y.net_sales, 2) AS net_sales FROM yr y JOIN dim_store cs ON cs.store_id = y.store_id AND cs.is_current ORDER BY rank LIMIT 10",
+  "result": {
+    "columns": ["rank", "store_id", "store_name", "fiscal_year", "net_sales"],
+    "rows": [
+      [1, 115, "Tampere Hervanta", "FY2025/26", 804120.83],
+      [2, 102, "Helsinki Pitäjänmäki", "FY2025/26", 679651.94],
+      [3, 131, "Oulu Kaakkuri", "FY2025/26", 555975.03],
+      [4, 108, "Lahti", "FY2025/26", 543956.58],
+      [5, 110, "Turku Kupittaa", "FY2025/26", 539965.78],
+      [6, 104, "Vantaa Tammisto", "FY2025/26", 531924.70],
+      [7, 125, "Kuopio", "FY2025/26", 512757.62],
+      [8, 116, "Tampere Lielahti", "FY2025/26", 506894.85],
+      [9, 117, "Tampere Kaleva", "FY2025/26", 474881.34],
+      [10, 118, "Nokia", "FY2025/26", 415258.62]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns, with each return deducted on its own return date",
+    "Store 999 (training store) and category ZZ Test excluded; the filter does not change any of the top 10 totals",
+    "Staff purchases included in net sales",
+    "Physical stores only (store_id below 900); the web shop (store 900) is not ranked",
+    "Fiscal calendar: FY2025/26 = 28 April 2025 to 3 May 2026, 53 weeks, with week 53 kept because there is no comparison",
+    "Control total: store net sales checked against rpt_daily_store_sales for FY2025/26; all 40 physical stores agree to the cent after the duplicate fix",
+    "Store names taken from the current dim_store version (as-is)"
+  ],
+  "assumptions": [
+    "The request does not say what 'biggest' means. I read it as largest by net sales, the company's standard store measure, not by floor area.",
+    "No period was given. I used the last complete fiscal year, FY2025/26, as the stable measure of size. Past 'last year' requests read this the same way when asked after May 2026. The current year FY2026/27 is only 22 weeks old, and Kuopio's refit closure (15 June to 26 July 2026) distorts it.",
+    "Ranked on total net sales for the year, not net sales per trading day, because the request asks about size and not productivity.",
+    "Savonlinna (closed 25 January 2026) and the other stores that traded for only part of the year are measured on whatever they sold. None of them reach the top 10."
+  ],
+  "caveats": [
+    "Correction: fact_sales_line holds 418 duplicated sales lines for Tampere Lielahti (store 116), dated 15 to 21 September 2025. The same receipt_id and line_no appear twice under different sales_line_ids. This overstated the store's FY2025/26 net sales by 10,390.77 EUR (517,285 against the correct 506,895). The final query keeps one row per receipt_id and line_no. With the correction the store matches rpt_daily_store_sales exactly. Without it, Lielahti would rank 7th, ahead of Kuopio. With it, Lielahti is 8th and Kuopio 7th. The top 10 membership is the same either way.",
+    "If 'biggest' meant floor area, the top 10 would be different: Helsinki Pitäjänmäki (8,381 sqm), Turku Kupittaa (7,844), Kuopio (7,814), Vantaa Tammisto (7,732), Oulu Kaakkuri (7,613), Lahti (7,036), Tampere Lielahti (6,761), Tampere Hervanta (6,705), Espoo Lommila (4,827) and Lappeenranta (4,738). The store sizes did not change between store versions. Tell me if you want that ranking, or a different period such as the current year to date.",
+    "Tampere Hervanta (115) is the largest store by sales but only 8th by floor area, so the two rankings differ in order as well as membership.",
+    "Data is loaded through 4 October 2026. The FY2025/26 figures are complete and not affected by that cut-off, but returns on late-FY2025/26 sales are booked on their return date, so they fall in the period they came back, not the period of sale."
+  ]
+}
+```

@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-D-t56-r1",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T56",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "6f996d2f0c94e551ef32778783ad541016b416dc5f4a848ebb5faf3df9529f4a",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:59:13",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, status,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.net_amount AS net_sales, 'sale' AS kind, f.sales_line_id AS id\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net, 'ret', r.return_line_id\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT business_date, SUM(net_sales) AS net, SUM(CASE WHEN kind='sale' THEN net_sales END) AS sales, SUM(CASE WHEN kind='ret' THEN net_sales END) AS rets, COUNT(*) n, COUNT(DISTINCT id||kind) nd\nFROM net_lines WHERE business_date BETWEEN DATE '2025-12-14' AND DATE '2025-12-24'\nGROUP BY 1 ORDER BY 1;\n",
+   "n": 1,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "business_date | net | sales | rets | n | nd\n2025-12-14 | 380.59 | 1153.33 | -772.74 | 37 | 37\n2025-12-15 | 11375.48 | 11714.52 | -339.04 | 486 | 486\n2025-12-16 | 10604.74 | 10967.03 | -362.29 | 428 | 428\n2025-12-17 | 14227.56 | 15214.54 | -986.98 | 572 | 572\n2025-12-18 | 11359.73 | 12189.13 | -829.40 | 502 | 502\n2025-12-19 | 9197.31 | 10258.50 | -1061.19 | 426 | 426\n2025-12-20 | 10274.69 | 11379.59 | -1104.90 | 432 | 432\n2025-12-21 | 611.75 | 1445.65 | -833.90 | 56 | 56\n2025-12-22 | 14820.19 | 15720.91 | -900.72 | 625 | 625\n2025-12-23 | 11248.95 | 11674.00 | -425.05 | 454 | 454\n2025-12-24 | 216.85 | 1017.20 | -800.35 | 63 | 63\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:59:14",
+   "statement": "SELECT business_date, store_id, receipts, net_sales_before_returns, returns_net, net_sales FROM rpt_daily_store_sales WHERE store_id=900 AND business_date BETWEEN DATE '2025-12-14' AND DATE '2025-12-24' ORDER BY 1;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "business_date | store_id | receipts | net_sales_before_returns | returns_net | net_sales\n2025-12-14 | 900 | 9 | 1153.33 | 772.74 | 380.59\n2025-12-15 | 900 | 248 | 11714.52 | 339.04 | 11375.48\n2025-12-16 | 900 | 211 | 10967.03 | 362.29 | 10604.74\n2025-12-17 | 900 | 271 | 15214.54 | 986.98 | 14227.56\n2025-12-18 | 900 | 246 | 12189.13 | 829.40 | 11359.73\n2025-12-19 | 900 | 215 | 10258.50 | 1061.19 | 9197.31\n2025-12-20 | 900 | 203 | 11379.59 | 1104.90 | 10274.69\n2025-12-21 | 900 | 18 | 1445.65 | 833.90 | 611.75\n2025-12-22 | 900 | 283 | 15720.91 | 900.72 | 14820.19\n2025-12-23 | 900 | 214 | 11674.00 | 425.05 | 11248.95\n2025-12-24 | 900 | 19 | 1017.20 | 800.35 | 216.85\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:59:21",
+   "statement": "WITH o AS (\n  SELECT web_order_id FROM fact_web_order\n  WHERE CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\n)\nSELECT COUNT(*) lines, COUNT(DISTINCT sales_line_id) ids, COUNT(DISTINCT (receipt_id, line_no)) keys, COUNT(DISTINCT receipt_id) orders,\n SUM(CASE WHEN channel_code IS NULL THEN 1 ELSE 0 END) nullchan, MIN(etl_loaded_at), MAX(etl_loaded_at), COUNT(DISTINCT etl_loaded_at) loads\nFROM fact_sales_line f JOIN o ON o.web_order_id=f.receipt_id;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | ids | keys | orders | nullchan | min(etl_loaded_at) | max(etl_loaded_at) | loads\n3813 | 3813 | 3813 | 1909 | 3813 | 2025-12-12T01:00:00 | 2025-12-24T01:00:00 | 13\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:59:22",
+   "statement": "SELECT COUNT(*) n, COUNT(DISTINCT web_order_id) d, SUM(CASE WHEN status NOT IN ('delivered','collected') THEN 1 ELSE 0 END) other_status\nFROM fact_web_order\nWHERE CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-12-15' AND DATE '2025-12-23';\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | other_status\n1909 | 1909 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:59:23",
+   "statement": "SELECT COUNT(*) n, COUNT(DISTINCT return_line_id) d, COUNT(DISTINCT sales_line_id) s FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key WHERE s.store_id=900 AND r.return_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23';\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | s\n168 | 168 | 168\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:59:28",
+   "statement": "SELECT 'sales' k, COUNT(*) n, SUM(net_amount) v FROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key JOIN fact_web_order o ON o.web_order_id=f.receipt_id\nWHERE p.category='ZZ Test' AND CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\nUNION ALL\nSELECT 'ret', COUNT(*), SUM(refund_net) FROM fact_return_line r JOIN dim_product p ON p.product_key=r.product_key JOIN dim_store s ON s.store_key=r.store_key\nWHERE p.category='ZZ Test' AND s.store_id=900 AND r.return_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23';\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "k | n | v\nsales | 0 | NULL\nret | 0 | NULL\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:59:33",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT w.dispatch_date AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT business_date, SUM(net_sales) AS web_net_sales\nFROM net_lines\nWHERE business_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\nGROUP BY 1 ORDER BY 1;\n",
+   "n": 7,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "business_date | web_net_sales\n2025-12-15 | 11375.48\n2025-12-16 | 10604.74\n2025-12-17 | 14227.56\n2025-12-18 | 11359.73\n2025-12-19 | 9197.31\n2025-12-20 | 10274.69\n2025-12-21 | 611.75\n2025-12-22 | 14820.19\n2025-12-23 | 11248.95\n(9 rows)"
+  }
+ ]
+}

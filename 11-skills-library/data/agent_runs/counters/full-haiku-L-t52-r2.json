@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-L-t52-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T52",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "98b57b295a90eaa47a7f840d1b80ffc55abcf624d63211d3976abc6c253bc2c2",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:03:06",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:17",
+   "statement": "SELECT DISTINCT\n  store_id,\n  store_name,\n  city,\n  region\nFROM dim_store\nWHERE store_name ILIKE '%Pitäjänmäki%' OR city ILIKE '%Pitäjänmäki%'\nORDER BY store_id\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_id | store_name | city | region\n102 | Helsinki Pitäjänmäki | Helsinki | Capital Region\n102 | Helsinki Pitäjänmäki | Helsinki | South\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:24",
+   "statement": "-- Get top 3 products by units sold at Pitäjänmäki (store 102) in P5 FY2026/27 (2026-08-31 to 2026-09-27)\nSELECT\n  p.sku,\n  p.product_name,\n  SUM(f.quantity) AS units_sold\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_product p ON f.product_key = p.product_key\nWHERE s.store_id = 102\n  AND f.sale_date BETWEEN '2026-08-31' AND '2026-09-27'\n  AND s.is_current = TRUE\n  AND p.is_current = TRUE\n  AND p.category <> 'ZZ Test'\nGROUP BY p.sku, p.product_name\nORDER BY units_sold DESC\nLIMIT 3\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "sku | product_name | units_sold\n101624 | Fixings & Fasteners Raudikko 251 | 52\n101778 | Fixings & Fasteners Nordhem 349 | 44\n102244 | Batteries & Bulbs Havu Pro 791 | 42\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:31",
+   "statement": "-- Check store 102 versions and their validity dates\nSELECT\n  store_key,\n  store_id,\n  store_name,\n  region,\n  valid_from,\n  valid_to,\n  is_current\nFROM dim_store\nWHERE store_id = 102\nORDER BY valid_from DESC\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_key | store_id | store_name | region | valid_from | valid_to | is_current\n4 | 102 | Helsinki Pitäjänmäki | Capital Region | 2025-04-28 | 9999-12-31 | true\n3 | 102 | Helsinki Pitäjänmäki | South | 2000-01-01 | 2025-04-27 | false\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:03:39",
+   "statement": "-- Check if the top 3 products had version changes during P5\nSELECT\n  sku,\n  product_name,\n  category,\n  valid_from,\n  valid_to,\n  is_current\nFROM dim_product\nWHERE sku IN (101624, 101778, 102244)\nORDER BY sku, valid_from DESC\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "sku | product_name | category | valid_from | valid_to | is_current\n101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | 2000-01-01 | 9999-12-31 | true\n101778 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | 2000-01-01 | 9999-12-31 | true\n102244 | Batteries & Bulbs Havu Pro 791 | Electrical | 2000-01-01 | 9999-12-31 | true\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:04:01",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 3 columns: sku, product_name, units_sold\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  sku | product_name | units_sold\n  101624 | Fixings & Fasteners Raudikko 251 | 52\n  101778 | Fixings & Fasteners Nordhem 349 | 44\n  102244 | Batteries & Bulbs Havu Pro 791 | 42\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

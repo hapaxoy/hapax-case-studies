@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t57-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T57",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "de6924e1d3f9d42455a8e6c5c5dcc0481d8f0d20a611755b9c3a6db9af4d62da",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:57:13",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE store_name ILIKE '%nokia%' OR city ILIKE '%nokia%' ORDER BY store_key\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n24 | 118 | Nokia | Nokia | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:57:13",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 --as-of 2026-10-09",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5    as of: 2026-10-09    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:57:22",
+   "statement": "SELECT count(*) AS n_lines, count(DISTINCT sales_line_id) AS n_ids, count(DISTINCT (receipt_id, line_no)) AS n_rl, sum(f.quantity) AS qty_all,\n sum(CASE WHEN p.category='ZZ Test' THEN f.quantity ELSE 0 END) AS qty_test, sum(CASE WHEN f.staff_purchase_flag THEN f.quantity ELSE 0 END) AS qty_staff,\n sum(CASE WHEN f.quantity<=0 THEN 1 ELSE 0 END) AS nonpos_lines, min(f.sale_date), max(f.sale_date),\n (SELECT sum(units_sold) FROM rpt_daily_store_sales WHERE store_id=118 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') AS ctrl_units\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE s.store_id=118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n_lines | n_ids | n_rl | qty_all | qty_test | qty_staff | nonpos_lines | min(f.sale_date) | max(f.sale_date) | ctrl_units\n1250 | 1250 | 1250 | 2245 | 0 | 34 | 0 | 2026-08-31 | 2026-09-27 | 2245\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:57:26",
+   "statement": "SELECT cp.category, cp.subcategory, sum(f.quantity) AS units, count(DISTINCT f.sales_line_id) AS lines,\n sum(CASE WHEN p.subcategory<>cp.subcategory OR p.category<>cp.category THEN f.quantity ELSE 0 END) AS units_restated\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE s.store_id=118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND cp.category<>'ZZ Test'\nGROUP BY 1,2 ORDER BY units DESC, cp.subcategory LIMIT 10\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | subcategory | units | lines | units_restated\nTools & Hardware | Fixings & Fasteners | 570 | 189 | 0\nElectrical | Indoor Lighting | 152 | 99 | 0\nCleaning & Household | Storage Boxes | 139 | 82 | 0\nCleaning & Household | Cleaning Products | 136 | 63 | 0\nGarden | Plants & Flowers | 136 | 82 | 0\nElectrical | Batteries & Bulbs | 125 | 56 | 0\nBathroom & Plumbing | Plumbing Parts | 106 | 48 | 0\nPaint & Decorating | Interior Paint | 76 | 56 | 0\nElectrical | Cables & Plugs | 75 | 55 | 0\nKitchen & Dining | Tableware | 74 | 35 | 0\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:57:31",
+   "statement": "SELECT cp.subcategory, sum(r.quantity_returned) AS returned_units\nFROM fact_return_line r\nJOIN dim_store s ON s.store_key=r.store_key\nJOIN dim_product p ON p.product_key=r.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE s.store_id=118 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND cp.category<>'ZZ Test'\nGROUP BY 1 ORDER BY 2 DESC LIMIT 8\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "subcategory | returned_units\nStorage Boxes | 9\nFixings & Fasteners | 7\nPlants & Flowers | 7\nIndoor Lighting | 5\nGarden Tools | 4\nSauna & Winter | 3\nOutdoor Lighting | 3\nLaundry & Ironing | 3\n(8 rows)"
+  }
+ ]
+}

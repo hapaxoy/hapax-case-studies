@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-S-t05-r3",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T05",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "6842da82c76a73b70ab2a5bebd1a664c18338f2548f35bd07ae2bd9481ba1a28",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:09:04",
+   "statement": "SELECT \n  fiscal_year,\n  fiscal_period,\n  fiscal_quarter,\n  period_start_date,\n  period_end_date,\n  weeks_in_period,\n  first_fiscal_week,\n  last_fiscal_week\nFROM ref_fiscal_calendar\nWHERE fiscal_period = 2\n  AND fiscal_year IN ('FY2024/25', 'FY2025/26')\nORDER BY fiscal_year\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_quarter | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week\nFY2024/25 | 2 | 1 | 2024-05-27 | 2024-06-23 | 4 | 5 | 8\nFY2025/26 | 2 | 1 | 2025-05-26 | 2025-06-22 | 4 | 5 | 8\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:09:10",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_week,\n  d.fiscal_week_start_date,\n  d.fiscal_week_end_date,\n  SUM(f.net_amount) as net_sales\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  AND d.fiscal_week IN (5, 6, 7, 8)\n  AND f.channel_code IN ('ST', 'WB')\n  AND f.staff_purchase_flag = FALSE\nGROUP BY d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\nORDER BY d.fiscal_year, d.fiscal_week\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | fiscal_week_start_date | fiscal_week_end_date | net_sales\nFY2024/25 | 5 | 2024-05-27 | 2024-06-02 | 326656.22\nFY2024/25 | 6 | 2024-06-03 | 2024-06-09 | 322405.91\nFY2024/25 | 7 | 2024-06-10 | 2024-06-16 | 323989.16\nFY2024/25 | 8 | 2024-06-17 | 2024-06-23 | 215931.95\nFY2025/26 | 5 | 2025-05-26 | 2025-06-01 | 342319.81\nFY2025/26 | 6 | 2025-06-02 | 2025-06-08 | 345852.99\nFY2025/26 | 7 | 2025-06-09 | 2025-06-15 | 343026.01\nFY2025/26 | 8 | 2025-06-16 | 2025-06-22 | 240524.08\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:09:18",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_week,\n  COUNT(*) as line_count,\n  COUNT(DISTINCT f.receipt_id) as receipt_count,\n  COUNT(DISTINCT f.store_key) as store_count,\n  COUNT(CASE WHEN f.member_key IS NULL THEN 1 END) as non_member_lines,\n  MIN(f.net_amount) as min_line_amount,\n  MAX(f.net_amount) as max_line_amount,\n  COUNT(CASE WHEN f.net_amount < 0 THEN 1 END) as negative_lines\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  AND d.fiscal_week IN (5, 6, 7, 8)\n  AND f.staff_purchase_flag = FALSE\nGROUP BY d.fiscal_year, d.fiscal_week\nORDER BY d.fiscal_year, d.fiscal_week\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | line_count | receipt_count | store_count | non_member_lines | min_line_amount | max_line_amount | negative_lines\nFY2024/25 | 5 | 13830 | 6083 | 39 | 7160 | 0.94 | 505.67 | 0\nFY2024/25 | 6 | 12898 | 5690 | 39 | 6763 | 1.01 | 505.67 | 0\nFY2024/25 | 7 | 12962 | 5704 | 39 | 6709 | 1.00 | 423.56 | 0\nFY2024/25 | 8 | 8583 | 3772 | 39 | 4362 | 0.86 | 505.67 | 0\nFY2025/26 | 5 | 14558 | 6493 | 41 | 6660 | 1.01 | 505.67 | 0\nFY2025/26 | 6 | 14032 | 6227 | 41 | 6521 | 0.86 | 505.67 | 0\nFY2025/26 | 7 | 14113 | 6265 | 41 | 6779 | 1.01 | 398.95 | 0\nFY2025/26 | 8 | 9607 | 4280 | 41 | 4162 | 0.77 | 420.08 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:09:23",
+   "statement": "SELECT \n  d.calendar_date,\n  d.day_name,\n  d.is_trading_day,\n  d.is_public_holiday,\n  d.holiday_name,\n  d.fiscal_week,\n  COUNT(DISTINCT f.receipt_id) as receipts_this_date\nFROM dim_date d\nLEFT JOIN fact_sales_line f ON d.calendar_date = f.sale_date AND f.staff_purchase_flag = FALSE\nWHERE d.fiscal_week = 8\n  AND d.fiscal_year IN ('FY2024/25', 'FY2025/26')\nGROUP BY d.calendar_date, d.day_name, d.is_trading_day, d.is_public_holiday, d.holiday_name, d.fiscal_week\nORDER BY d.calendar_date\n",
+   "n": 4,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "calendar_date | day_name | is_trading_day | is_public_holiday | holiday_name | fiscal_week | receipts_this_date\n2024-06-17 | Monday | true | false | NULL | 8 | 694\n2024-06-18 | Tuesday | true | false | NULL | 8 | 667\n2024-06-19 | Wednesday | true | false | NULL | 8 | 743\n2024-06-20 | Thursday | true | false | NULL | 8 | 864\n2024-06-21 | Friday | false | true | Midsummer Eve | 8 | 77\n2024-06-22 | Saturday | false | true | Midsummer Day | 8 | 76\n2024-06-23 | Sunday | true | false | NULL | 8 | 651\n2025-06-16 | Monday | true | false | NULL | 8 | 794\n2025-06-17 | Tuesday | true | false | NULL | 8 | 782\n2025-06-18 | Wednesday | true | false | NULL | 8 | 859\n2025-06-19 | Thursday | true | false | NULL | 8 | 891\n2025-06-20 | Friday | false | true | Midsummer Eve | 8 | 109\n2025-06-21 | Saturday | false | true | Midsummer Day | 8 | 129\n2025-06-22 | Sunday | true | false | NULL | 8 | 716\n(14 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:09:31",
+   "statement": "WITH weekly_sales AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    SUM(f.net_amount) as net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND d.fiscal_week IN (5, 6, 7, 8)\n    AND f.channel_code IN ('ST', 'WB')\n    AND f.staff_purchase_flag = FALSE\n  GROUP BY d.fiscal_year, d.fiscal_week\n)\nSELECT \n  fiscal_week,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END), 2) as sales_fy2024_25,\n  ROUND(MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END), 2) as sales_fy2025_26,\n  ROUND(\n    (MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) - \n     MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END)) /\n    MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END) * 100,\n    2\n  ) as growth_percent\nFROM weekly_sales\nGROUP BY fiscal_week\nORDER BY fiscal_week\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_week | sales_fy2024_25 | sales_fy2025_26 | growth_percent\n5 | 326656.22 | 342319.81 | 4.8\n6 | 322405.91 | 345852.99 | 7.27\n7 | 323989.16 | 343026.01 | 5.88\n8 | 215931.95 | 240524.08 | 11.39\n(4 rows)"
+  }
+ ]
+}

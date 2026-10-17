@@ -1,0 +1,44 @@
+```json
+{
+  "sql": "WITH ytd AS (SELECT DATE '2026-05-04' AS start_date, DATE '2026-10-04' AS end_date), sales AS (SELECT s.region, sum(f.net_amount) AS sales_net FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key CROSS JOIN ytd WHERE f.sale_date BETWEEN ytd.start_date AND ytd.end_date AND s.store_id &lt; 900 AND f.channel_id = 1 GROUP BY s.region), refunds AS (SELECT s.region, sum(r.refund_net) AS refunds_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key CROSS JOIN ytd WHERE r.return_date BETWEEN ytd.start_date AND ytd.end_date AND s.store_id &lt; 900 GROUP BY s.region) SELECT rank() OVER (ORDER BY sales.sales_net - coalesce(refunds.refunds_net, 0) DESC) AS rank, sales.region, round(sales.sales_net - coalesce(refunds.refunds_net, 0), 2) AS net_sales_eur FROM sales LEFT JOIN refunds USING (region) ORDER BY rank",
+  "result": {
+    "columns": ["rank", "region", "net_sales_eur"],
+    "rows": [
+      [1, "West", 1815139.47],
+      [2, "South", 1309213.51],
+      [3, "East", 959424.31],
+      [4, "Capital Region", 948667.5],
+      [5, "North", 730386.24]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = line net amount excluding VAT, less refunds (refund_net) booked on the return date, as in rpt_daily_store_sales",
+    "Fiscal year FY2026/27, starting 2026-05-04 per ref_fiscal_calendar",
+    "Stores only: web shop (store_id 900, channel_ids 2 and 3) excluded",
+    "Training store (store_id 999) excluded as a pseudo-location",
+    "Regions from dim_store at the sale date: since 2025-04-28 the Helsinki-area stores sit in 'Capital Region', which is the fifth region alongside North, South, East and West",
+    "Refunds are attributed to the store where the return was booked, not the store of the original sale"
+  ],
+  "assumptions": [
+    "'How they are doing' is read as total net sales (EUR, excluding VAT) for the fiscal year to date, highest first. Region size therefore drives the order. This is not a growth or per-store measure.",
+    "'This year so far' is the fiscal year FY2026/27 from 2026-05-04 to 2026-10-04, the end of fiscal week 22, the last full week loaded. Period P06 is flagged not fully loaded because it is still running.",
+    "Staff purchases are included in net sales. I found no rule to exclude them, and they are about 1.3% of store sales.",
+    "The five regions are the current ones in dim_store: North, South, East, West and Capital Region.",
+    "Ties and near-ties are ranked on the exact figure. East and Capital Region are about 1.1% apart."
+  ],
+  "caveats": [
+    "Correction: web shop sales (store 900, channel_ids 2 and 3) are excluded. rpt_daily_store_sales includes store 900, so summing that table over all stores would overstate store sales by about 1.2m EUR before returns. I computed from the fact tables instead. For stores 101-139 the report matches the fact table.",
+    "Correction: the training store (999, about 13k EUR, 94% staff purchases) is excluded.",
+    "Correction: from this year channel_code is NULL on sales lines (only channel_id is filled), and before the web migration (up to FY2025/26 P06) channel_id is NULL. I identified stores by store_id &lt; 900 and channel_id = 1 and did not rely on channel_code.",
+    "Correction: the Capital Region split from South (and Kouvola moved from East to South) on 2025-04-28. Using the old or temporary region lists, or old region labels, would show four regions and misstate the comparison with last year.",
+    "Net sales deducts refunds of 292k EUR across the stores. A rank on sales before returns gives the same order.",
+    "The same order holds if the period is cut at the end of P05 (2026-09-27): West, South, East, Capital Region, North.",
+    "East's total is lowered by the Kuopio refit closure (store 125, 2026-06-15 to 2026-07-26, 6 weeks). Without that closure East would probably rank higher against Capital Region, which is only 1.1% behind it.",
+    "Savonlinna (store 129, East) closed on 2026-01-25 and has no sales this year. It is not in the East figure. East's year-on-year comparison is affected by this closure.",
+    "Ranking by size is not the same as ranking by trend. In a rough comparison with the same fiscal weeks last year (week 1 to week 22 of FY2025/26), excluding closed stores and refit stores, growth in store net sales was North +3.8%, Capital Region +2.7%, South +2.1%, West +1.6% and East -1.2%. If Finance wants performance against last year, the order would be different. I can produce that on request.",
+    "Store Kemi (133) has no sales on one trading day, 2026-08-31. Neighbouring days are about 300-500 EUR, so the effect is negligible. I did not adjust for it.",
+    "stg_sales_line_load duplicates the last two days already in fact_sales_line (same line ids, 3,118 lines). I did not add them, so nothing is double counted.",
+    "The warehouse comments describe formats as Hyper, Standard and Express, but the data holds Large, Medium and Small. This does not affect the regional result."
+  ]
+}
+```

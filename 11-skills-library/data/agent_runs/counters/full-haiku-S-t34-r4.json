@@ -1,0 +1,103 @@
+{
+ "run_id": "full-haiku-S-t34-r4",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T34",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "13d4367394bc25efa1e02a6b58b698d0a528589563efea534aa3ba8a4031f02f",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:48",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nORDER BY fiscal_year DESC, fiscal_period DESC\nLIMIT 20\n",
+   "n": 1,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2026/27 | 6 | FY2026/27 P06 | 2026-09-28 | 2026-11-01\nFY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27\nFY2026/27 | 4 | FY2026/27 P04 | 2026-08-03 | 2026-08-30\nFY2026/27 | 3 | FY2026/27 P03 | 2026-06-29 | 2026-08-02\nFY2026/27 | 2 | FY2026/27 P02 | 2026-06-01 | 2026-06-28\nFY2026/27 | 1 | FY2026/27 P01 | 2026-05-04 | 2026-05-31\nFY2025/26 | 12 | FY2025/26 P12 | 2026-03-23 | 2026-05-03\nFY2025/26 | 11 | FY2025/26 P11 | 2026-02-23 | 2026-03-22\nFY2025/26 | 10 | FY2025/26 P10 | 2026-01-26 | 2026-02-22\nFY2025/26 | 9 | FY2025/26 P09 | 2025-12-22 | 2026-01-25\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21\nFY2025/26 | 7 | FY2025/26 P07 | 2025-10-27 | 2025-11-23\nFY2025/26 | 6 | FY2025/26 P06 | 2025-09-22 | 2025-10-26\nFY2025/26 | 5 | FY2025/26 P05 | 2025-08-25 | 2025-09-21\nFY2025/26 | 4 | FY2025/26 P04 | 2025-07-28 | 2025-08-24\nFY2025/26 | 3 | FY2025/26 P03 | 2025-06-23 | 2025-07-27\nFY2025/26 | 2 | FY2025/26 P02 | 2025-05-26 | 2025-06-22\nFY2025/26 | 1 | FY2025/26 P01 | 2025-04-28 | 2025-05-25\nFY2024/25 | 12 | FY2024/25 P12 | 2025-03-24 | 2025-04-27\nFY2024/25 | 11 | FY2024/25 P11 | 2025-02-24 | 2025-03-23\n(20 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:58",
+   "statement": "WITH period_dates AS (\n  SELECT \n    FY26.period_start_date as fy26_start,\n    FY26.period_end_date as fy26_end,\n    FY25.period_start_date as fy25_start,\n    FY25.period_end_date as fy25_end\n  FROM ref_fiscal_calendar FY26\n  JOIN ref_fiscal_calendar FY25 \n    ON FY26.fiscal_year = 'FY2026/27' AND FY26.fiscal_period = 4\n    AND FY25.fiscal_year = 'FY2025/26' AND FY25.fiscal_period = 4\n),\nlfl_stores AS (\n  -- Find stores open on both period start dates\n  SELECT DISTINCT s.store_id, s.store_name\n  FROM dim_store s\n  WHERE s.store_id < 900  -- Exclude web channel\n    AND s.is_current = TRUE\n)\nSELECT \n  ls.store_id,\n  ls.store_name,\n  SUM(CASE WHEN fs.sale_date BETWEEN pd.fy26_start AND pd.fy26_end THEN fs.net_amount ELSE 0 END) as fy26_p04_sales,\n  SUM(CASE WHEN fs.sale_date BETWEEN pd.fy25_start AND pd.fy25_end THEN fs.net_amount ELSE 0 END) as fy25_p04_sales,\n  ROUND(\n    (SUM(CASE WHEN fs.sale_date BETWEEN pd.fy26_start AND pd.fy26_end THEN fs.net_amount ELSE 0 END) - \n     SUM(CASE WHEN fs.sale_date BETWEEN pd.fy25_start AND pd.fy25_end THEN fs.net_amount ELSE 0 END)) /\n    NULLIF(SUM(CASE WHEN fs.sale_date BETWEEN pd.fy25_start AND pd.fy25_end THEN fs.net_amount ELSE 0 END), 0) * 100, 2\n  ) as growth_pct\nFROM lfl_stores ls\nCROSS JOIN period_dates pd\nLEFT JOIN fact_sales_line fs ON fs.store_key IN (\n  SELECT store_key FROM dim_store WHERE store_id = ls.store_id\n)\nWHERE (fs.sale_date BETWEEN pd.fy25_start AND pd.fy25_end \n    OR fs.sale_date BETWEEN pd.fy26_start AND pd.fy26_end)\nGROUP BY ls.store_id, ls.store_name, pd.fy26_start, pd.fy26_end, pd.fy25_start, pd.fy25_end\nORDER BY ls.store_id\n",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Not implemented Error: Cannot perform non-inner join on subquery!"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:04",
+   "statement": "WITH period_dates AS (\n  SELECT \n    'FY2026/27' as fy26_year, 4 as fy26_period,\n    'FY2025/26' as fy25_year, 4 as fy25_period\n),\nfy26_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    SUM(fsl.net_amount) as p04_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2026/27'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name\n),\nfy25_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    SUM(fsl.net_amount) as p04_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name\n)\nSELECT \n  COALESCE(a.store_id, b.store_id) as store_id,\n  COALESCE(a.store_name, b.store_name) as store_name,\n  COALESCE(b.p04_sales, 0) as fy25_p04_sales,\n  COALESCE(a.p04_sales, 0) as fy26_p04_sales,\n  ROUND(\n    (COALESCE(a.p04_sales, 0) - COALESCE(b.p04_sales, 0)) /\n    NULLIF(COALESCE(b.p04_sales, 0), 0) * 100, 2\n  ) as growth_pct\nFROM fy26_p04_sales a\nFULL OUTER JOIN fy25_p04_sales b \n  ON a.store_id = b.store_id\nORDER BY COALESCE(a.store_id, b.store_id)\n",
+   "n": 3,
+   "ok": true,
+   "rows": 39,
+   "output_preview": "store_id | store_name | fy25_p04_sales | fy26_p04_sales | growth_pct\n101 | Helsinki Vuosaari | 33231.54 | 33320.86 | 0.27\n102 | Helsinki Pitäjänmäki | 56723.43 | 62627.66 | 10.41\n103 | Espoo Lommila | 24025.74 | 23681.73 | -1.43\n104 | Vantaa Tammisto | 43806.28 | 44405.59 | 1.37\n105 | Kerava | 10418.77 | 8670.27 | -16.78\n106 | Porvoo | 12212.02 | 11547.18 | -5.44\n107 | Hyvinkää | 27465.91 | 28981.72 | 5.52\n108 | Lahti | 46163.32 | 47133.15 | 2.1\n109 | Hämeenlinna | 29544.20 | 24768.08 | -16.17\n110 | Turku Kupittaa | 48063.38 | 44720.41 | -6.96\n111 | Turku Härmälä | 19683.68 | 21977.03 | 11.65\n112 | Raisio | 9874.76 | 11139.18 | 12.8\n113 | Salo | 10349.97 | 10134.50 | -2.08\n114 | Kouvola | 26520.34 | 27189.42 | 2.52\n115 | Tampere Hervanta | 69961.62 | 67021.77 | -4.2\n116 | Tampere Lielahti | 42840.67 | 42637.22 | -0.47\n117 | Tampere Kaleva | 39204.29 | 39300.98 | 0.25\n118 | Nokia | 35377.10 | 35531.00 | 0.44\n119 | Pori | 37250.60 | 33455.89 | -10.19\n120 | Rauma | 9145.44 | 9584.57 | 4.8\n121 | Vaasa | 33395.33 | 32536.22 | -2.57\n122 | Seinäjoki | 28060.04 | 26424.90 | -5.83\n123 | Kokkola | 9839.51 | 11948.55 | 21.43\n124 | Jyväskylä Palokka | 30275.31 | 31053.13 | 2.57\n125 | Kuopio | 43745.29 | 45627.08 | 4.3\n126 | Joensuu | 34268.25 | 31770.06 | -7.29\n127 | Mikkeli | 28108.99 | 21281.33 | -24.29\n128 | Lappeenranta | 31319.64 | 31647.75 | 1.05\n129 | Savonlinna | 9913.31 | 0.00 | -100.0\n130 | Kotka | 12473.10 | 14108.99 | 13.12\n131 | Oulu Kaakkuri | 39994.53 | 46236.81 | 15.61\n13"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:10",
+   "statement": "SELECT \n  ds.store_id,\n  ds.store_name,\n  ds.is_current,\n  ds.close_date,\n  CAST(ds.close_date as TEXT) as close_date_text\nFROM dim_store ds\nWHERE ds.store_id IN (129)\nORDER BY ds.store_id, ds.valid_from DESC\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | is_current | close_date | close_date_text\n129 | Savonlinna | true | 2026-01-25 | 2026-01-25\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:19",
+   "statement": "-- Calculate like-for-like growth including only stores open in both periods\nWITH period_dates AS (\n  SELECT \n    (SELECT period_start_date FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2026/27' AND fiscal_period = 4) as fy26_start,\n    (SELECT period_end_date FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2026/27' AND fiscal_period = 4) as fy26_end,\n    (SELECT period_start_date FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 4) as fy25_start,\n    (SELECT period_end_date FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 4) as fy25_end\n),\nfy26_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    SUM(fsl.net_amount) as p04_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2026/27'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name\n),\nfy25_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    SUM(fsl.net_amount) as p04_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name\n),\nlfl_candidates AS (\n  SELECT \n    a.store_id,\n    a.store_name,\n    b.p04_sales as fy25_p04_sales,\n    a.p04_sales as fy26_p04_sales\n  FROM fy26_p04_sales a\n  INNER JOIN fy25_p04_sales b \n    ON a.store_id = b.store_id\n)\nSELECT \n  'Like-for-Like Growth (Period 4)' as metric,\n  ROUND(\n    (SUM(fy26_p04_sales) - SUM(fy25_p04_sales)) / \n    NULLIF(SUM(fy25_p04_sales), 0) * 100, 2\n  ) as growth_percentage,\n  SUM(fy25_p04_sales) as fy25_p04_total_sales,\n  SUM(fy26_p04_sales) as fy26_p04_total_sales,\n  COUNT(*) as stores_counted\nFROM lfl_candidates\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "metric | growth_percentage | fy25_p04_total_sales | fy26_p04_total_sales | stores_counted\nLike-for-Like Growth (Period 4) | 0.01 | 1062205.02 | 1062266.72 | 38\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:25",
+   "statement": "-- Like-for-like growth by region\nWITH fy26_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    ds.region,\n    SUM(fsl.net_amount) as p04_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2026/27'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name, ds.region\n),\nfy25_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    ds.region,\n    SUM(fsl.net_amount) as p04_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name, ds.region\n),\nlfl_by_region AS (\n  SELECT \n    a.region,\n    b.p04_sales as fy25_p04_sales,\n    a.p04_sales as fy26_p04_sales\n  FROM fy26_p04_sales a\n  INNER JOIN fy25_p04_sales b \n    ON a.store_id = b.store_id\n)\nSELECT \n  region,\n  ROUND(SUM(fy25_p04_sales), 2) as fy25_p04_sales,\n  ROUND(SUM(fy26_p04_sales), 2) as fy26_p04_sales,\n  ROUND(\n    (SUM(fy26_p04_sales) - SUM(fy25_p04_sales)) / \n    NULLIF(SUM(fy25_p04_sales), 0) * 100, 2\n  ) as growth_percentage,\n  COUNT(*) as store_count\nFROM lfl_by_region\nGROUP BY region\nORDER BY region\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | fy25_p04_sales | fy26_p04_sales | growth_percentage | store_count\nCapital Region | 168205.76 | 172706.11 | 2.68 | 5\nEast | 190645.58 | 184981.60 | -2.97 | 7\nNorth | 125480.46 | 134172.98 | 6.93 | 6\nSouth | 240775.36 | 240843.19 | 0.03 | 10\nWest | 337097.86 | 329562.84 | -2.24 | 10\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:34",
+   "statement": "-- Final like-for-like growth calculation for period 4\nWITH fy26_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    ds.region,\n    SUM(fsl.net_amount) as period_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2026/27'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name, ds.region\n),\nfy25_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    ds.region,\n    SUM(fsl.net_amount) as period_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name, ds.region\n),\nlfl_stores AS (\n  SELECT \n    a.region,\n    a.store_id,\n    a.store_name,\n    b.period_sales as fy25_sales,\n    a.period_sales as fy26_sales\n  FROM fy26_p04_sales a\n  INNER JOIN fy25_p04_sales b \n    ON a.store_id = b.store_id\n)\nSELECT \n  'Overall' as region,\n  ROUND(SUM(fy25_sales), 2) as fy25_p04_net_sales,\n  ROUND(SUM(fy26_sales), 2) as fy26_p04_net_sales,\n  ROUND(\n    (SUM(fy26_sales) - SUM(fy25_sales)) / \n    NULLIF(SUM(fy25_sales), 0) * 100, 2\n  ) as like_for_like_growth_pct,\n  COUNT(DISTINCT store_id) as stores_in_lfl\nFROM lfl_stores\n\nUNION ALL\n\nSELECT \n  region,\n  ROUND(SUM(fy25_sales), 2) as fy25_p04_net_sales,\n  ROUND(SUM(fy26_sales), 2) as fy26_p04_net_sales,\n  ROUND(\n    (SUM(fy26_sales) - SUM(fy25_sales)) / \n    NULLIF(SUM(fy25_sales), 0) * 100, 2\n  ) as like_for_like_growth_pct,\n  COUNT(DISTINCT store_id) as stores_in_lfl\nFROM lfl_stores\nGROUP BY region\nORDER BY CASE WHEN region = 'Overall' THEN 0 ELSE 1 END, region\n",
+   "n": 7,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Could not ORDER BY column \"CASE  WHEN ((lfl_stores.region = 'Overall')) THEN (0) ELSE 1 END\": add the expression/function to every SELECT, or move the UNION into a FROM clause."
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:41",
+   "statement": "-- Final like-for-like growth calculation for period 4\nWITH fy26_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    ds.region,\n    SUM(fsl.net_amount) as period_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2026/27'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name, ds.region\n),\nfy25_p04_sales AS (\n  SELECT \n    ds.store_id,\n    ds.store_name,\n    ds.region,\n    SUM(fsl.net_amount) as period_sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id, ds.store_name, ds.region\n),\nlfl_stores AS (\n  SELECT \n    a.region,\n    a.store_id,\n    b.period_sales as fy25_sales,\n    a.period_sales as fy26_sales\n  FROM fy26_p04_sales a\n  INNER JOIN fy25_p04_sales b \n    ON a.store_id = b.store_id\n),\noverall_summary AS (\n  SELECT \n    'Overall' as region,\n    ROUND(SUM(fy25_sales), 2) as fy25_p04_net_sales,\n    ROUND(SUM(fy26_sales), 2) as fy26_p04_net_sales,\n    ROUND(\n      (SUM(fy26_sales) - SUM(fy25_sales)) / \n      NULLIF(SUM(fy25_sales), 0) * 100, 2\n    ) as like_for_like_growth_pct,\n    COUNT(DISTINCT store_id) as stores_in_lfl,\n    1 as sort_order\n  FROM lfl_stores\n),\nregional_summary AS (\n  SELECT \n    region,\n    ROUND(SUM(fy25_sales), 2) as fy25_p04_net_sales,\n    ROUND(SUM(fy26_sales), 2) as fy26_p04_net_sales,\n    ROUND(\n      (SUM(fy26_sales) - SUM(fy25_sales)) / \n      NULLIF(SUM(fy25_sales), 0) * 100, 2\n    ) as like_for_like_growth_pct,\n    COUNT(DISTINCT store_id) as stores_in_lfl,\n    2 as sort_order\n  FROM lfl_stores\n  GROUP BY region\n)\nSELECT region, fy25_p04_net_sales, fy26_p04_net_sales, like_for_like_growth_pct, stores_in_lfl\nFROM overall_summary\nUNION ALL\nSELECT region, fy25_p04_net_sales, fy26_p04_net_sales, like_for_like_growth_pct, stores_in_lfl\nFROM regional_summary\nORDER BY sort_order, region\n",
+   "n": 8,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Could not ORDER BY column \"overall_summary.sort_order\": add the expression/function to every SELECT, or move the UNION into a FROM clause."
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:47",
+   "statement": "-- Check for stores that have sales in one period but not the other\nWITH fy26_stores AS (\n  SELECT DISTINCT ds.store_id\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2026/27'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n),\nfy25_stores AS (\n  SELECT DISTINCT ds.store_id\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n)\nSELECT \n  COUNT(DISTINCT COALESCE(a.store_id, b.store_id)) as total_stores,\n  COUNT(DISTINCT a.store_id) as stores_with_fy26_sales,\n  COUNT(DISTINCT b.store_id) as stores_with_fy25_sales,\n  COUNT(DISTINCT CASE WHEN a.store_id IS NOT NULL AND b.store_id IS NOT NULL THEN a.store_id END) as lfl_stores\nFROM fy26_stores a\nFULL OUTER JOIN fy25_stores b ON a.store_id = b.store_id\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_stores | stores_with_fy26_sales | stores_with_fy25_sales | lfl_stores\n39 | 38 | 39 | 38\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:55",
+   "statement": "-- Like-for-like growth for period 4: FY2026/27 vs FY2025/26\nWITH fy26_p04 AS (\n  SELECT \n    ds.store_id,\n    SUM(fsl.net_amount) as sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2026/27'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id\n),\nfy25_p04 AS (\n  SELECT \n    ds.store_id,\n    SUM(fsl.net_amount) as sales\n  FROM fact_sales_line fsl\n  JOIN dim_store ds ON fsl.store_key = ds.store_key\n  JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_year = 'FY2025/26'\n    AND dd.fiscal_period = 4\n    AND ds.store_id < 900\n  GROUP BY ds.store_id\n),\nlfl AS (\n  SELECT \n    b.sales as fy25_sales,\n    a.sales as fy26_sales\n  FROM fy26_p04 a\n  INNER JOIN fy25_p04 b ON a.store_id = b.store_id\n)\nSELECT \n  'FY2026/27' as fiscal_year,\n  4 as period,\n  ROUND(SUM(fy25_sales), 2) as fy25_p04_net_sales_eur,\n  ROUND(SUM(fy26_sales), 2) as fy26_p04_net_sales_eur,\n  ROUND((SUM(fy26_sales) - SUM(fy25_sales)) / NULLIF(SUM(fy25_sales), 0) * 100, 2) as like_for_like_growth_pct\nFROM lfl\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | period | fy25_p04_net_sales_eur | fy26_p04_net_sales_eur | like_for_like_growth_pct\nFY2026/27 | 4 | 1062205.02 | 1062266.72 | 0.01\n(1 row)"
+  }
+ ]
+}

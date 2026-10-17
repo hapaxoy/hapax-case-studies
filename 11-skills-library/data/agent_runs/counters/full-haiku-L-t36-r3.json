@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-L-t36-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T36",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "f4474151430a32676ea87f184a4c61c11bf8ff1975aa282915b29ba8ee64a8e2",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:44:11",
+   "statement": "fiscal-calendar/scripts/fiscal.py P7-P12 FY2024/25",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P7-P12 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P07, FY2024/25 P08, FY2024/25 P09, FY2024/25 P10, FY2024/25 P11, FY2024/25 P12\n  fiscal_weeks                       27-52\n  start_date                         2024-10-28\n  end_date                           2025-04-27\n  weeks                              26\n  days                               182\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-04-27\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 27 AND 52)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:20",
+   "statement": "SELECT \n  d.fiscal_period_label,\n  SUM(f.net_amount - COALESCE(r.refund_net, 0)) AS net_sales\nFROM fact_sales_line f\nJOIN dim_date d ON d.calendar_date = f.sale_date\nJOIN dim_product p ON p.product_key = f.product_key\nLEFT JOIN fact_return_line r ON r.sales_line_id = f.sales_line_id\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_week BETWEEN 27 AND 52\n  AND p.category = 'Garden'\n  AND p.product_key != 999  -- filter store 999\n  AND p.category != 'ZZ Test'  -- filter test category\nGROUP BY d.fiscal_period_label, d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "fiscal_period_label | net_sales\nFY2024/25 P07 | 56975.73\nFY2024/25 P08 | 55886.23\nFY2024/25 P09 | 64127.30\nFY2024/25 P10 | 59241.34\nFY2024/25 P11 | 108241.60\nFY2024/25 P12 | 308914.74\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:26",
+   "statement": "-- Build net sales with returns properly accounted for\nWITH net_lines AS (\n  SELECT \n    f.sales_line_id,\n    f.sale_date,\n    d.fiscal_period,\n    d.fiscal_period_label,\n    p.category,\n    s.store_id,\n    f.net_amount AS sales_net,\n    COALESCE(r.refund_net, 0) AS return_net\n  FROM fact_sales_line f\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  LEFT JOIN fact_return_line r ON r.sales_line_id = f.sales_line_id\n  WHERE d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_week BETWEEN 27 AND 52\n    AND p.category = 'Garden'\n    AND s.store_id < 900  -- filter store 999\n    AND p.category != 'ZZ Test'  -- filter test category\n)\nSELECT \n  fiscal_period_label,\n  fiscal_period,\n  ROUND(SUM(sales_net - return_net), 2) AS net_sales\nFROM net_lines\nGROUP BY fiscal_period_label, fiscal_period\nORDER BY fiscal_period\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "fiscal_period_label | fiscal_period | net_sales\nFY2024/25 P07 | 7 | 50092.28\nFY2024/25 P08 | 8 | 47526.16\nFY2024/25 P09 | 9 | 54736.15\nFY2024/25 P10 | 10 | 52321.65\nFY2024/25 P11 | 11 | 95067.17\nFY2024/25 P12 | 12 | 269967.08\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:39",
+   "statement": "-- Following the net_sales_pattern from the library\nWITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: stores on the sale date, web on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           d.fiscal_period, d.fiscal_period_label,\n           p.category,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_date d    ON d.calendar_date = COALESCE(w.dispatch_date, f.sale_date)\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = 'FY2024/25'\n      AND d.fiscal_week BETWEEN 27 AND 52\n      AND p.category = 'Garden'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date,\n           d.fiscal_period, d.fiscal_period_label,\n           p.category,\n           -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    JOIN dim_date d    ON d.calendar_date = r.return_date\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = 'FY2024/25'\n      AND d.fiscal_week BETWEEN 27 AND 52\n      AND p.category = 'Garden'\n)\nSELECT \n  fiscal_period_label,\n  fiscal_period,\n  ROUND(SUM(net_sales), 2) AS net_sales\nFROM net_lines\nGROUP BY fiscal_period_label, fiscal_period\nORDER BY fiscal_period\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Referenced table \"w\" not found!\nCandidate tables: \"d\"\n\nLINE 17:     JOIN dim_date d    ON d.calendar_date = COALESCE(w.dispatch_date, f.sale_date)\n                                                              ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:45",
+   "statement": "-- Following the net_sales_pattern from the library\nWITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: stores on the sale date, web on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           p.category,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND p.category = 'Garden'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date,\n           p.category,\n           -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND p.category = 'Garden'\n),\nwith_period AS (\n    SELECT n.business_date,\n           d.fiscal_period, \n           d.fiscal_period_label,\n           n.net_sales\n    FROM net_lines n\n    JOIN dim_date d ON d.calendar_date = n.business_date\n    WHERE d.fiscal_year = 'FY2024/25'\n      AND d.fiscal_week BETWEEN 27 AND 52\n)\nSELECT \n  fiscal_period_label,\n  fiscal_period,\n  ROUND(SUM(net_sales), 2) AS net_sales\nFROM with_period\nGROUP BY fiscal_period_label, fiscal_period\nORDER BY fiscal_period\n",
+   "n": 5,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "fiscal_period_label | fiscal_period | net_sales\nFY2024/25 P07 | 7 | 56700.48\nFY2024/25 P08 | 8 | 56269.57\nFY2024/25 P09 | 9 | 63287.96\nFY2024/25 P10 | 10 | 59447.43\nFY2024/25 P11 | 11 | 108829.54\nFY2024/25 P12 | 12 | 308099.58\n(6 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:44:53",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain fiscal_period --period FY2024/25 P07-P12 --control",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n[stderr]\n--period 'FY2024/25 P07-P12' not found in ref_fiscal_calendar (format: 'FY2026/27 P05').\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:45:05",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain fiscal_period --start 2024-10-28 --end 2025-04-27 --control --value-col net_sales",
+   "n": 7,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 6 rows, 3 columns: fiscal_period_label, fiscal_period, net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (fiscal_period): 6 keys.\n\n== Date coverage ==\n  [INFO] Requested 2024-10-28 to 2025-04-27 (182 days; fiscal: FY2024/25 P09, FY2024/25 P11, FY2024/25 P08, FY2024/25 P07, FY2024/25 P12, FY2024/25 P10).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 5 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 8 rows in the range only in Helsinki time, 17 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2024-10-28 to 2025-04-27, stores: all, at level: total.\n  [INFO] Result total 652,634.56; control total 6,622,331.58; gap -5,969,697.02.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 652,634.56 vs control 6,622,331.58 (gap -5,969,697.02). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (f"
+  }
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-L-t51-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T51",
+ "budget": 30,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "abee200c42f603a328eaec625f0f849a4e1eb0a7227151b71ba2fa6d493932ba",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:06",
+   "statement": "SELECT campaign_id, campaign_name, start_date, end_date FROM dim_campaign WHERE campaign_name ILIKE '%Black Week%' AND start_date >= '2025-01-01'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date\n15 | Black Week 2025 | 2025-11-24 | 2025-11-30\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:16",
+   "statement": "-- Campaign uplift: mean net sales per targeted member minus mean per holdout member.\n-- facts: DEF-UPLIFT, REG-EXPOSURE-FANOUT, REG-CONSENT, REG-MEMBER-VERSIONS, DEF-NET-SALES-SCOPE,\n--        DEF-WEB-RECOGNITION, REG-GUEST-ORDERS\n-- Window: the campaign window plus seven days (start_date to end_date + 7).\n-- Targeted = at least one exposure row in the campaign; exposure has one row per contact, so reduce to\n-- distinct member_id first (via dim_member, because exposure carries member_key).\n-- Holdout = campaign_holdout, which holds member_id, not member_key. Holdout members are never contacted.\n-- Net sales before returns, on lines linked to the member; members with no sales count as zero.\n-- Lines are dated as in net sales (web on the Helsinki dispatch date); store 999 and ZZ Test are out.\nWITH params AS (\n    SELECT 15 AS campaign_id\n),\ncampaign AS (\n    SELECT c.campaign_id, c.campaign_name, c.start_date, c.end_date + 7 AS window_end\n    FROM dim_campaign c JOIN params ON params.campaign_id = c.campaign_id\n),\ntargeted AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    JOIN params ON params.campaign_id = e.campaign_id\n),\nholdout AS (\n    SELECT DISTINCT h.member_id\n    FROM campaign_holdout h\n    JOIN params ON params.campaign_id = h.campaign_id\n),\nmembers AS (\n    SELECT member_id, 'targeted' AS member_group FROM targeted\n    UNION ALL\n    SELECT member_id, 'holdout' FROM holdout\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nmember_sales AS (\n    SELECT m.member_id, SUM(f.net_amount) AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_member m  ON m.member_key = f.member_key\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign.start_date AND campaign.window_end\n    GROUP BY 1\n),\nby_group AS (\n    SELECT mb.member_group, COUNT(*) AS members, AVG(COALESCE(ms.net_sales, 0)) AS mean_net_sales\n    FROM members mb\n    LEFT JOIN member_sales ms ON ms.member_id = mb.member_id\n    GROUP BY 1\n)\nSELECT member_group, members, ROUND(mean_net_sales, 2) AS mean_net_sales_per_member\nFROM by_group\nUNION ALL\nSELECT 'uplift (targeted - holdout)', NULL,\n       ROUND(MAX(CASE WHEN member_group = 'targeted' THEN mean_net_sales END)\n           - MAX(CASE WHEN member_group = 'holdout' THEN mean_net_sales END), 2)\nFROM by_group\nUNION ALL\nSELECT 'check: members in both groups', (SELECT COUNT(*) FROM targeted JOIN holdout USING (member_id)), NULL\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "member_group | members | mean_net_sales_per_member\nholdout | 2747 | 7.94\ntargeted | 23818 | 9.34\nuplift (targeted - holdout) | NULL | 1.41\ncheck: members in both groups | 0 | NULL\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:03:25",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.3 s.\n\n== Row count ==\n  [PASS] 2 rows, 3 columns: member_group, members, mean_net_sales_per_member\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 2 rows) ==\n  member_group | members | mean_net_sales_per_member\n  holdout | 2747 | 7.94\n  targeted | 23818 | 9.34\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

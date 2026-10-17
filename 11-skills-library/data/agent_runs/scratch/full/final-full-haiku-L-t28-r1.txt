@@ -1,0 +1,43 @@
+Perfect! The query is valid. Now I'll prepare the final answer. The request asks for "Weeks of cover by category at the end of last period", so I'll return just the category and weeks_of_cover columns.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2026-09-27' AS week_ending\n),\nclosing AS (\n    SELECT cp.category, SUM(fs.closing_units) AS closing_units\n    FROM fact_stock_week fs\n    JOIN dim_store s    ON s.store_key = fs.store_key\n    JOIN dim_product p  ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date = params.week_ending\n      AND s.store_id &lt; 900 \n      AND p.category &lt;&gt; 'ZZ Test'\n    GROUP BY 1\n),\nsold AS (\n    SELECT cp.category, SUM(f.quantity) AS units_sold_4w\n    FROM fact_sales_line f\n    JOIN dim_store s    ON s.store_key = f.store_key\n    JOIN dim_product p  ON p.product_key = f.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7\n      AND s.store_id &lt; 900 \n      AND p.category &lt;&gt; 'ZZ Test'\n    GROUP BY 1\n)\nSELECT c.category, \n       CASE WHEN COALESCE(s.units_sold_4w, 0) = 0 THEN NULL\n            ELSE ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) END AS weeks_of_cover\nFROM closing c\nLEFT JOIN sold s ON s.category = c.category\nORDER BY c.category",
+  "result": {
+    "columns": ["category", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 11.6],
+      ["Cleaning &amp; Household", 7.6],
+      ["Electrical", 9.2],
+      ["Furniture", 29.5],
+      ["Garden", 16.4],
+      ["Home Textiles &amp; Decor", 12.2],
+      ["Kitchen &amp; Dining", 14.6],
+      ["Paint &amp; Decorating", 12.6],
+      ["Seasonal", 48.8],
+      ["Tools &amp; Hardware", 7.7]
+    ]
+  },
+  "definitions_applied": [
+    "DEF-WEEKS-COVER: weeks of cover = closing units / average weekly units sold over prior four fiscal weeks",
+    "DEF-STOCK-SEMIADD: stock aggregated across stores and products, not across weeks",
+    "REG-STOCK-SNAPSHOT: fact_stock_week with one row per store and article per week-ending Sunday",
+    "DEF-STORE-SCOPE: physical stores only (store_id &lt; 900), excluding web and training store",
+    "REG-TEST-SKU: test articles (category 'ZZ Test') excluded from all reporting",
+    "DEF-HIERARCHY-ASIS: current product version used for category membership"
+  ],
+  "assumptions": [
+    "Last period is FY2026/27 P05, the last completed fiscal period, ending 2026-09-27",
+    "Week-ending date 2026-09-27 (Sunday) is the snapshot for closing stock",
+    "Prior four weeks for sales average are the weeks before the snapshot week (2026-08-24 to 2026-09-20, fiscal weeks 17-20)",
+    "Aggregation is across all physical stores (store_id &lt; 900) in each category",
+    "Current product version used to determine category membership (as-is)"
+  ],
+  "caveats": [
+    "Seasonal category has high weeks of cover (48.8), reflecting lower but variable demand",
+    "Furniture has highest weeks of cover (29.5), reflecting slower turnover typical of furniture",
+    "Tools &amp; Hardware and Cleaning &amp; Household have lowest weeks of cover (7.7 and 7.6), indicating faster inventory turnover",
+    "Categories with zero sales in the prior four weeks would show NULL weeks of cover; none found in this data"
+  ]
+}
+```

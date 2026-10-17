@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH sold_lines AS (SELECT f.sales_line_id, f.sale_date, cp.subcategory, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND d.fiscal_year = 'FY2025/26' AND d.fiscal_quarter = 1 AND cp.category = 'Garden' AND cp.subcategory <> 'Outdoor Lighting'), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT 'FY2025/26' AS fiscal_year, 1 AS fiscal_quarter, l.subcategory, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct FROM sold_lines l LEFT JOIN refunds r USING (sales_line_id) GROUP BY l.subcategory ORDER BY return_rate_pct DESC",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_quarter", "subcategory", "return_rate_pct"],
+    "rows": [
+      ["FY2025/26", 1, "Garden Furniture", 12.87],
+      ["FY2025/26", 1, "Barbecue & Grills", 7.26],
+      ["FY2025/26", 1, "Garden Tools", 5.35],
+      ["FY2025/26", 1, "Pots & Planters", 3.86],
+      ["FY2025/26", 1, "Plants & Flowers", 2.74],
+      ["FY2025/26", 1, "Soil & Fertiliser", 1.58],
+      ["FY2025/26", 1, "Edible Plants & Seeds", 0.96]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate on the sale-week cohort: refund_net divided by sold net_amount, with refunds matched to the sold line through sales_line_id, whenever and wherever the return was booked",
+    "Net amount excluding VAT, after line discounts",
+    "Fiscal calendar: FY2025/26 Q1 is P1 to P3, weeks 1 to 13, 28 Apr 2025 to 27 Jul 2025, selected on dim_date",
+    "As-is product hierarchy: category and subcategory from the current product version (dim_product is_current), so outdoor lighting sits in Electrical for all history",
+    "Store 999 and category ZZ Test excluded",
+    "Web shop (store 900) and physical stores both included, as in the accepted return-rate requests",
+    "Staff purchases included",
+    "Refunds pre-aggregated per sales line before joining, to avoid fan-out"
+  ],
+  "assumptions": [
+    "Read 'Q1 of last year' as FY2025/26 Q1. The request is dated 6 Oct 2026, in FY2026/27, and earlier accepted requests (REQ-D14, REQ-D16) read 'last year' as the previous fiscal year.",
+    "Read 'goods sold in Q1' as the sale-week cohort: lines selected by sale date in Q1, with returns counted against the quarter in which the goods were sold, whenever they came back.",
+    "Read 'Garden' as the current Garden category (as-is), because no as-was request was made. This leaves out outdoor lighting, which moved to Electrical from 27 Oct 2025.",
+    "Included web sales and store sales together, since the request does not split by channel.",
+    "Showed one row per Garden subcategory, with fiscal year and quarter as separate columns."
+  ],
+  "caveats": [
+    "Correction: five delisted outdoor lighting SKUs (100870, 100877, 100879, 100916, 100917) still carry category Garden, subcategory Outdoor Lighting in their only dim_product version. They were delisted before the 27 Oct 2025 move, so they never got the new Electrical version. Two of them had 19 sales lines in Q1. I excluded them to keep outdoor lighting in Electrical on the as-is basis. A plain filter on current category = Garden would have added a spurious eighth 'Outdoor Lighting' row.",
+    "Under an as-was reading, outdoor lighting would still be in Garden for this quarter and would appear as an extra subcategory. I did not report it.",
+    "The Q1 cohort is complete. The last sale was 27 Jul 2025, well over 30 days before the warehouse load point of 4 Oct 2026, so late returns are all in.",
+    "Checks run: no duplicate sales_line_id in the selected lines, no duplicate return_line_id, no negative refunds, no orphan returns, no multiple return rows per sales line.",
+    "I could not run the query_check script or the rpt_daily_store_sales control-total check. The control table has no product dimension, so it does not apply to this product-level rate, and no script runner was available in this session."
+  ]
+}
+```

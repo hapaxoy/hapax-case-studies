@@ -1,0 +1,31 @@
+{
+ "run_id": "full-sonnet-L-t15-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T15",
+ "budget": 30,
+ "used": 2,
+ "refused": 0,
+ "packet_sha256": "a5bef43c5862ac3687c99e70f2d5dd9c21a7645ba4af69ab61fc1887abd13464",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:49:59",
+   "statement": "SELECT status,\n       COUNT(*) AS n_rows,\n       COUNT(DISTINCT web_order_id) AS n_distinct,\n       SUM(CASE WHEN CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE)=DATE '2025-12-01' THEN 1 ELSE 0 END) AS helsinki_day,\n       SUM(CASE WHEN CAST(order_ts_utc AS DATE)=DATE '2025-12-01' THEN 1 ELSE 0 END) AS utc_day\nFROM fact_web_order\nWHERE order_ts_utc >= TIMESTAMP '2025-11-29' AND order_ts_utc < TIMESTAMP '2025-12-03'\nGROUP BY ALL ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | n_rows | n_distinct | helsinki_day | utc_day\ncancelled | 34 | 34 | 19 | 17\ncollected | 193 | 193 | 87 | 81\ndelivered | 545 | 545 | 239 | 193\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:50:04",
+   "statement": "WITH o AS (\n  SELECT * FROM fact_web_order\n  WHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n    AND status <> 'cancelled'\n), t AS (\n  SELECT DISTINCT f.receipt_id\n  FROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key\n  WHERE p.category='ZZ Test' AND f.receipt_id IN (SELECT web_order_id FROM o)\n)\nSELECT (SELECT COUNT(*) FROM o) AS orders,\n       (SELECT COUNT(DISTINCT web_order_id) FROM o) AS distinct_orders,\n       (SELECT COUNT(*) FROM t) AS test_orders,\n       (SELECT COUNT(*) FROM o WHERE web_order_id NOT IN (SELECT receipt_id FROM fact_sales_line)) AS no_lines,\n       (SELECT COUNT(*) FROM o WHERE login_state='guest') AS guests,\n       (SELECT COUNT(*) FROM o WHERE status='processing') AS processing\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | distinct_orders | test_orders | no_lines | guests | processing\n326 | 326 | 0 | 0 | 103 | 0\n(1 row)"
+  }
+ ]
+}

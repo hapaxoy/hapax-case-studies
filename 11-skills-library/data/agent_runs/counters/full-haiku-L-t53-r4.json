@@ -1,0 +1,49 @@
+{
+ "run_id": "full-haiku-L-t53-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T53",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "db84888e039d37addf8069fc85f46f9fc8cb381934ee2faec2b70bfc2a4297b3",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:16:37",
+   "statement": "fiscal-calendar/scripts/fiscal.py P1 this year --compare",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'P1 this year'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:16:40",
+   "statement": "fiscal-calendar/scripts/fiscal.py P1 --compare",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P1    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P01\n  fiscal_weeks                       1-4\n  start_date                         2026-05-04\n  end_date                           2026-05-31\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-05-31\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 4)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\nPrior-year comparator (same fiscal week numbers)\n------------------------------------------------\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P01\n  fiscal_weeks                       1-4\n  start_date                         2025-04-28\n  end_date                           2025-05-25\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-05-25\n  aligned_on                         fiscal week number (CAL-COMPARE)\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEE"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:00",
+   "statement": "-- Like-for-like (LFL) net sales growth, total and by region (as-is).\n-- P1 FY2026/27 (weeks 1-4) vs P1 FY2025/26 (same fiscal weeks)\n-- Physical stores only (store_id below 900); week 53 is never LFL (the week filter stops at 52).\n-- A store-week counts when the store traded in that fiscal week in both years: open, not closed,\n-- no refit week from ref_store_closure. The opening rule tests open_date against the first day of the\n-- requested range minus 364 days, as the accepted queries do.\nWITH params AS (\n    SELECT 'FY2026/27' AS ty_year, 'FY2025/26' AS ly_year, 1 AS first_week, 4 AS last_week   -- P1: weeks 1-4\n),\nrange_start AS (\n    SELECT MIN(d.calendar_date) AS first_day\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year = params.ty_year AND d.fiscal_week = params.first_week\n),\nweeks AS (\n    SELECT DISTINCT d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)    -- week 53 is never LFL\n),\nstore_weeks AS (\n    -- every store x fiscal week in the two years, flagged as trading or not (open, not closed, no refit)\n    SELECT st.store_id, w.fiscal_year, w.fiscal_week,\n           (st.open_date IS NULL OR st.open_date <= w.fiscal_week_start_date)\n           AND (st.close_date IS NULL OR st.close_date >= w.fiscal_week_end_date)\n           AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                           WHERE c.store_id = st.store_id\n                             AND c.closure_start_date <= w.fiscal_week_end_date\n                             AND c.closure_end_date >= w.fiscal_week_start_date) AS trading\n    FROM dim_store st\n    CROSS JOIN weeks w\n    WHERE st.is_current AND st.store_id < 900\n),\nlfl_store_weeks AS (\n    SELECT ty.store_id, ty.fiscal_week\n    FROM store_weeks ty\n    CROSS JOIN params\n    CROSS JOIN range_start\n    JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = params.ly_year\n    JOIN dim_store st   ON st.store_id = ty.store_id AND st.is_current\n    WHERE ty.fiscal_year = params.ty_year AND ty.trading AND ly.trading\n      AND (st.open_date IS NULL OR st.open_date <= range_start.first_day - 364)   -- open 52+ weeks before the period\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nlfl_sales AS (\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales, COUNT(DISTINCT n.store_id || '-' || d.fiscal_week) AS store_weeks\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n    GROUP BY GROUPING SETS ((d.fiscal_year), (d.fiscal_year, cs.region))\n)\nSELECT ty.region, ty.store_weeks, ty.net_sales AS this_year, ly.net_sales AS last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct\nFROM lfl_sales ty\nCROSS JOIN params\nJOIN lfl_sales ly ON ly.region IS NOT DISTINCT FROM ty.region AND ly.fiscal_year = params.ly_year\nWHERE ty.fiscal_year = params.ty_year\nORDER BY ty.region NULLS FIRST;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | store_weeks | this_year | last_year | lfl_growth_pct\nNULL | 152 | 1177925.94 | 1103969.88 | 6.7\nCapital Region | 20 | 192335.06 | 175364.62 | 9.68\nEast | 28 | 206053.16 | 199048.92 | 3.52\nNorth | 24 | 142080.24 | 132482.99 | 7.24\nSouth | 40 | 264028.02 | 253884.56 | 4.0\nWest | 40 | 373429.46 | 343188.79 | 8.81\n(6 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:17:18",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.5 s.\n\n== Row count ==\n  [PASS] 6 rows, 5 columns: region, store_weeks, this_year, last_year, lfl_growth_pct\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 6 rows) ==\n  region | store_weeks | this_year | last_year | lfl_growth_pct\n   | 152 | 1177925.94 | 1103969.88 | 6.7\n  Capital Region | 20 | 192335.06 | 175364.62 | 9.68\n  East | 28 | 206053.16 | 199048.92 | 3.52\n  North | 24 | 142080.24 | 132482.99 | 7.24\n  South | 40 | 264028.02 | 253884.56 | 4.0\n  West | 40 | 373429.46 | 343188.79 | 8.81\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

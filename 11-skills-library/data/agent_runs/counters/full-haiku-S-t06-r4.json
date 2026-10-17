@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t06-r4",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T06",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "3f0c3d378a0469a2009f4b58e762451672962a8528581fbdb025ced15542b829",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:05",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date \nFROM ref_fiscal_calendar \nWHERE fiscal_period = 2 \nORDER BY fiscal_year DESC\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2026/27 | 2 | FY2026/27 P02 | 2026-06-01 | 2026-06-28\nFY2025/26 | 2 | FY2025/26 P02 | 2025-05-26 | 2025-06-22\nFY2024/25 | 2 | FY2024/25 P02 | 2024-05-27 | 2024-06-23\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:11",
+   "statement": "SELECT \n    ds.format as store_format,\n    COUNT(DISTINCT fsl.receipt_id) as total_receipts,\n    SUM(fsl.quantity) as units_sold,\n    SUM(frl.quantity_returned) as units_returned,\n    ROUND(100.0 * SUM(COALESCE(frl.quantity_returned, 0)) / SUM(fsl.quantity), 2) as return_rate_pct\nFROM fact_sales_line fsl\nINNER JOIN dim_store ds ON fsl.store_key = ds.store_key\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nWHERE fsl.sale_date BETWEEN '2025-05-26' AND '2025-06-22'\nGROUP BY ds.format\nORDER BY ds.format\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "store_format | total_receipts | units_sold | units_returned | return_rate_pct\nLarge | 7289 | 27468 | 652 | 2.37\nMedium | 9880 | 36996 | 901 | 2.44\nSmall | 3217 | 12232 | 292 | 2.39\nTraining | 56 | 195 | NULL | 0.0\nWeb | 3170 | 9968 | 575 | 5.77\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:15",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY format\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:20",
+   "statement": "SELECT format, COUNT(*) as store_count, \n  MIN(store_id) as min_store_id, \n  MAX(store_id) as max_store_id\nFROM dim_store\nWHERE is_current = TRUE\nGROUP BY format\nORDER BY format\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | store_count | min_store_id | max_store_id\nLarge | 8 | 102 | 131\nMedium | 18 | 101 | 136\nSmall | 13 | 105 | 139\nTraining | 1 | 999 | 999\nWeb | 1 | 900 | 900\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:28",
+   "statement": "SELECT sales_line_id, COUNT(*) as return_count\nFROM fact_return_line\nWHERE return_date BETWEEN '2025-05-26' AND '2025-06-22'\nGROUP BY sales_line_id\nHAVING COUNT(*) > 1\nLIMIT 10\n",
+   "n": 5,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "sales_line_id | return_count\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:33",
+   "statement": "SELECT \n    ds.format as store_format,\n    SUM(fsl.quantity) as units_sold,\n    SUM(COALESCE(frl.quantity_returned, 0)) as units_returned,\n    ROUND(100.0 * SUM(COALESCE(frl.quantity_returned, 0)) / SUM(fsl.quantity), 2) as return_rate_pct\nFROM fact_sales_line fsl\nINNER JOIN dim_store ds ON fsl.store_key = ds.store_key\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nWHERE fsl.sale_date BETWEEN '2025-05-26' AND '2025-06-22'\nGROUP BY ds.format\nORDER BY ds.format\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "store_format | units_sold | units_returned | return_rate_pct\nLarge | 27468 | 652 | 2.37\nMedium | 36996 | 901 | 2.44\nSmall | 12232 | 292 | 2.39\nTraining | 195 | 0 | 0.0\nWeb | 9968 | 575 | 5.77\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:42",
+   "statement": "SELECT \n    ds.format,\n    ds.store_id,\n    ds.store_name,\n    COUNT(DISTINCT fsl.sales_line_id) as sales_lines,\n    SUM(fsl.quantity) as units_sold,\n    COUNT(DISTINCT frl.return_line_id) as return_lines,\n    SUM(COALESCE(frl.quantity_returned, 0)) as units_returned\nFROM fact_sales_line fsl\nINNER JOIN dim_store ds ON fsl.store_key = ds.store_key\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nWHERE fsl.sale_date BETWEEN '2025-05-26' AND '2025-06-22'\nGROUP BY ds.format, ds.store_id, ds.store_name\nORDER BY ds.format, ds.store_id\nLIMIT 50\n",
+   "n": 7,
+   "ok": true,
+   "rows": 41,
+   "output_preview": "format | store_id | store_name | sales_lines | units_sold | return_lines | units_returned\nLarge | 102 | Helsinki Pitäjänmäki | 2376 | 3946 | 76 | 101\nLarge | 104 | Vantaa Tammisto | 1794 | 3006 | 60 | 78\nLarge | 108 | Lahti | 1855 | 2976 | 73 | 87\nLarge | 110 | Turku Kupittaa | 1957 | 3255 | 66 | 81\nLarge | 115 | Tampere Hervanta | 2921 | 4762 | 75 | 94\nLarge | 116 | Tampere Lielahti | 1875 | 3055 | 70 | 83\nLarge | 125 | Kuopio | 1782 | 3011 | 53 | 61\nLarge | 131 | Oulu Kaakkuri | 2064 | 3457 | 63 | 67\nMedium | 101 | Helsinki Vuosaari | 1546 | 2469 | 58 | 72\nMedium | 103 | Espoo Lommila | 1092 | 1819 | 40 | 49\nMedium | 107 | Hyvinkää | 1134 | 1856 | 49 | 54\nMedium | 109 | Hämeenlinna | 1169 | 1929 | 41 | 49\nMedium | 111 | Turku Härmälä | 1095 | 1796 | 41 | 53\nMedium | 114 | Kouvola | 1020 | 1648 | 29 | 37\nMedium | 117 | Tampere Kaleva | 1628 | 2734 | 65 | 88\nMedium | 118 | Nokia | 1516 | 2508 | 40 | 61\nMedium | 119 | Pori | 1478 | 2434 | 41 | 47\nMedium | 121 | Vaasa | 1538 | 2454 | 53 | 64\nMedium | 122 | Seinäjoki | 1235 | 2012 | 26 | 32\nMedium | 124 | Jyväskylä Palokka | 1281 | 2089 | 53 | 62\nMedium | 126 | Joensuu | 1331 | 2143 | 35 | 43\nMedium | 127 | Mikkeli | 1033 | 1621 | 27 | 29\nMedium | 128 | Lappeenranta | 1374 | 2232 | 52 | 60\nMedium | 132 | Oulu Linnanmaa | 1190 | 1962 | 31 | 38\nMedium | 134 | Rovaniemi | 843 | 1381 | 17 | 20\nMedium | 136 | Tampere Lamminpää | 1141 | 1909 | 38 | 43\nSmall | 105 | Kerava | 510 | 864 | 24 | 28\nSmall | 106 | Porvoo | 536 | 876 | 16 | 1"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:54",
+   "statement": "-- Verify fiscal period dates for FY2025/26 P02\nSELECT fiscal_year, fiscal_period, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2025/26' AND fiscal_period = 2\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date\nFY2025/26 | 2 | 2025-05-26 | 2025-06-22\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:58",
+   "statement": "SELECT \n    ds.format as store_format,\n    ROUND(100.0 * SUM(COALESCE(frl.quantity_returned, 0)) / SUM(fsl.quantity), 2) as return_rate\nFROM fact_sales_line fsl\nINNER JOIN dim_store ds ON fsl.store_key = ds.store_key\nLEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\nWHERE fsl.sale_date BETWEEN '2025-05-26' AND '2025-06-22'\nGROUP BY ds.format\nORDER BY ds.format\n",
+   "n": 9,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "store_format | return_rate\nLarge | 2.37\nMedium | 2.44\nSmall | 2.39\nTraining | 0.0\nWeb | 5.77\n(5 rows)"
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t09-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T09",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "315715358ee80d711383197a43fe7ef173fe6f376cedea73eb5cfad5fb800ced",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:58:11",
+   "statement": "fiscal-calendar/scripts/fiscal.py P3 --as-of 2026-10-05",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P3    as of: 2026-10-05    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P03\n  fiscal_weeks                       9-13\n  start_date                         2026-06-29\n  end_date                           2026-08-02\n  weeks                              5\n  days                               35\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-02\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 9 AND 13)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:58:16",
+   "statement": "SELECT 'store' AS kind, CAST(store_key AS VARCHAR) AS k, CAST(store_id AS VARCHAR) AS id, store_name AS name, city AS a, region AS b, CAST(valid_from AS VARCHAR) AS c, CAST(valid_to AS VARCHAR) AS d\nFROM dim_store WHERE city ILIKE '%lahti%' OR store_name ILIKE '%lahti%'\nUNION ALL\nSELECT 'product', category, subcategory, CAST(count(DISTINCT sku) AS VARCHAR), CAST(count(*) AS VARCHAR), CAST(sum(CASE WHEN is_current THEN 1 ELSE 0 END) AS VARCHAR), NULL, NULL\nFROM dim_product WHERE category ILIKE '%paint%' OR subcategory ILIKE '%paint%' OR subcategory ILIKE '%interior%'\nGROUP BY category, subcategory\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "kind | k | id | name | a | b | c | d\nstore | 13 | 108 | Lahti | Lahti | South | 2000-01-01 | 9999-12-31\nstore | 22 | 116 | Tampere Lielahti | Tampere | West | 2000-01-01 | 9999-12-31\nproduct | Paint & Decorating | Wallpaper & Decor Film | 77 | 78 | 77 | NULL | NULL\nproduct | Paint & Decorating | Brushes & Rollers | 100 | 100 | 100 | NULL | NULL\nproduct | Paint & Decorating | Exterior Paint | 85 | 85 | 85 | NULL | NULL\nproduct | Paint & Decorating | Interior Paint | 123 | 125 | 123 | NULL | NULL\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:58:23",
+   "statement": "WITH lines AS (\n  SELECT f.*, p.subcategory AS sub_was, p.category AS cat_was, cp.subcategory AS sub_now, cp.category AS cat_now, p.product_name\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE s.store_id = 108 AND f.sale_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n)\nSELECT sub_now, sub_was, cat_now, cat_was,\n  count(*) AS n_rows, count(DISTINCT (receipt_id, line_no)) AS n_keys, count(DISTINCT sales_line_id) AS n_ids,\n  sum(quantity) AS units, sum(CASE WHEN quantity < 0 THEN 1 ELSE 0 END) AS neg_rows, sum(CASE WHEN staff_purchase_flag THEN quantity ELSE 0 END) AS staff_units,\n  min(sale_date) AS d0, max(sale_date) AS d1, count(DISTINCT etl_loaded_at) AS loads\nFROM lines\nWHERE sub_now ILIKE '%paint%' OR sub_was ILIKE '%paint%' OR sub_now ILIKE '%interior%' OR sub_was ILIKE '%interior%'\nGROUP BY ALL ORDER BY 1,2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "sub_now | sub_was | cat_now | cat_was | n_rows | n_keys | n_ids | units | neg_rows | staff_units | d0 | d1 | loads\nExterior Paint | Exterior Paint | Paint & Decorating | Paint & Decorating | 70 | 70 | 70 | 83 | 0 | 0 | 2026-06-30 | 2026-08-02 | 26\nInterior Paint | Interior Paint | Paint & Decorating | Paint & Decorating | 142 | 142 | 142 | 194 | 0 | 4 | 2026-06-29 | 2026-08-02 | 35\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:58:32",
+   "statement": "WITH tot AS (\n  SELECT sum(f.quantity) AS fact_units, count(*) AS fact_rows, count(DISTINCT (f.receipt_id, f.line_no)) AS fact_keys\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 108 AND p.category <> 'ZZ Test' AND f.sale_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n), ctl AS (\n  SELECT sum(units_sold) AS rpt_units, sum(net_sales_before_returns) AS rpt_gross, count(*) AS rpt_days\n  FROM rpt_daily_store_sales WHERE store_id = 108 AND business_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n), tot_net AS (\n  SELECT sum(f.net_amount) AS fact_net\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 108 AND p.category <> 'ZZ Test' AND f.sale_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n), ret_date AS (\n  SELECT sum(r.quantity_returned) AS ret_units_by_return_date, count(*) AS ret_rows\n  FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key\n  WHERE s.store_id = 108 AND p.subcategory = 'Interior Paint' AND r.return_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n), ret_cohort AS (\n  SELECT sum(r.quantity_returned) AS ret_units_of_period_sales, count(*) AS ret_rows_c\n  FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n  JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 108 AND p.subcategory = 'Interior Paint' AND f.sale_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n)\nSELECT * FROM tot, ctl, tot_net, ret_date, ret_cohort\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fact_units | fact_rows | fact_keys | rpt_units | rpt_gross | rpt_days | fact_net | ret_units_by_return_date | ret_rows | ret_units_of_period_sales | ret_rows_c\n3927 | 2383 | 2383 | 3927 | 67202.85 | 35 | 67202.85 | 5 | 5 | 6 | 6\n(1 row)"
+  }
+ ]
+}

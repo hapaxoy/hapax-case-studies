@@ -1,0 +1,42 @@
+Now I'll prepare my final response based on the analysis. Let me verify I have the correct number of queries used:
+
+**Query summary:**
+1. Checked available fiscal periods for period 4 ✓
+2. Identified stores with sales in both periods ✓
+3. Got sales data for all stores across both years ✓
+4. Calculated overall like-for-like total ✓
+5. Verified trading days consistency ✓
+6. Got store-by-store breakdown ✓
+7. Ran final clean query for like-for-like comparison ✓
+8. Confirmed final results ✓
+
+I have 4 queries remaining. Let me finalize my answer.
+
+```json
+{
+  "sql": "WITH lfl_stores AS (SELECT DISTINCT s.store_id FROM rpt_daily_store_sales s JOIN dim_date d ON s.business_date = d.calendar_date WHERE d.fiscal_period = 4 AND d.fiscal_year IN ('FY2026/27', 'FY2025/26') AND s.store_id < 900 GROUP BY s.store_id HAVING COUNT(DISTINCT d.fiscal_year) = 2), sales_by_year AS (SELECT d.fiscal_year, SUM(s.net_sales) as total_net_sales FROM rpt_daily_store_sales s JOIN dim_date d ON s.business_date = d.calendar_date JOIN lfl_stores ls ON s.store_id = ls.store_id WHERE d.fiscal_period = 4 AND d.fiscal_year IN ('FY2026/27', 'FY2025/26') GROUP BY d.fiscal_year) SELECT MAX(CASE WHEN fiscal_year = 'FY2026/27' THEN total_net_sales END) as fy2627_net_sales, MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN total_net_sales END) as fy2526_net_sales, ROUND((MAX(CASE WHEN fiscal_year = 'FY2026/27' THEN total_net_sales END) / MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN total_net_sales END) - 1) * 100, 2) as lfl_pct_change FROM sales_by_year",
+  "result": {
+    "columns": ["fiscal_period", "fiscal_year", "net_sales", "prior_year_net_sales", "lfl_pct_change"],
+    "rows": [[4, "FY2026/27", 1010478.52, 1010743.32, -0.03]]
+  },
+  "definitions_applied": [
+    "Like-for-like (LFL) sales: stores operating in both comparison periods",
+    "Net sales before returns (EUR excluding VAT from rpt_daily_store_sales)",
+    "Physical stores only (store_id < 900, excluding web channel)",
+    "Fiscal period boundaries per ref_fiscal_calendar"
+  ],
+  "assumptions": [
+    "Fiscal year 'this year' = FY2026/27, 'last year' = FY2025/26",
+    "Period 4 is the same calendar period in both years (28 days each, 2025-07-28 to 2025-08-24 vs 2026-08-03 to 2026-08-30)",
+    "Like-for-like includes only physical stores with sales data in both fiscal years",
+    "Web channel (store 900) excluded as the request refers to 'stores'",
+    "Store 129 (Savonlinna) excluded because it operated only in FY2025/26"
+  ],
+  "caveats": [
+    "Calendar comparison: FY2025/26 P4 ended 2025-08-24 while FY2026/27 P4 ended 2026-08-30, creating a 6-day misalignment within the fiscal calendar structure. Both periods have identical 28 calendar days and 28 trading days with no public holidays.",
+    "Store 129 (Savonlinna) was excluded from like-for-like: 9,549.14 EUR sales in FY2025/26 P4 but no FY2026/27 P4 sales (store closed or data gap).",
+    "The -0.03% decline represents a decrease of 264.80 EUR across 38 like-for-like stores. Performance varied significantly by store: Lohja (+25.4%), Kokkola (+21.2%), and Raisio (+14.5%) showed strongest growth; Mikkeli (-26.2%), Hämeenlinna (-17.6%), and Kerava (-16.0%) showed largest declines.",
+    "Web order sales (store 900) excluded but may be relevant context for total retail performance."
+  ]
+}
+```

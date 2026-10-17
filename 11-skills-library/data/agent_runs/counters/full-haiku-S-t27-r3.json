@@ -1,0 +1,103 @@
+{
+ "run_id": "full-haiku-S-t27-r3",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T27",
+ "budget": 12,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "ffec83722e489122277fdc1806514034b39cfd79e90d730791c11a65f05abff5",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:38",
+   "statement": "SELECT DISTINCT fiscal_year, calendar_year, calendar_month \nFROM dim_date \nWHERE calendar_date >= '2024-08-01' AND calendar_date <= '2024-09-30'\nORDER BY calendar_year, calendar_month\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | calendar_year | calendar_month\nFY2024/25 | 2024 | 8\nFY2024/25 | 2024 | 9\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:40",
+   "statement": "SELECT DISTINCT region FROM dim_store_old\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "region\nNorth\nSouth\nEast\nWest\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:45",
+   "statement": "SELECT DISTINCT region FROM dim_store WHERE is_current = TRUE\n",
+   "n": 3,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region\nCapital Region\nNorth\nHead office\nEast\nWest\nOnline\nSouth\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:51",
+   "statement": "SELECT \n    do.region,\n    d.calendar_month,\n    SUM(f.gross_amount) as gross_sales_vat\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nINNER JOIN dim_store_old do ON ds.store_id = do.store_id\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.calendar_year = 2024 \n  AND d.calendar_month IN (8, 9)\n  AND ds.store_id < 900  -- exclude online/pseudo-locations\nGROUP BY do.region, d.calendar_month\nORDER BY do.region, d.calendar_month\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"do\"\n\nLINE 2:     do.region,\n            ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:55",
+   "statement": "SELECT \n    dso.region,\n    d.calendar_month,\n    SUM(f.gross_amount) as gross_sales_vat\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nINNER JOIN dim_store_old dso ON ds.store_id = dso.store_id\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.calendar_year = 2024 \n  AND d.calendar_month IN (8, 9)\n  AND ds.store_id < 900  -- exclude online/pseudo-locations\nGROUP BY dso.region, d.calendar_month\nORDER BY dso.region, d.calendar_month\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "region | calendar_month | gross_sales_vat\nEast | 8 | 296762.31\nEast | 9 | 249751.64\nNorth | 8 | 175960.85\nNorth | 9 | 149625.27\nSouth | 8 | 489776.38\nSouth | 9 | 445837.96\nWest | 8 | 402582.35\nWest | 9 | 363697.29\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:59:59",
+   "statement": "SELECT \n    dso.region,\n    COALESCE(SUM(CASE WHEN d.calendar_month = 8 THEN f.gross_amount ELSE 0 END), 0) as August_2024,\n    COALESCE(SUM(CASE WHEN d.calendar_month = 9 THEN f.gross_amount ELSE 0 END), 0) as September_2024\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nINNER JOIN dim_store_old dso ON ds.store_id = dso.store_id\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.calendar_year = 2024 \n  AND d.calendar_month IN (8, 9)\n  AND ds.store_id < 900\nGROUP BY dso.region\nORDER BY dso.region\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "region | August_2024 | September_2024\nEast | 296762.31 | 249751.64\nNorth | 175960.85 | 149625.27\nSouth | 489776.38 | 445837.96\nWest | 402582.35 | 363697.29\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:02",
+   "statement": "SELECT COUNT(*) as total_sales_lines\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.calendar_year = 2024 \n  AND d.calendar_month IN (8, 9)\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_sales_lines\n90953\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:06",
+   "statement": "SELECT COUNT(DISTINCT ds.store_id) as stores_in_sales,\n       COUNT(DISTINCT dso.store_id) as stores_in_old_mapping\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nLEFT JOIN dim_store_old dso ON ds.store_id = dso.store_id\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.calendar_year = 2024 \n  AND d.calendar_month IN (8, 9)\n  AND ds.store_id < 900\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "stores_in_sales | stores_in_old_mapping\n38 | 38\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:09",
+   "statement": "SELECT DISTINCT ds.store_id, ds.store_name, ds.region\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.calendar_year = 2024 \n  AND d.calendar_month IN (8, 9)\n  AND ds.store_id >= 900\nORDER BY ds.store_id\n",
+   "n": 9,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_id | store_name | region\n900 | Tuomimetsä web shop | Online\n999 | Training store | Head office\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:14",
+   "statement": "SELECT \n    'TOTAL' as region,\n    COALESCE(SUM(CASE WHEN d.calendar_month = 8 THEN f.gross_amount ELSE 0 END), 0) as August_2024,\n    COALESCE(SUM(CASE WHEN d.calendar_month = 9 THEN f.gross_amount ELSE 0 END), 0) as September_2024\nFROM fact_sales_line f\nINNER JOIN dim_store ds ON f.store_key = ds.store_key\nINNER JOIN dim_store_old dso ON ds.store_id = dso.store_id\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.calendar_year = 2024 \n  AND d.calendar_month IN (8, 9)\n  AND ds.store_id < 900\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "region | August_2024 | September_2024\nTOTAL | 1365081.89 | 1208912.16\n(1 row)"
+  }
+ ]
+}

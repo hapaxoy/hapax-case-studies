@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-S-t38-r1",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T38",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "cdd95d362c8824f21ced4e0372e37f4992d9d1f5fe774fca90a33ce79503d68c",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:04",
+   "statement": "SELECT 'cur' src, * FROM dim_campaign WHERE campaign_name ILIKE '%black%'\nUNION ALL\nSELECT 'bak', * FROM bak_dim_campaign_2025 WHERE campaign_name ILIKE '%black%'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "src | campaign_id | campaign_name | start_date | end_date | channels | target_group | holdout_pct | mailing_list_size | holdout_size\ncur | 5 | Black Week 2024 | 2024-11-25 | 2024-12-01 | email+sms+push | All members with marketing consent at the campaign start | 0.100 | 18693 | 1928\ncur | 15 | Black Week 2025 | 2025-11-24 | 2025-11-30 | email+sms+push | All members with marketing consent at the campaign start | 0.100 | 26573 | 2747\nbak | 5 | Black Week 2024 | 2024-11-25 | 2024-12-01 | email+sms+push | All members with marketing consent at the campaign start | 0.100 | 18693 | 1928\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:05",
+   "statement": "SELECT campaign_id, count(*) n, count(DISTINCT member_id) nd FROM campaign_holdout GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 23,
+   "output_preview": "campaign_id | n | nd\n1 | 841 | 841\n2 | 281 | 281\n3 | 941 | 941\n4 | 1033 | 1033\n5 | 1928 | 1928\n6 | 359 | 359\n7 | 1064 | 1064\n8 | 306 | 306\n9 | 1204 | 1204\n10 | 811 | 811\n11 | 483 | 483\n12 | 1369 | 1369\n13 | 1412 | 1412\n14 | 415 | 415\n15 | 2747 | 2747\n16 | 616 | 616\n17 | 1564 | 1564\n18 | 393 | 393\n19 | 1597 | 1597\n20 | 808 | 808\n21 | 771 | 771\n22 | 1834 | 1834\n23 | 1764 | 1764\n(23 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:10",
+   "statement": "WITH h AS (SELECT member_id FROM campaign_holdout WHERE campaign_id=15),\nv AS (SELECT h.member_id, m.marketing_consent, m.join_date FROM h LEFT JOIN dim_member m ON m.member_id=h.member_id AND DATE '2025-11-24' BETWEEN m.valid_from AND m.valid_to)\nSELECT count(*) n, count(DISTINCT member_id) nd, count(marketing_consent) matched, sum(CASE WHEN marketing_consent THEN 1 ELSE 0 END) consent, sum(CASE WHEN NOT marketing_consent THEN 1 ELSE 0 END) noconsent, sum(CASE WHEN join_date>DATE '2025-11-24' THEN 1 ELSE 0 END) joined_after FROM v\n",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"matched\"\n\nLINE 3: ...(*) n, count(DISTINCT member_id) nd, count(marketing_consent) matched, sum(CASE WHEN marketing_consent THEN 1 ELSE 0 END...\n                                                                         ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:12",
+   "statement": "WITH elig AS (SELECT DISTINCT member_id FROM dim_member WHERE DATE '2025-11-24' BETWEEN valid_from AND valid_to AND marketing_consent AND join_date<=DATE '2025-11-24'),\nh AS (SELECT member_id FROM campaign_holdout WHERE campaign_id=15),\nex AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=15)\nSELECT (SELECT count(*) FROM elig) eligible, (SELECT count(*) FROM ex) exposed, (SELECT count(*) FROM h JOIN ex USING(member_id)) held_and_exposed, (SELECT count(*) FROM h WHERE member_id NOT IN (SELECT member_id FROM elig)) held_not_eligible, (SELECT count(*) FROM elig WHERE member_id NOT IN (SELECT member_id FROM h) AND member_id NOT IN (SELECT member_id FROM ex)) elig_neither\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "eligible | exposed | held_and_exposed | held_not_eligible | elig_neither\n33080 | 23818 | 0 | 0 | 6515\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:18",
+   "statement": "WITH h AS (SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id=15),\nex AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=15),\nst AS (SELECT DISTINCT m.member_id FROM stg_campaign_contact_load e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=15)\nSELECT (SELECT count(*) FROM h) held, (SELECT count(*) FROM ex) exposed, (SELECT count(*) FROM (SELECT member_id FROM h UNION SELECT member_id FROM ex)) union_n, (SELECT count(*) FROM st) staged, (SELECT count(*) FROM fact_campaign_exposure WHERE campaign_id=15) exp_rows, (SELECT count(*) FROM stg_campaign_contact_load WHERE campaign_id=15) stg_rows, (SELECT count(*) FROM h JOIN st USING(member_id)) held_in_stage\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "held | exposed | union_n | staged | exp_rows | stg_rows | held_in_stage\n2747 | 23818 | 26565 | 0 | 50043 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:23",
+   "statement": "SELECT count(*) n, count(DISTINCT h.member_id) nd, sum(CASE WHEN m.member_id IS NULL THEN 1 ELSE 0 END) unmatched, sum(CASE WHEN m.marketing_consent THEN 1 ELSE 0 END) consent, sum(CASE WHEN m.marketing_consent = false THEN 1 ELSE 0 END) noconsent\nFROM campaign_holdout h LEFT JOIN dim_member m ON m.member_id=h.member_id AND DATE '2025-11-24' BETWEEN m.valid_from AND m.valid_to\nWHERE h.campaign_id=15\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | nd | unmatched | consent | noconsent\n2747 | 2747 | 0 | 2747 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:26",
+   "statement": "SELECT c.campaign_id, c.campaign_name, c.holdout_size, count(h.member_id) actual FROM dim_campaign c LEFT JOIN campaign_holdout h USING(campaign_id) WHERE c.campaign_id=15 GROUP BY ALL\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "campaign_id | campaign_name | holdout_size | actual\n15 | Black Week 2025 | 2747 | 2747\n(1 row)"
+  }
+ ]
+}

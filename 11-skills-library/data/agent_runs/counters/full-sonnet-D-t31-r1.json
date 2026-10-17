@@ -1,0 +1,103 @@
+{
+ "run_id": "full-sonnet-D-t31-r1",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "28bcafe2ff10e27fd917939770c326b96d1616fa9a9b7cd12d7cdbca99b19f88",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:08",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_period=8 ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2024/25 | 8 | FY2024/25 P08 | 2024-11-25 | 2024-12-22 | 4 | 31 | 34 | true\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21 | 4 | 31 | 34 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:09",
+   "statement": "SELECT tier, count(*) n, count(distinct member_id) m, min(valid_from), max(valid_to) FROM dim_member GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | n | m | min(valid_from) | max(valid_to)\nBasic | 50572 | 43649 | 2019-01-01 | 9999-12-31\nGold | 8203 | 7210 | 2019-01-01 | 9999-12-31\nSilver | 30539 | 27039 | 2019-01-01 | 9999-12-31\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:14",
+   "statement": "SELECT count(*) versions_valid, count(distinct member_id) members_valid FROM dim_member WHERE valid_from <= DATE '2025-12-21' AND valid_to >= DATE '2025-12-21'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "versions_valid | members_valid\n48675 | 48675\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:15",
+   "statement": "SELECT count(*) n, count(distinct sales_line_id) d_id, count(distinct (receipt_id, line_no)) d_rl, min(sale_date), max(sale_date), count(distinct etl_loaded_at) loads FROM fact_sales_line WHERE sale_date > DATE '2024-12-22' AND sale_date <= DATE '2025-12-21'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d_id | d_rl | min(sale_date) | max(sale_date) | loads\n617345 | 617345 | 616927 | 2024-12-23 | 2025-12-21 | 365\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:15",
+   "statement": "SELECT member_id, count(*) c FROM dim_member WHERE valid_from <= DATE '2025-12-21' AND valid_to >= DATE '2025-12-21' GROUP BY 1 HAVING count(*)>1 LIMIT 10\n",
+   "n": 5,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "member_id | c\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:23",
+   "statement": "WITH lines AS (\n  SELECT f.*, s.store_id, p.category FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date > DATE '2024-12-22' AND f.sale_date <= DATE '2025-12-21')\nSELECT count(*) n, sum((member_key IS NULL)::int) nomem, sum((store_id=999)::int) s999, sum((category='ZZ Test')::int) zz, sum((quantity<=0)::int) nonpos, sum((net_amount<=0)::int) nonposnet, sum((staff_purchase_flag)::int) staff,\n count(distinct CASE WHEN member_key IS NOT NULL THEN member_key END) mk FROM lines\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | nomem | s999 | zz | nonpos | nonposnet | staff | mk\n617345 | 289163 | 1758 | 464 | 0 | 0 | 9696 | 32210\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:23",
+   "statement": "WITH x AS (SELECT receipt_id, line_no, count(*) c, count(distinct member_key) mk, count(distinct sale_date) sd, count(distinct store_key) sk, count(distinct etl_loaded_at) el FROM fact_sales_line WHERE sale_date > DATE '2024-12-22' AND sale_date <= DATE '2025-12-21' GROUP BY 1,2 HAVING count(*)>1)\nSELECT count(*), sum(c), max(mk), max(sd), max(sk), max(el) FROM x\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "count_star() | sum(c) | max(mk) | max(sd) | max(sk) | max(el)\n418 | 836 | 1 | 1 | 1 | 2\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:32",
+   "statement": "WITH active AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test')\nSELECT m.tier, COUNT(DISTINCT a.member_id) AS active_members\nFROM active a\nJOIN dim_member m ON m.member_id = a.member_id AND DATE '2025-12-21' BETWEEN m.valid_from AND m.valid_to\nGROUP BY 1 ORDER BY CASE m.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 ELSE 3 END\n",
+   "n": 8,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members\nBasic | 14654\nSilver | 10971\nGold | 3901\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:33",
+   "statement": "WITH active AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21')\nSELECT m.tier, COUNT(DISTINCT a.member_id) AS active_members_no_exclusions, count(*) \nFROM active a\nJOIN dim_member m ON m.member_id = a.member_id AND DATE '2025-12-21' BETWEEN m.valid_from AND m.valid_to\nGROUP BY 1 ORDER BY 1\n",
+   "n": 9,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members_no_exclusions | count_star()\nBasic | 14654 | 14654\nGold | 3901 | 3901\nSilver | 10971 | 10971\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:34",
+   "statement": "SELECT count(*) FROM (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key WHERE f.sale_date > DATE '2024-12-22' AND f.sale_date <= DATE '2025-12-21') a\nWHERE NOT EXISTS (SELECT 1 FROM dim_member m WHERE m.member_id=a.member_id AND DATE '2025-12-21' BETWEEN m.valid_from AND m.valid_to)\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "count_star()\n0\n(1 row)"
+  }
+ ]
+}

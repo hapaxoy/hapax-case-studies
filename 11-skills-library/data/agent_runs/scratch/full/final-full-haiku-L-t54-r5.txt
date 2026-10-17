@@ -1,0 +1,26 @@
+Perfect! All validation checks passed. I have successfully queried the whole company's net sales for the last period.
+
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT SUM(n.net_sales) AS net_sales\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21;",
+  "result": {
+    "columns": ["net_sales"],
+    "rows": [[1109546.52]]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Returns reduce net sales on return date, not sale date",
+    "Exclusions: store 999 and category ZZ Test",
+    "Web sales recognized on dispatch date in Helsinki time",
+    "Staff purchases included"
+  ],
+  "assumptions": [
+    "Last month interpreted as the last completed fiscal period: FY2026/27 P05 (fiscal weeks 18-21, 28 August to 27 September 2026)"
+  ],
+  "caveats": [
+    "The company's fiscal calendar does not align with calendar months; last period is 28 August to 27 September 2026",
+    "Web sales use Helsinki dispatch date, not UTC order date",
+    "Result verified against rpt_daily_store_sales control total with zero variance"
+  ]
+}
+```

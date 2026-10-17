@@ -1,0 +1,33 @@
+```json
+{
+  "sql": "WITH web AS (SELECT f.sale_date, f.net_amount, o.fulfilment_type FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE f.channel_code = 'WB' OR f.channel_id IN (2, 3)) SELECT r.fiscal_year, r.fiscal_period, round(100.0 * sum(CASE WHEN web.fulfilment_type = 'click_and_collect' THEN web.net_amount END) / sum(web.net_amount), 2) AS click_and_collect_share_pct FROM web JOIN ref_fiscal_calendar r ON web.sale_date BETWEEN r.period_start_date AND r.period_end_date WHERE r.fiscal_year = 'FY2025/26' AND r.fiscal_period BETWEEN 6 AND 8 GROUP BY r.fiscal_year, r.fiscal_period ORDER BY r.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_and_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 6, 27.65],
+      ["FY2025/26", 7, 26.63],
+      ["FY2025/26", 8, 26.56]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: periods taken from ref_fiscal_calendar (FY2025/26 P06 22 Sep to 26 Oct 2025, P07 27 Oct to 23 Nov 2025, P08 24 Nov to 21 Dec 2025)",
+    "Web shop sales = fact_sales_line lines on the web channel (channel_code WB, or channel_id 2 or 3 after the migration)",
+    "Click-and-collect identified by fact_web_order.fulfilment_type = 'click_and_collect' (joined on receipt_id = web_order_id)",
+    "Sales value = net_amount (EUR excluding VAT, after line discounts)",
+    "Period assignment by sale_date, which is the local (Helsinki) date, not the UTC date",
+    "Training store (store 999) lines are not web sales and are excluded"
+  ],
+  "assumptions": [
+    "'Last year' means FY2025/26, because the request is dated 2026-10-09 and falls in FY2026/27. Periods 6 to 8 are therefore 22 Sep to 21 Dec 2025.",
+    "'Sales' means net sales value excluding VAT (net_amount), before returns. Veikko did not say whether returns should be netted off.",
+    "'Share of the web shop's sales' means click-and-collect value divided by total web value (home delivery plus click-and-collect). Cancelled orders have no sales lines, so they are not in either figure.",
+    "Shares are rounded to two decimals, in percent."
+  ],
+  "caveats": [
+    "Correction: before the web-platform migration (sales lines up to 2 Nov 2025) channel_id is NULL and the web channel is just 'WB', so click-and-collect cannot be told apart in fact_sales_line. Periods 6 and 7 and the start of period 8 fall in that range. From 3 Nov 2025, channel_id 3 is click-and-collect. I classified every web line by joining to fact_web_order.fulfilment_type, which is populated throughout. Filtering on channel_id = 3 would have understated the share for periods 6 and 7 and part of period 8.",
+    "The join to fact_web_order matches every web line in the periods checked. There are no duplicate sales lines or orders, and line counts and VAT arithmetic reconcile.",
+    "Returns are not netted off. Netting web refunds by return date (refund_net on web lines, any original sale date) gives slightly lower shares of 27.26 (P6), 26.03 (P7) and 26.39 (P8) percent. If net-of-returns is the reporting basis, use those figures.",
+    "Web value for the three periods (EUR excluding VAT) is 194176.17 (P6), 166510.02 (P7) and 249084.84 (P8). Click-and-collect value is 53697.28, 44335.88 and 66151.51."
+  ]
+}
+```

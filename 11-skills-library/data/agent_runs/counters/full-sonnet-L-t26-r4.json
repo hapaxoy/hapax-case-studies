@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t26-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T26",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "7beef4caccabfe2e3671c8a6c839d401871e9fa9bace543fe145e32795338a4c",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:34:25",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 --as-of 2026-10-07",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2    as of: 2026-10-07    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P02\n  fiscal_weeks                       5-8\n  start_date                         2026-06-01\n  end_date                           2026-06-28\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-06-28\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 5 AND 8)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:34:42",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain store_id --period FY2026/27 P02 --control --control-stores physical --value-col net_sales --control-measure net_sales",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 38 rows, 7 columns: rank, store_id, store_name, format, trading_days, net_sales, net_sales_per_trading_day\n\n== Duplicate keys ==\n  [PASS] Unique at grain (store_id): 38 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-06-01 to 2026-06-28 (28 days; fiscal: FY2026/27 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 3 only in UTC; fact_sales_line.sale_ts_utc: 11 rows in the range only in Helsinki time, 6 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2026-06-01 to 2026-06-28, stores: physical, at level: store_id.\n  [INFO] Result total 1,063,916.20; control total 1,063,916.20; gap 0.00.\n  [PASS] No gap above 0.01 at level store_id.\n\n== Preview (first 10 rows) ==\n  rank | store_id | store_name | format | trading_days | net_sales | net_sales_per_trading_day\n  1 | 115 | Tampere Hervanta | Large | 26 | 72687.05 | 2796.0\n  2 | 102 | Helsinki Pit�j�nm�ki | Large | 26 | 55562.42 | 2137.0\n  3 | 108 | Lahti | Large | 26 | 4689"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:55",
+   "statement": "SELECT 'dup_sales_line_id' AS chk, COUNT(*) AS n FROM (SELECT sales_line_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL SELECT 'dup_receipt_line', COUNT(*) FROM (SELECT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1,2 HAVING COUNT(*)>1)\nUNION ALL SELECT 'dup_return_line', COUNT(*) FROM (SELECT return_line_id FROM fact_return_line WHERE return_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL SELECT 'current_physical_stores', COUNT(*) FROM dim_store WHERE is_current AND store_id<900\nUNION ALL SELECT 'kuopio_sales_during_refit', COUNT(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=125 AND f.sale_date BETWEEN DATE '2026-06-15' AND DATE '2026-06-28'\nUNION ALL SELECT 'sales_on_closed_days_physical', COUNT(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_date d ON d.calendar_date=f.sale_date WHERE s.store_id<900 AND f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' AND NOT d.is_trading_day\nUNION ALL SELECT 'staff_purchase_lines_in_P2', COUNT(*) FROM fact_sales_line f WHERE f.staff_purchase_flag AND f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28'\nUNION ALL SELECT 'store999_or_ZZ_lines', COUNT(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' AND (s.store_id=999 OR p.category='ZZ Test')\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "chk | n\ndup_sales_line_id | 0\ndup_receipt_line | 0\ndup_return_line | 0\ncurrent_physical_stores | 39\nkuopio_sales_during_refit | 0\nsales_on_closed_days_physical | 0\nstaff_purchase_lines_in_P2 | 766\nstore999_or_ZZ_lines | 121\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:34:56",
+   "statement": "SELECT s.store_id, s.store_name, s.format, s.open_date, s.close_date, s.valid_from, s.valid_to FROM dim_store s WHERE s.is_current AND s.store_id<900 AND (s.open_date IS NOT NULL OR s.close_date IS NOT NULL OR s.store_id NOT IN (SELECT DISTINCT s2.store_id FROM fact_sales_line f JOIN dim_store s2 ON s2.store_key=f.store_key WHERE f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28')) ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "store_id | store_name | format | open_date | close_date | valid_from | valid_to\n129 | Savonlinna | Small | NULL | 2026-01-25 | 2000-01-01 | 9999-12-31\n136 | Tampere Lamminpää | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31\n137 | Lohja | Small | 2024-11-04 | NULL | 2024-11-04 | 9999-12-31\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:35:05",
+   "statement": "WITH params AS (\n    SELECT DATE '2026-06-01' AS start_date, DATE '2026-06-28' AS end_date\n),\nperiod_days AS (\n    SELECT d.calendar_date FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date BETWEEN params.start_date AND params.end_date AND d.is_trading_day\n),\ntrading_days AS (\n    SELECT cs.store_id, COUNT(*) AS trading_days\n    FROM dim_store cs\n    CROSS JOIN period_days pd\n    WHERE cs.is_current AND cs.store_id < 900\n      AND (cs.open_date IS NULL OR cs.open_date <= pd.calendar_date)\n      AND (cs.close_date IS NULL OR cs.close_date >= pd.calendar_date)\n      AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                      WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n    GROUP BY 1\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nstore_sales AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY ss.net_sales / td.trading_days DESC) AS rank, cs.store_id, cs.store_name,\n       'FY2026/27' AS fiscal_year, 2 AS fiscal_period,\n       ROUND(ss.net_sales / td.trading_days, 2) AS net_sales_per_trading_day\nFROM store_sales ss\nJOIN trading_days td ON td.store_id = ss.store_id\nJOIN dim_store cs    ON cs.store_id = ss.store_id AND cs.is_current\nORDER BY rank\n",
+   "n": 5,
+   "ok": true,
+   "rows": 38,
+   "output_preview": "rank | store_id | store_name | fiscal_year | fiscal_period | net_sales_per_trading_day\n1 | 115 | Tampere Hervanta | FY2026/27 | 2 | 2795.66\n2 | 102 | Helsinki Pitäjänmäki | FY2026/27 | 2 | 2137.02\n3 | 108 | Lahti | FY2026/27 | 2 | 1803.84\n4 | 104 | Vantaa Tammisto | FY2026/27 | 2 | 1785.19\n5 | 131 | Oulu Kaakkuri | FY2026/27 | 2 | 1770.06\n6 | 116 | Tampere Lielahti | FY2026/27 | 2 | 1749.44\n7 | 125 | Kuopio | FY2026/27 | 2 | 1713.84\n8 | 110 | Turku Kupittaa | FY2026/27 | 2 | 1706.94\n9 | 117 | Tampere Kaleva | FY2026/27 | 2 | 1568.05\n10 | 118 | Nokia | FY2026/27 | 2 | 1462.94\n11 | 119 | Pori | FY2026/27 | 2 | 1425.39\n12 | 124 | Jyväskylä Palokka | FY2026/27 | 2 | 1323.2\n13 | 101 | Helsinki Vuosaari | FY2026/27 | 2 | 1316.53\n14 | 132 | Oulu Linnanmaa | FY2026/27 | 2 | 1244.13\n15 | 121 | Vaasa | FY2026/27 | 2 | 1225.09\n16 | 128 | Lappeenranta | FY2026/27 | 2 | 1219.37\n17 | 126 | Joensuu | FY2026/27 | 2 | 1217.07\n18 | 136 | Tampere Lamminpää | FY2026/27 | 2 | 1173.22\n19 | 107 | Hyvinkää | FY2026/27 | 2 | 1104.5\n20 | 109 | Hämeenlinna | FY2026/27 | 2 | 1081.18\n21 | 114 | Kouvola | FY2026/27 | 2 | 1013.03\n22 | 122 | Seinäjoki | FY2026/27 | 2 | 1001.34\n23 | 127 | Mikkeli | FY2026/27 | 2 | 946.76\n24 | 103 | Espoo Lommila | FY2026/27 | 2 | 946.55\n25 | 111 | Turku Härmälä | FY2026/27 | 2 | 838.33\n26 | 134 | Rovaniemi | FY2026/27 | 2 | 803.66\n27 | 137 | Lohja | FY2026/27 | 2 | 612.2\n28 | 130 | Kotka | FY2026/27 | 2 | 566.57\n29 | 133 | Kemi | FY2026/27 | 2 | 510.74\n30 | 139 | Raahe | FY2"
+  }
+ ]
+}

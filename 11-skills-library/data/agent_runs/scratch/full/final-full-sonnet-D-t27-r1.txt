@@ -1,0 +1,42 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (\n  SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n  FROM fact_web_order\n  WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n  SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.region, f.gross_amount\n  FROM fact_sales_line f\n  JOIN dim_store s   ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n  WHERE f.sale_date BETWEEN DATE '2024-07-01' AND DATE '2024-10-31'\n    AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT region,\n       SUM(CASE WHEN business_date BETWEEN DATE '2024-08-01' AND DATE '2024-08-31' THEN gross_amount ELSE 0 END) AS august_2024_gross_incl_vat,\n       SUM(CASE WHEN business_date BETWEEN DATE '2024-09-01' AND DATE '2024-09-30' THEN gross_amount ELSE 0 END) AS september_2024_gross_incl_vat\nFROM lines\nWHERE business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY region\nORDER BY region",
+  "result": {
+    "columns": ["region", "august_2024_gross_incl_vat", "september_2024_gross_incl_vat"],
+    "rows": [
+      ["East", 296762.31, 249751.64],
+      ["North", 175960.85, 149625.27],
+      ["Online", 173563.99, 160307.64],
+      ["South", 489776.38, 445837.96],
+      ["West", 402582.35, 363697.29]
+    ]
+  },
+  "definitions_applied": [
+    "Gross sales = sum of gross_amount from the sales lines (each line's own VAT rate), before returns, in EUR including VAT",
+    "As-was regions: region taken from the dim_store version the sales line points to (valid on the sale date), so there is no Capital Region in 2024",
+    "Web sales recognised on the Helsinki dispatch date (fact_web_order joined on receipt_id = web_order_id), not the order date; only delivered and collected orders; Online shown as its own region (store 900)",
+    "Store 999 and category ZZ Test excluded",
+    "Calendar months in Helsinki time (1 to 31 August and 1 to 30 September 2024), as VAT filing months, not fiscal periods",
+    "Control total: net_amount from the same lines, built on the same dating and exclusions, matched rpt_daily_store_sales.net_sales_before_returns for every store (including web store 900) for both months, with no differences",
+    "Staff purchases included (company definition)",
+    "Did not use rpt.v_daily_sales, rpt.v_weekly_store_sales, channel_code, or any stg_, bak_, tmp_ or _old tables"
+  ],
+  "assumptions": [
+    "August and September 2024 read as calendar months, because the figures are for a VAT filing. The company fiscal periods are different (FY2024/25 P4 starts 26 Aug 2024, for example)",
+    "Read 'regions as they were at the time, as in the old reports' as as-was: South, West, East and North plus Online. Capital Region did not exist until 28 April 2025",
+    "Online (web shop, store 900) shown as its own row, since web sales are part of total company sales and carry no physical region",
+    "Web sales dated on the Helsinki dispatch date, as the company definition requires, even though a VAT filing might use another date",
+    "Staff purchases left in, as they are in net sales and gross sales on the company definition",
+    "Returns not deducted, as asked ('before returns'). Refund_gross was not shown because the request did not ask for it"
+  ],
+  "caveats": [
+    "No data errors needing correction were found for these months: no duplicate sales lines, no orphan store or product keys, no store-version mismatches, and gross_amount equals net_amount x (1 + vat_rate) on every line",
+    "Store 999 and ZZ Test lines were filtered out. They are small, with 142 lines in August and 125 in September including test web lines, and they change the totals slightly. Store 999 is the training store and is outside the filing figures; check with Finance if the filing should include it",
+    "VAT rate change on 1 September 2024: the general rate rose from 24% to 25.5%. Store lines use the correct rate for their sale date. 206 web lines (gross about 9,217 EUR) were ordered before 1 September but dispatched in September, and carry the 24% rate from the order date. I kept the rate on the line as recorded, which is why September Online gross includes some 24% lines. If the VAT point of supply for web orders is the dispatch date, Finance should check whether these lines should be at 25.5%",
+    "Web orders ordered in late July but dispatched in August (and in late August but dispatched in September) are dated on dispatch, so Online August and September do not equal the sum of orders placed in those months",
+    "Web orders still processing or cancelled have no sales lines and are not in the figures. No such orders fall into these months in the sales lines",
+    "Because the figures are before returns, they are not net of refunds. Refunds would reduce the VAT base, and the dictionary does not say how returns enter a figure including VAT. Refunds are not shown here",
+    "The 'in old reports' wording may refer to rpt_weekly_sales_by_region, which stopped refreshing on 27 April 2025. I did not use it (on the do-not-use list), and the as-was regions from dim_store give the same four regions"
+  ]
+}
+```

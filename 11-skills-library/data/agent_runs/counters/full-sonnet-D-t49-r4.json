@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-D-t49-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T49",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "d2443ab6c92c92d7564bf2e35d1588675c78e578ad2dcbd3f1e4746241b43ed4",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:40",
+   "statement": "SELECT d.fiscal_year, d.fiscal_period, min(d.calendar_date) mn, max(d.calendar_date) mx, count(*) n, min(r.fully_loaded) fl\nFROM dim_date d JOIN ref_fiscal_calendar r ON r.fiscal_year=d.fiscal_year AND r.fiscal_period=d.fiscal_period\nWHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 GROUP BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | mn | mx | n | fl\nFY2026/27 | 4 | 2026-08-03 | 2026-08-30 | 28 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:40",
+   "statement": "SELECT format, region, count(*) versions, count(distinct store_id) stores, min(store_id), max(store_id), sum(CASE WHEN is_current THEN 1 ELSE 0 END) cur\nFROM dim_store GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 17,
+   "output_preview": "format | region | versions | stores | min(store_id) | max(store_id) | cur\nLarge | Capital Region | 2 | 2 | 102 | 104 | 2\nLarge | East | 1 | 1 | 125 | 125 | 1\nLarge | North | 1 | 1 | 131 | 131 | 1\nLarge | South | 4 | 4 | 102 | 110 | 2\nLarge | West | 2 | 2 | 115 | 116 | 2\nMedium | Capital Region | 2 | 2 | 101 | 103 | 2\nMedium | East | 5 | 5 | 114 | 128 | 4\nMedium | North | 2 | 2 | 132 | 134 | 2\nMedium | South | 6 | 6 | 101 | 114 | 4\nMedium | West | 6 | 6 | 117 | 136 | 6\nSmall | Capital Region | 1 | 1 | 105 | 105 | 1\nSmall | East | 3 | 3 | 129 | 138 | 3\nSmall | North | 3 | 3 | 133 | 139 | 3\nSmall | South | 5 | 5 | 105 | 137 | 4\nSmall | West | 2 | 2 | 120 | 123 | 2\nTraining | Head office | 1 | 1 | 999 | 999 | 1\nWeb | Online | 1 | 1 | 900 | 900 | 1\n(17 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:46",
+   "statement": "SELECT 'fmt_inconsistent' k, count(*) v FROM (SELECT store_id FROM dim_store GROUP BY 1 HAVING count(distinct format)>1)\nUNION ALL\nSELECT 'rows', count(*) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\nUNION ALL\nSELECT 'distinct line key', count(*) FROM (SELECT DISTINCT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30')\nUNION ALL\nSELECT 'distinct sales_line_id', count(distinct sales_line_id) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\nUNION ALL\nSELECT 'distinct etl load', count(distinct etl_loaded_at) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\nUNION ALL\nSELECT 'null store/product key', count(*) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND (store_key IS NULL OR product_key IS NULL)\nUNION ALL\nSELECT 'receipts spanning >1 store', count(*) FROM (SELECT receipt_id FROM fact_sales_line f JOIN dim_store s USING(store_key) WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY 1 HAVING count(distinct s.store_id)>1)\nUNION ALL\nSELECT 'receipts mixed staff flag', count(*) FROM (SELECT receipt_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY 1 HAVING count(distinct staff_purchase_flag)>1)\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "k | v\nfmt_inconsistent | 0\nrows | 48107\ndistinct line key | 48107\ndistinct sales_line_id | 48107\ndistinct etl load | 28\nnull store/product key | 0\nreceipts spanning >1 store | 0\nreceipts mixed staff flag | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:55",
+   "statement": "WITH base AS (\n  SELECT f.receipt_id, f.net_amount, f.staff_purchase_flag, s.store_id, cs.format, p.category\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n)\nSELECT cs_format, COUNT(DISTINCT receipt_id) receipts, SUM(net_amount) net, ROUND(SUM(net_amount)/COUNT(DISTINCT receipt_id),2) atv,\n  sum(CASE WHEN net_amount<=0 THEN 1 ELSE 0 END) nonpos_lines, count(distinct store_id) stores\nFROM (SELECT format cs_format, * FROM base WHERE store_id<900 AND NOT staff_purchase_flag AND category<>'ZZ Test')\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "cs_format | receipts | net | atv | nonpos_lines | stores\nLarge | 6508 | 394865.46 | 60.67 | 0 | 8\nMedium | 8641 | 520763.45 | 60.27 | 0 | 18\nSmall | 2598 | 131841.05 | 50.75 | 0 | 12\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:17:56",
+   "statement": "WITH l AS (\n  SELECT s.store_id, SUM(f.net_amount) net, COUNT(DISTINCT f.receipt_id) rc\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND p.category<>'ZZ Test'\n  GROUP BY 1),\nr AS (SELECT store_id, SUM(net_sales_before_returns) nsbr, SUM(receipts) rc FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id<900 GROUP BY 1)\nSELECT l.store_id, l.net, r.nsbr, round(l.net-r.nsbr,2) diff, l.rc, r.rc rrc\nFROM l FULL JOIN r USING(store_id) WHERE abs(coalesce(l.net,0)-coalesce(r.nsbr,0))>0.5 OR l.rc<>r.rc OR l.net IS NULL OR r.nsbr IS NULL\nORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "store_id | net | nsbr | diff | rc | rrc\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:03",
+   "statement": "SELECT 'date_ts_mismatch' k, count(*) v FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND CAST(timezone('Europe/Helsinki', sale_ts_utc AT TIME ZONE 'UTC') AS DATE)<>sale_date\nUNION ALL\nSELECT 'mixed test receipts', count(*) FROM (SELECT f.receipt_id FROM fact_sales_line f JOIN dim_product p USING(product_key) WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY 1 HAVING count(distinct p.category='ZZ Test')>1)\nUNION ALL\nSELECT 'test lines in stores<900', count(*) FROM fact_sales_line f JOIN dim_product p USING(product_key) JOIN dim_store s USING(store_key) WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND p.category='ZZ Test' AND s.store_id<900\nUNION ALL\nSELECT 'store999 lines', count(*) FROM fact_sales_line f JOIN dim_store s USING(store_key) WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id=999\nUNION ALL\nSELECT 'staff receipts in stores', count(distinct receipt_id) FROM fact_sales_line f JOIN dim_store s USING(store_key) WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND staff_purchase_flag\nUNION ALL\nSELECT 'sales on non-trading days', count(*) FROM fact_sales_line f JOIN dim_date d ON d.calendar_date=f.sale_date JOIN dim_store s USING(store_key) WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND NOT d.is_trading_day\n",
+   "n": 6,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "k | v\ndate_ts_mismatch | 0\nmixed test receipts | 0\ntest lines in stores<900 | 0\nstore999 lines | 127\nstaff receipts in stores | 280\nsales on non-trading days | 0\n(6 rows)"
+  }
+ ]
+}

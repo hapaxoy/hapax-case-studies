@@ -1,0 +1,103 @@
+{
+ "run_id": "full-sonnet-D-t58-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T58",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "faf3fe2b8caa48f67af29406d6f63175575ccfecb6c3d646aa0c22ac117e7190",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:35",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period IN (1,2,3)\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2026/27 | 1 | 2026-05-04 | 2026-05-31 | 4 | 1 | 4 | true\nFY2026/27 | 2 | 2026-06-01 | 2026-06-28 | 4 | 5 | 8 | true\nFY2026/27 | 3 | 2026-06-29 | 2026-08-02 | 5 | 9 | 13 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:36",
+   "statement": "SELECT calendar_date, day_name, is_public_holiday, holiday_name, is_trading_day FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=2 AND (NOT is_trading_day OR is_public_holiday)\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "calendar_date | day_name | is_public_holiday | holiday_name | is_trading_day\n2026-06-19 | Friday | true | Midsummer Eve | false\n2026-06-20 | Saturday | true | Midsummer Day | false\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:36",
+   "statement": "SELECT store_key, store_id, store_name, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE is_current ORDER BY store_id\n",
+   "n": 3,
+   "ok": true,
+   "rows": 41,
+   "output_preview": "store_key | store_id | store_name | region | format | open_date | close_date | valid_from | valid_to | is_current\n2 | 101 | Helsinki Vuosaari | Capital Region | Medium | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n4 | 102 | Helsinki Pitäjänmäki | Capital Region | Large | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n6 | 103 | Espoo Lommila | Capital Region | Medium | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n8 | 104 | Vantaa Tammisto | Capital Region | Large | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n10 | 105 | Kerava | Capital Region | Small | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n11 | 106 | Porvoo | South | Small | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n12 | 107 | Hyvinkää | South | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n13 | 108 | Lahti | South | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n14 | 109 | Hämeenlinna | South | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n15 | 110 | Turku Kupittaa | South | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n16 | 111 | Turku Härmälä | South | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n17 | 112 | Raisio | South | Small | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n18 | 113 | Salo | South | Small | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n20 | 114 | Kouvola | South | Medium | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n21 | 115 | Tampere Hervanta | West | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n22 | 116 | Tampere Lielahti | West | Large | NULL | NU"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:37",
+   "statement": "SELECT * FROM ref_store_closure ORDER BY closure_start_date\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "closure_id | store_id | closure_type | closure_start_date | closure_end_date | weeks_closed\n1 | 104 | refit | 2024-07-08 | 2024-08-11 | 5\n2 | 119 | refit | 2025-09-08 | 2025-10-12 | 5\n3 | 125 | refit | 2026-06-15 | 2026-07-26 | 6\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:44",
+   "statement": "WITH net_lines AS (\n  SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE s.store_id<900 AND p.category<>'ZZ Test'\n  UNION ALL\n  SELECT r.return_date, s.store_id, -r.refund_net\n  FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\n  WHERE s.store_id<900 AND p.category<>'ZZ Test'\n),\nmine AS (\n  SELECT n.store_id, SUM(n.net_sales) AS net_sales, COUNT(DISTINCT n.business_date) AS days_with_activity\n  FROM net_lines n JOIN dim_date d ON d.calendar_date=n.business_date\n  WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=2 GROUP BY 1\n),\nctl AS (\n  SELECT store_id, SUM(net_sales) AS ctl_net, COUNT(*) AS ctl_days, SUM(CASE WHEN net_sales<>0 THEN 1 ELSE 0 END) AS ctl_active_days\n  FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' AND store_id<900 GROUP BY 1\n)\nSELECT m.store_id, m.net_sales, c.ctl_net, ROUND(m.net_sales-c.ctl_net,2) AS diff, m.days_with_activity, c.ctl_days, c.ctl_active_days\nFROM mine m FULL JOIN ctl c USING(store_id) ORDER BY store_id\n",
+   "n": 5,
+   "ok": true,
+   "rows": 38,
+   "output_preview": "store_id | net_sales | ctl_net | diff | days_with_activity | ctl_days | ctl_active_days\n101 | 34229.86 | 34229.86 | 0.00 | 26 | 26 | 26\n102 | 55562.42 | 55562.42 | 0.00 | 26 | 26 | 26\n103 | 24610.32 | 24610.32 | 0.00 | 26 | 26 | 26\n104 | 46414.81 | 46414.81 | 0.00 | 26 | 26 | 26\n105 | 10480.14 | 10480.14 | 0.00 | 26 | 26 | 26\n106 | 11141.96 | 11141.96 | 0.00 | 26 | 26 | 26\n107 | 28716.89 | 28716.89 | 0.00 | 26 | 26 | 26\n108 | 46899.91 | 46899.91 | 0.00 | 26 | 26 | 26\n109 | 28110.63 | 28110.63 | 0.00 | 26 | 26 | 26\n110 | 44380.38 | 44380.38 | 0.00 | 26 | 26 | 26\n111 | 21796.60 | 21796.60 | 0.00 | 26 | 26 | 26\n112 | 11024.52 | 11024.52 | 0.00 | 26 | 26 | 26\n113 | 8866.76 | 8866.76 | 0.00 | 26 | 26 | 26\n114 | 26338.80 | 26338.80 | 0.00 | 26 | 26 | 26\n115 | 72687.05 | 72687.05 | 0.00 | 26 | 26 | 26\n116 | 45485.54 | 45485.54 | 0.00 | 26 | 26 | 26\n117 | 40769.32 | 40769.32 | 0.00 | 26 | 26 | 26\n118 | 38036.56 | 38036.56 | 0.00 | 26 | 26 | 26\n119 | 37060.06 | 37060.06 | 0.00 | 26 | 26 | 26\n120 | 9429.48 | 9429.48 | 0.00 | 26 | 26 | 26\n121 | 31852.44 | 31852.44 | 0.00 | 26 | 26 | 26\n122 | 26034.82 | 26034.82 | 0.00 | 26 | 26 | 26\n123 | 11011.25 | 11011.25 | 0.00 | 26 | 26 | 26\n124 | 34403.16 | 34403.16 | 0.00 | 26 | 26 | 26\n125 | 23993.71 | 23993.71 | 0.00 | 14 | 14 | 14\n126 | 31643.91 | 31643.91 | 0.00 | 26 | 26 | 26\n127 | 24615.83 | 24615.83 | 0.00 | 26 | 26 | 26\n128 | 31703.61 | 31703.61 | 0.00 | 26 | 26 | 26\n130 | 14730.87 | 14730.87 | 0.00 | 26 | 26 | 26\n131 | 46021.68 | 46021.6"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:52",
+   "statement": "SELECT COUNT(*) AS lines, COUNT(DISTINCT (receipt_id, line_no)) AS distinct_lines, COUNT(DISTINCT sales_line_id) AS distinct_ids, MIN(sale_date), MAX(sale_date), SUM(CASE WHEN s.store_id=999 THEN 1 ELSE 0 END) AS s999, SUM(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS zz, SUM(CASE WHEN s.store_id=900 THEN 1 ELSE 0 END) AS web, SUM(CASE WHEN f.net_amount<0 THEN 1 ELSE 0 END) AS neg\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | distinct_lines | distinct_ids | min(sale_date) | max(sale_date) | s999 | zz | web | neg\n55084 | 55084 | 55084 | 2026-06-01 | 2026-06-28 | 119 | 42 | 8356 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:52",
+   "statement": "SELECT COUNT(*) AS rets, COUNT(DISTINCT return_line_id) AS d_ids, COUNT(DISTINCT sales_line_id) AS d_sl, SUM(CASE WHEN s.store_id=900 THEN 1 ELSE 0 END) AS web, SUM(CASE WHEN s.store_id=999 THEN 1 ELSE 0 END) AS s999\nFROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key WHERE r.return_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rets | d_ids | d_sl | web | s999\n2224 | 2224 | 2224 | 525 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:53",
+   "statement": "SELECT s.store_id, COUNT(*) AS n, SUM(f.net_amount) AS net FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE f.sale_date BETWEEN DATE '2026-06-15' AND DATE '2026-06-28' AND s.store_id IN (125,129) GROUP BY 1\n",
+   "n": 8,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "store_id | n | net\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:19:02",
+   "statement": "WITH net_lines AS (\n  SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE s.store_id<900 AND p.category<>'ZZ Test'\n  UNION ALL\n  SELECT r.return_date, s.store_id, -r.refund_net\n  FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\n  WHERE s.store_id<900 AND p.category<>'ZZ Test'\n),\nsales AS (\n  SELECT n.store_id, SUM(n.net_sales) AS net_sales\n  FROM net_lines n JOIN dim_date d ON d.calendar_date=n.business_date\n  WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=2 GROUP BY 1\n),\ntrading AS (\n  SELECT cs.store_id, COUNT(*) AS trading_days\n  FROM dim_store cs\n  CROSS JOIN (SELECT calendar_date FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=2 AND is_trading_day) d\n  WHERE cs.is_current AND cs.store_id<900\n    AND (cs.open_date IS NULL OR cs.open_date<=d.calendar_date)\n    AND (cs.close_date IS NULL OR cs.close_date>=d.calendar_date)\n    AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id=cs.store_id AND d.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n  GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY s.net_sales/t.trading_days DESC) AS rank, cs.store_id, cs.store_name,\n       ROUND(s.net_sales,2) AS net_sales, t.trading_days, ROUND(s.net_sales/t.trading_days,2) AS net_sales_per_trading_day\nFROM sales s JOIN trading t USING(store_id) JOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\nORDER BY rank\n",
+   "n": 9,
+   "ok": true,
+   "rows": 38,
+   "output_preview": "rank | store_id | store_name | net_sales | trading_days | net_sales_per_trading_day\n1 | 115 | Tampere Hervanta | 72687.05 | 26 | 2795.66\n2 | 102 | Helsinki Pitäjänmäki | 55562.42 | 26 | 2137.02\n3 | 108 | Lahti | 46899.91 | 26 | 1803.84\n4 | 104 | Vantaa Tammisto | 46414.81 | 26 | 1785.19\n5 | 131 | Oulu Kaakkuri | 46021.68 | 26 | 1770.06\n6 | 116 | Tampere Lielahti | 45485.54 | 26 | 1749.44\n7 | 125 | Kuopio | 23993.71 | 14 | 1713.84\n8 | 110 | Turku Kupittaa | 44380.38 | 26 | 1706.94\n9 | 117 | Tampere Kaleva | 40769.32 | 26 | 1568.05\n10 | 118 | Nokia | 38036.56 | 26 | 1462.94\n11 | 119 | Pori | 37060.06 | 26 | 1425.39\n12 | 124 | Jyväskylä Palokka | 34403.16 | 26 | 1323.2\n13 | 101 | Helsinki Vuosaari | 34229.86 | 26 | 1316.53\n14 | 132 | Oulu Linnanmaa | 32347.31 | 26 | 1244.13\n15 | 121 | Vaasa | 31852.44 | 26 | 1225.09\n16 | 128 | Lappeenranta | 31703.61 | 26 | 1219.37\n17 | 126 | Joensuu | 31643.91 | 26 | 1217.07\n18 | 136 | Tampere Lamminpää | 30503.73 | 26 | 1173.22\n19 | 107 | Hyvinkää | 28716.89 | 26 | 1104.5\n20 | 109 | Hämeenlinna | 28110.63 | 26 | 1081.18\n21 | 114 | Kouvola | 26338.80 | 26 | 1013.03\n22 | 122 | Seinäjoki | 26034.82 | 26 | 1001.34\n23 | 127 | Mikkeli | 24615.83 | 26 | 946.76\n24 | 103 | Espoo Lommila | 24610.32 | 26 | 946.55\n25 | 111 | Turku Härmälä | 21796.60 | 26 | 838.33\n26 | 134 | Rovaniemi | 20895.20 | 26 | 803.66\n27 | 137 | Lohja | 15917.24 | 26 | 612.2\n28 | 130 | Kotka | 14730.87 | 26 | 566.57\n29 | 133 | Kemi | 13279.13 | 26 | 510.74\n30 | 139 | Raahe | 12908."
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:19:02",
+   "statement": "SELECT COUNT(*) AS zz_lines_in_stores, SUM(f.net_amount) AS zz_net FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' AND s.store_id<900 AND p.category='ZZ Test'\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "zz_lines_in_stores | zz_net\n0 | NULL\n(1 row)"
+  }
+ ]
+}

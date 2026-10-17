@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t40-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T40",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "3270a7fb29fd6095d5966be637805fcb81d68a81734b4da18a21133224377d00",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:04",
+   "statement": "SELECT product_key, sku, product_name, category, subcategory, brand, listed_from, delisted_on, valid_from, valid_to, is_current FROM dim_product WHERE sku = 101624 OR product_name ILIKE '%kaakkuri%' ORDER BY sku, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "product_key | sku | product_name | category | subcategory | brand | listed_from | delisted_on | valid_from | valid_to | is_current\n1702 | 101624 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | Fixings & Fasteners | Raudikko | 2019-01-01 | NULL | 2000-01-01 | 9999-12-31 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:08",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE store_name ILIKE '%kaakkuri%' OR city ILIKE '%oulu%' ORDER BY store_id, valid_from\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n37 | 131 | Oulu Kaakkuri | Oulu | North | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n38 | 132 | Oulu Linnanmaa | Oulu | North | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:09",
+   "statement": "SELECT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date, fiscal_period, max(calendar_date) AS maxd FROM dim_date WHERE calendar_date IN (DATE '2026-09-28', DATE '2026-10-04', DATE '2026-10-08') GROUP BY ALL ORDER BY 3\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_week | fiscal_week_start_date | fiscal_week_end_date | fiscal_period | maxd\nFY2026/27 | 22 | 2026-09-28 | 2026-10-04 | 6 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:15",
+   "statement": "SELECT f.sale_date, f.channel_code, f.staff_purchase_flag, count(*) AS line_rows, count(DISTINCT f.sales_line_id) AS dist_lines, sum(f.quantity) AS units, sum(f.net_amount) AS net, min(f.etl_loaded_at) AS first_load, max(f.etl_loaded_at) AS last_load\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE s.store_id = 131 AND p.sku = 101624 AND f.sale_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04'\nGROUP BY ALL ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "sale_date | channel_code | staff_purchase_flag | line_rows | dist_lines | units | net | first_load | last_load\n2026-09-28 | NULL | false | 1 | 1 | 1 | 1.91 | 2026-09-29T01:00:00 | 2026-09-29T01:00:00\n2026-09-29 | NULL | false | 1 | 1 | 2 | 2.29 | 2026-09-30T01:00:00 | 2026-09-30T01:00:00\n2026-10-01 | NULL | false | 1 | 1 | 1 | 1.91 | 2026-10-02T01:00:00 | 2026-10-02T01:00:00\n2026-10-02 | NULL | false | 2 | 2 | 9 | 17.19 | 2026-10-03T01:00:00 | 2026-10-03T01:00:00\n2026-10-03 | NULL | false | 2 | 2 | 2 | 3.63 | 2026-10-04T01:00:00 | 2026-10-04T01:00:00\n2026-10-04 | NULL | false | 1 | 1 | 2 | 3.82 | 2026-10-05T01:00:00 | 2026-10-05T01:00:00\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:22",
+   "statement": "WITH days AS (SELECT calendar_date, is_trading_day, holiday_name FROM dim_date WHERE calendar_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04'),\nfact AS (SELECT f.sale_date, count(*) AS store_lines_all_skus, count(DISTINCT f.receipt_id) AS receipts, max(f.etl_loaded_at) AS last_load\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key WHERE s.store_id = 131 AND f.sale_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04' GROUP BY 1),\nrpt AS (SELECT business_date, receipts AS rpt_receipts, units_sold, net_sales_before_returns, returns_net FROM rpt_daily_store_sales WHERE store_id = 131 AND business_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04'),\nret AS (SELECT r.return_date, sum(r.quantity_returned) AS sku_units_returned FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id = 131 AND p.sku = 101624 AND r.return_date BETWEEN DATE '2026-09-28' AND DATE '2026-10-04' GROUP BY 1)\nSELECT d.calendar_date, d.is_trading_day, d.holiday_name, fact.store_lines_all_skus, fact.receipts, fact.last_load, rpt.rpt_receipts, rpt.units_sold, rpt.net_sales_before_returns, rpt.returns_net, ret.sku_units_returned\nFROM days d LEFT JOIN fact ON fact.sale_date = d.calendar_date LEFT JOIN rpt ON rpt.business_date = d.calendar_date LEFT JOIN ret ON ret.return_date = d.calendar_date ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "calendar_date | is_trading_day | holiday_name | store_lines_all_skus | receipts | last_load | rpt_receipts | units_sold | net_sales_before_returns | returns_net | sku_units_returned\n2026-09-28 | true | NULL | 69 | 28 | 2026-09-29T01:00:00 | 28 | 118 | 1526.61 | 21.52 | NULL\n2026-09-29 | true | NULL | 56 | 24 | 2026-09-30T01:00:00 | 24 | 105 | 1373.94 | 27.29 | NULL\n2026-09-30 | true | NULL | 57 | 22 | 2026-10-01T01:00:00 | 22 | 97 | 1398.42 | 84.01 | 4\n2026-10-01 | true | NULL | 78 | 31 | 2026-10-02T01:00:00 | 31 | 128 | 1566.12 | 21.43 | NULL\n2026-10-02 | true | NULL | 104 | 40 | 2026-10-03T01:00:00 | 40 | 183 | 2062.82 | 99.11 | NULL\n2026-10-03 | true | NULL | 81 | 33 | 2026-10-04T01:00:00 | 33 | 142 | 1618.34 | 90.77 | NULL\n2026-10-04 | true | NULL | 48 | 25 | 2026-10-05T01:00:00 | 25 | 91 | 1286.63 | 30.64 | NULL\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:27",
+   "statement": "SELECT 101624 AS sku, 'Fixings & Fasteners Raudikko 251' AS product_name, 131 AS store_id, 'Oulu Kaakkuri' AS store_name, SUM(f.quantity) AS units_sold\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE s.store_id = 131 AND p.sku = 101624\n  AND d.fiscal_year = 'FY2026/27' AND d.fiscal_week = 22\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sku | product_name | store_id | store_name | units_sold\n101624 | Fixings & Fasteners Raudikko 251 | 131 | Oulu Kaakkuri | 17\n(1 row)"
+  }
+ ]
+}

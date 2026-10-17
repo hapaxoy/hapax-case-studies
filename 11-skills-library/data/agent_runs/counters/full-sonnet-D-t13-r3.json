@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-D-t13-r3",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T13",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "80c1e016eecdef7ca9f112258231c8d9e336413c3bfc8246f4e3682c21cc71cb",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:04",
+   "statement": "SELECT r.fiscal_period_label, r.period_start_date, r.period_end_date, r.fully_loaded,\n (SELECT count(*) FROM fact_sales_line f WHERE f.sale_date BETWEEN r.period_start_date AND r.period_end_date) AS lines,\n (SELECT count(*) FROM (SELECT receipt_id, line_no FROM fact_sales_line f WHERE f.sale_date BETWEEN r.period_start_date AND r.period_end_date GROUP BY 1,2 HAVING count(*)>1)) AS dup_keys,\n (SELECT count(DISTINCT etl_loaded_at) FROM fact_sales_line f WHERE f.sale_date BETWEEN r.period_start_date AND r.period_end_date) AS loads\nFROM ref_fiscal_calendar r WHERE fiscal_year='FY2026/27' AND fiscal_period IN (3,4,5)\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period_label | period_start_date | period_end_date | fully_loaded | lines | dup_keys | loads\nFY2026/27 P03 | 2026-06-29 | 2026-08-02 | true | 64665 | 0 | 35\nFY2026/27 P04 | 2026-08-03 | 2026-08-30 | true | 48107 | 0 | 28\nFY2026/27 P05 | 2026-08-31 | 2026-09-27 | true | 46914 | 0 | 28\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:06",
+   "statement": "SELECT store_id, format, count(*) versions, min(valid_from), max(valid_to), min(store_name) FROM dim_store GROUP BY 1,2 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 41,
+   "output_preview": "store_id | format | versions | min(valid_from) | max(valid_to) | min(store_name)\n101 | Medium | 2 | 2000-01-01 | 9999-12-31 | Helsinki Vuosaari\n102 | Large | 2 | 2000-01-01 | 9999-12-31 | Helsinki Pitäjänmäki\n103 | Medium | 2 | 2000-01-01 | 9999-12-31 | Espoo Lommila\n104 | Large | 2 | 2000-01-01 | 9999-12-31 | Vantaa Tammisto\n105 | Small | 2 | 2000-01-01 | 9999-12-31 | Kerava\n106 | Small | 1 | 2000-01-01 | 9999-12-31 | Porvoo\n107 | Medium | 1 | 2000-01-01 | 9999-12-31 | Hyvinkää\n108 | Large | 1 | 2000-01-01 | 9999-12-31 | Lahti\n109 | Medium | 1 | 2000-01-01 | 9999-12-31 | Hämeenlinna\n110 | Large | 1 | 2000-01-01 | 9999-12-31 | Turku Kupittaa\n111 | Medium | 1 | 2000-01-01 | 9999-12-31 | Turku Härmälä\n112 | Small | 1 | 2000-01-01 | 9999-12-31 | Raisio\n113 | Small | 1 | 2000-01-01 | 9999-12-31 | Salo\n114 | Medium | 2 | 2000-01-01 | 9999-12-31 | Kouvola\n115 | Large | 1 | 2000-01-01 | 9999-12-31 | Tampere Hervanta\n116 | Large | 1 | 2000-01-01 | 9999-12-31 | Tampere Lielahti\n117 | Medium | 1 | 2000-01-01 | 9999-12-31 | Tampere Kaleva\n118 | Medium | 1 | 2000-01-01 | 9999-12-31 | Nokia\n119 | Medium | 1 | 2000-01-01 | 9999-12-31 | Pori\n120 | Small | 1 | 2000-01-01 | 9999-12-31 | Rauma\n121 | Medium | 1 | 2000-01-01 | 9999-12-31 | Vaasa\n122 | Medium | 1 | 2000-01-01 | 9999-12-31 | Seinäjoki\n123 | Small | 1 | 2000-01-01 | 9999-12-31 | Kokkola\n124 | Medium | 1 | 2000-01-01 | 9999-12-31 | Jyväskylä Palokka\n125 | Large | 1 | 2000-01-01 | 9999-12-31 | Kuopio\n126 | Medium | 1 | 2000-01-01 | 9"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:16",
+   "statement": "WITH l AS (\n SELECT f.*, s.store_id, p.category FROM fact_sales_line f\n JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'),\nctl AS (SELECT l.store_id, sum(net_amount) n FROM l WHERE store_id<900 AND category<>'ZZ Test' GROUP BY 1),\nrpt AS (SELECT store_id, sum(net_sales_before_returns) r FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' GROUP BY 1)\nSELECT ctl.store_id, ctl.n, rpt.r, ctl.n-rpt.r diff FROM ctl FULL JOIN rpt USING(store_id) WHERE abs(coalesce(ctl.n,0)-coalesce(rpt.r,0))>0.5 OR ctl.store_id IS NULL OR rpt.store_id IS NULL\nUNION ALL\nSELECT -1, count(*), count(DISTINCT receipt_id), sum(CASE WHEN staff_purchase_flag THEN 1 ELSE 0 END) FROM l\nUNION ALL\nSELECT -2, count(*), 0, 0 FROM (SELECT receipt_id FROM l GROUP BY 1 HAVING count(DISTINCT store_id)>1 OR count(DISTINCT sale_date)>1 OR count(DISTINCT staff_purchase_flag)>1)\nUNION ALL\nSELECT -3, count(*), sum(net_amount), 0 FROM l WHERE quantity<=0 OR net_amount<=0\n",
+   "n": 3,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "store_id | n | r | diff\nNULL | NULL | 207538.45 | NULL\n-1 | 48107.00 | 21311.00 | 737.00\n-2 | 0.00 | 0.00 | 0.00\n-3 | 0.00 | NULL | 0.00\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:26",
+   "statement": "WITH l AS (SELECT * FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30')\nSELECT (SELECT count(*)-count(DISTINCT sales_line_id) FROM l) dup_ids,\n (SELECT count(*) FROM (SELECT 1 FROM l GROUP BY receipt_id, product_key, quantity, net_amount, sale_ts_utc HAVING count(*)>1)) dup_content,\n (SELECT string_agg(DISTINCT CAST(store_id AS VARCHAR), ',') FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id>=900) rpt_extra,\n (SELECT count(*) FROM l WHERE sale_date NOT IN (SELECT calendar_date FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=4)) outside,\n (SELECT count(*) FROM (SELECT receipt_id FROM l WHERE channel_code='ST' OR channel_code IS NULL GROUP BY 1 HAVING count(*)=0)) x,\n (SELECT count(*) FROM l f JOIN dim_store s USING(store_key) WHERE s.store_id=900) web_lines,\n (SELECT count(*) FROM l f JOIN dim_store s USING(store_key) WHERE s.store_id=999) s999,\n (SELECT count(*) FROM l f JOIN dim_product p USING(product_key) WHERE p.category='ZZ Test') zz\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_ids | dup_content | rpt_extra | outside | x | web_lines | s999 | zz\n0 | 38 | 900 | 0 | 0 | 6459 | 127 | 57\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:32",
+   "statement": "WITH l AS (SELECT f.*, s.store_id FROM fact_sales_line f JOIN dim_store s USING(store_key) WHERE sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30')\nSELECT receipt_id, store_id, count(*) n, string_agg(CAST(line_no AS VARCHAR), ',') lns, any_value(quantity) q, any_value(net_amount) amt, any_value(etl_loaded_at) loaded, any_value(staff_purchase_flag) staff\nFROM l GROUP BY receipt_id, store_id, product_key, quantity, net_amount, sale_ts_utc HAVING count(*)>1 ORDER BY 1 LIMIT 12\n",
+   "n": 5,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "receipt_id | store_id | n | lns | q | amt | loaded | staff\n10537822 | 125 | 2 | 1,2 | 1 | 8.52 | 2026-08-04T01:00:00 | false\n10538141 | 128 | 2 | 3,4 | 1 | 4.43 | 2026-08-05T01:00:00 | false\n10538470 | 115 | 2 | 2,3 | 3 | 11.37 | 2026-08-05T01:00:00 | false\n10539326 | 106 | 2 | 1,2 | 1 | 41.50 | 2026-08-07T01:00:00 | false\n10540520 | 108 | 2 | 1,3 | 1 | 2.15 | 2026-08-08T01:00:00 | false\n10541248 | 126 | 2 | 1,2 | 1 | 15.17 | 2026-08-09T01:00:00 | false\n10541289 | 115 | 2 | 2,3 | 1 | 55.39 | 2026-08-09T01:00:00 | false\n10541527 | 131 | 2 | 1,2 | 1 | 8.42 | 2026-08-10T01:00:00 | false\n10541900 | 121 | 2 | 2,3 | 1 | 5.72 | 2026-08-10T01:00:00 | false\n10542241 | 127 | 2 | 2,3 | 1 | 19.60 | 2026-08-11T01:00:00 | true\n10542318 | 139 | 2 | 1,2 | 2 | 13.16 | 2026-08-11T01:00:00 | false\n10542326 | 121 | 2 | 1,3 | 1 | 21.50 | 2026-08-11T01:00:00 | false\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:39",
+   "statement": "SELECT cs.format,\n       COUNT(DISTINCT s.store_id) AS stores,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       ROUND(SUM(f.net_amount), 2) AS net_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nWHERE s.store_id < 900\n  AND NOT f.staff_purchase_flag\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4\nGROUP BY 1\nORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | stores | receipts | net_before_returns | atv\nLarge | 8 | 6508 | 394865.46 | 60.67\nMedium | 18 | 8641 | 520763.45 | 60.27\nSmall | 12 | 2598 | 131841.05 | 50.75\n(3 rows)"
+  }
+ ]
+}

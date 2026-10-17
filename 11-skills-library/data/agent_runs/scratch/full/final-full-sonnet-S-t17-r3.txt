@@ -1,0 +1,40 @@
+```json
+{
+  "sql": "WITH sold AS (SELECT f.sales_line_id, f.quantity, p.subcategory FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key JOIN dim_store st ON st.store_key = f.store_key WHERE f.sale_date BETWEEN DATE '2025-04-28' AND DATE '2025-07-27' AND p.category = 'Garden' AND NOT f.staff_purchase_flag AND st.store_id &lt;&gt; 999), returned AS (SELECT sales_line_id, sum(quantity_returned) AS units_returned FROM fact_return_line GROUP BY sales_line_id) SELECT s.subcategory, round(100.0 * sum(coalesce(r.units_returned, 0)) / sum(s.quantity), 2) AS return_rate_pct FROM sold s LEFT JOIN returned r ON r.sales_line_id = s.sales_line_id GROUP BY s.subcategory ORDER BY s.subcategory",
+  "result": {
+    "columns": ["subcategory", "return_rate_pct"],
+    "rows": [
+      ["Barbecue &amp; Grills", 6.53],
+      ["Edible Plants &amp; Seeds", 1.0],
+      ["Garden Furniture", 12.81],
+      ["Garden Tools", 5.15],
+      ["Outdoor Lighting", 7.25],
+      ["Plants &amp; Flowers", 2.72],
+      ["Pots &amp; Planters", 3.93],
+      ["Soil &amp; Fertiliser", 1.71]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: Q1 of FY2025/26 is 2025-04-28 to 2025-07-27 (ref_fiscal_calendar / dim_date)",
+    "Product category and subcategory taken from the product version in force on the sale date (fact_sales_line.product_key)",
+    "Return rate = units returned / units sold, with each return attributed to the original sales line (fact_return_line.sales_line_id) regardless of the return date",
+    "Staff purchases excluded (staff_purchase_flag)",
+    "Training store (store_id 999) excluded",
+    "Web (store_id 900) and physical store sales both included"
+  ],
+  "assumptions": [
+    "'Last year' means the last complete fiscal year, FY2025/26, because the request was received on 2026-10-06 and the company reports on a fiscal calendar that starts in late April. 'Q1' is fiscal Q1, not calendar Q1 (Jan-Mar).",
+    "'Goods sold in Q1' means a cohort view: all units sold in the quarter, with every later return of those units counted. Returns were all booked by 2025-08-22, so the return window is complete.",
+    "The rate is by units. A value-based rate (refund net / net sales) gives very similar figures, for example Garden Furniture 12.95, Barbecue &amp; Grills 7.32, Edible Plants &amp; Seeds 0.98 and Soil &amp; Fertiliser 1.58.",
+    "'Garden' means the category as it stood when the goods were sold. Outdoor Lighting was part of Garden until 2025-10-26 and so is included."
+  ],
+  "caveats": [
+    "Outdoor Lighting moved from Garden to Electrical on 2025-10-27. It is included here because it was Garden when sold in Q1 FY2025/26 (7.25%, 1,723 units sold). A Garden total on today's product tree would exclude it.",
+    "Correction: the Training store (store_id 999) is excluded. It had 136 Garden lines in the period.",
+    "Correction: staff purchases are excluded. They are about 1,256 Garden lines in the period. Including them changes the rates by 0.1 percentage points or less. For example, Garden Furniture would be 12.73 and Barbecue &amp; Grills 6.47.",
+    "Fact_sales_line was checked for duplicate lines, gaps in daily loads and sales on closed days, and none were found. Returns were checked for returns exceeding units sold and returns dated before the sale, and none were found. The staging tables (stg_*) and bak_*/tmp_* tables were not used.",
+    "Small volumes make some rates sensitive: Barbecue &amp; Grills (2,038 units) and Outdoor Lighting (1,723 units) rest on a few hundred units each.",
+    "The fiscal period FY2026/27 P06 is not fully loaded, but it does not affect this result."
+  ]
+}
+```

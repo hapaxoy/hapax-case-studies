@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t49-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T49",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "6fe3b2070e374c81f45de409ff158ecc28f232cb27142daabe51e0c41351ec48",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:17",
+   "statement": "SELECT s.format, count(*) AS line_rows, count(DISTINCT (f.receipt_id, f.line_no)) AS distinct_lines, count(DISTINCT f.sales_line_id) AS distinct_ids, count(DISTINCT f.receipt_id) AS receipts, min(d.calendar_date) AS mind, max(d.calendar_date) AS maxd, count(DISTINCT s.store_id) AS stores, sum(f.net_amount) AS net\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 AND s.store_id<900 AND NOT f.staff_purchase_flag AND p.category<>'ZZ Test'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | line_rows | distinct_lines | distinct_ids | receipts | mind | maxd | stores | net\nLarge | 14957 | 14957 | 14957 | 6508 | 2026-08-03 | 2026-08-30 | 8 | 394865.46\nMedium | 19987 | 19987 | 19987 | 8641 | 2026-08-03 | 2026-08-30 | 18 | 520763.45\nSmall | 5911 | 5911 | 5911 | 2598 | 2026-08-03 | 2026-08-30 | 12 | 131841.05\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:24",
+   "statement": "WITH l AS (\n SELECT f.*, s.store_id, s.format, p.category FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN dim_date d ON d.calendar_date=f.sale_date\n WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 AND s.store_id<900),\nctl AS (SELECT s.format, sum(r.net_sales_before_returns) AS ctl_gross, sum(r.receipts) AS ctl_receipts FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date JOIN dim_store s ON s.store_id=r.store_id AND s.is_current WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 AND r.store_id<900 GROUP BY 1)\nSELECT l.format, count(DISTINCT l.receipt_id) AS rec_ids, count(DISTINCT (l.receipt_id,l.store_id)) AS rec_store, sum(l.net_amount) AS all_net, sum(CASE WHEN l.category='ZZ Test' THEN l.net_amount END) AS test_net, sum(CASE WHEN l.staff_purchase_flag THEN l.net_amount END) AS staff_net, count(DISTINCT CASE WHEN l.staff_purchase_flag THEN l.receipt_id END) AS staff_rec, any_value(ctl.ctl_gross) AS ctl_gross, any_value(ctl.ctl_receipts) AS ctl_receipts,\n count(*) FILTER (WHERE l.quantity<=0 OR l.net_amount<=0) AS nonpos, count(*) FILTER (WHERE l.channel_code='WB') AS wb\nFROM l LEFT JOIN ctl ON ctl.format=l.format GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | rec_ids | rec_store | all_net | test_net | staff_net | staff_rec | ctl_gross | ctl_receipts | nonpos | wb\nLarge | 6607 | 6607 | 400409.69 | NULL | 5544.23 | 99 | 400409.69 | 6607 | 0 | 0\nMedium | 8779 | 8779 | 528036.85 | NULL | 7273.40 | 138 | 528036.85 | 8779 | 0 | 0\nSmall | 2641 | 2641 | 133820.18 | NULL | 1979.13 | 43 | 133820.18 | 2641 | 0 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:29",
+   "statement": "SELECT store_id, count(*) AS versions, count(DISTINCT format) AS formats, string_agg(DISTINCT format, ',') AS fmts, min(open_date) o, max(close_date) c\nFROM dim_store WHERE store_id<900 GROUP BY 1 HAVING count(DISTINCT format)>1 OR max(close_date) IS NOT NULL OR min(open_date) IS NOT NULL\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "store_id | versions | formats | fmts | o | c\n136 | 1 | 1 | Medium | 2024-09-02 | NULL\n129 | 1 | 1 | Small | NULL | 2026-01-25\n137 | 1 | 1 | Small | 2024-11-04 | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:34",
+   "statement": "SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, s.format,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nWHERE s.store_id < 900\n  AND NOT f.staff_purchase_flag\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_period = 4\nGROUP BY s.format\nORDER BY s.format\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | format | atv\nFY2026/27 | 4 | Large | 60.67\nFY2026/27 | 4 | Medium | 60.27\nFY2026/27 | 4 | Small | 50.75\n(3 rows)"
+  }
+ ]
+}

@@ -1,0 +1,23 @@
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 9 AS first_period, 10 AS last_period\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n    SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, o.fulfilment_type, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT d.fiscal_period,\n       ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 1) AS click_and_collect_share_pct\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.business_date\nCROSS JOIN params\nWHERE d.fiscal_year = params.fiscal_year AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1\nORDER BY 1;",
+  "result": {
+    "columns": ["fiscal_period", "click_and_collect_share_pct"],
+    "rows": [[9, 29.2], [10, 30.7]]
+  },
+  "definitions_applied": [
+    "Web net sales (dispatch date in Helsinki time, after returns)",
+    "Click-and-collect share (click-and-collect net sales / total web net sales, as percentage)",
+    "Net sales (net amount excluding VAT, after returns, excluding test articles and store 999)"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2025/26 (previous fiscal year from the request date 2026-10-06)",
+    "Web sales are recognised on the dispatch date (not order date) in Helsinki time",
+    "Only delivered and collected orders are included (cancelled orders excluded)"
+  ],
+  "caveats": [
+    "Returns can arrive up to 30 days after the original sale, so period totals include returns booked in each period, regardless of original sale date",
+    "No data quality issues detected"
+  ]
+}
+```

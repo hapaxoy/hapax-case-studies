@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-S-t30-r2",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T30",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "3d3ef851d2431291f534b92d987dea44f6bdf688201a8184dfcf12ce5068bfb2",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:16",
+   "statement": "SELECT tier, is_current, (valid_to = DATE '9999-12-31') AS open_ended, count(*) AS version_rows, count(DISTINCT member_id) AS distinct_members, min(valid_from) AS min_from, max(valid_from) AS max_from\nFROM dim_member\nGROUP BY ALL\nORDER BY ALL\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tier | is_current | open_ended | version_rows | distinct_members | min_from | max_from\nBasic | false | false | 19343 | 17903 | 2019-01-01 | 2026-10-01\nBasic | true | true | 31229 | 31229 | 2019-01-01 | 2026-10-04\nGold | false | false | 2412 | 2233 | 2019-01-01 | 2026-09-30\nGold | true | true | 5791 | 5791 | 2019-01-02 | 2026-10-04\nSilver | false | false | 7559 | 7068 | 2019-01-01 | 2026-10-02\nSilver | true | true | 22980 | 22980 | 2019-01-02 | 2026-10-04\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:20",
+   "statement": "WITH per_member AS (\n  SELECT member_id,\n         count(*) AS versions,\n         sum(CASE WHEN is_current THEN 1 ELSE 0 END) AS current_rows,\n         sum(CASE WHEN valid_to = DATE '9999-12-31' THEN 1 ELSE 0 END) AS open_rows,\n         sum(CASE WHEN CURRENT_DATE BETWEEN valid_from AND valid_to THEN 1 ELSE 0 END) AS rows_valid_today\n  FROM dim_member GROUP BY member_id\n)\nSELECT current_rows, open_rows, rows_valid_today, count(*) AS members\nFROM per_member GROUP BY ALL ORDER BY ALL\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "current_rows | open_rows | rows_valid_today | members\n1 | 1 | 1 | 60000\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:23",
+   "statement": "SELECT 'null_or_odd_tier' AS check_name, count(*) AS n FROM dim_member WHERE is_current AND (tier IS NULL OR tier NOT IN ('Basic','Silver','Gold'))\nUNION ALL SELECT 'current_join_after_today', count(*) FROM dim_member WHERE is_current AND join_date > CURRENT_DATE\nUNION ALL SELECT 'current_gold_join_null', count(*) FROM dim_member WHERE is_current AND tier='Gold' AND join_date IS NULL\nUNION ALL SELECT 'current_gold_valid_from_after_2026_10_07', count(*) FROM dim_member WHERE is_current AND tier='Gold' AND valid_from > DATE '2026-10-07'\nUNION ALL SELECT 'current_gold_dup_key', count(*) - count(DISTINCT member_key) FROM dim_member WHERE is_current AND tier='Gold'\nUNION ALL SELECT 'current_today', CAST(CURRENT_DATE AS INTEGER) * 0 + 0\n",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Conversion Error: Unimplemented type for cast (DATE -> INTEGER)\n\nLINE 6: UNION ALL SELECT 'current_today', CAST(CURRENT_DATE AS INTEGER) * 0 + 0\n                                          ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:27",
+   "statement": "SELECT 'odd_tier' AS check_name, count(*) AS n FROM dim_member WHERE is_current AND (tier IS NULL OR tier NOT IN ('Basic','Silver','Gold'))\nUNION ALL SELECT 'join_after_request', count(*) FROM dim_member WHERE is_current AND join_date > DATE '2026-10-07'\nUNION ALL SELECT 'gold_valid_from_after_request', count(*) FROM dim_member WHERE is_current AND tier='Gold' AND valid_from > DATE '2026-10-07'\nUNION ALL SELECT 'gold_dup_key', count(*) - count(DISTINCT member_key) FROM dim_member WHERE is_current AND tier='Gold'\nUNION ALL SELECT 'gold_in_staging_not_in_dim', count(*) FROM stg_member_updates s WHERE s.is_current AND s.tier='Gold' AND s.member_key NOT IN (SELECT member_key FROM dim_member)\nUNION ALL SELECT 'staging_rows', count(*) FROM stg_member_updates\nUNION ALL SELECT 'staging_keys_in_dim', count(*) FROM stg_member_updates s WHERE s.member_key IN (SELECT member_key FROM dim_member)\n",
+   "n": 4,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "check_name | n\nodd_tier | 0\njoin_after_request | 0\ngold_valid_from_after_request | 0\ngold_dup_key | 0\ngold_in_staging_not_in_dim | 0\nstaging_rows | 4061\nstaging_keys_in_dim | 4061\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:30",
+   "statement": "SELECT tier, count(DISTINCT member_id) AS gold_members\nFROM dim_member\nWHERE is_current AND tier = 'Gold'\nGROUP BY tier\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "tier | gold_members\nGold | 5791\n(1 row)"
+  }
+ ]
+}

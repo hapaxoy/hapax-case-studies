@@ -1,0 +1,33 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, d.fiscal_period, ROUND(100.0 * SUM(CASE WHEN o.fulfilment_type = 'click_and_collect' THEN f.net_amount ELSE 0 END) / SUM(f.net_amount), 2) AS click_and_collect_share_pct FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id = f.receipt_id JOIN dim_date d ON d.calendar_date = f.sale_date WHERE f.channel_id IN (2, 3) AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (9, 10) GROUP BY d.fiscal_year, d.fiscal_period ORDER BY d.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_and_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 9, 29.75],
+      ["FY2025/26", 10, 30.45]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales = sales lines in the two web channels (channel_id 2 Web home delivery and 3 Click and collect), joined to fact_web_order",
+    "Sales value = net_amount (EUR excluding VAT, after line discounts), before returns",
+    "Click-and-collect = fact_web_order.fulfilment_type = 'click_and_collect'",
+    "Fiscal periods from dim_date / ref_fiscal_calendar by sale_date (FY2025/26 P09 = 2025-12-22 to 2026-01-25, P10 = 2026-01-26 to 2026-02-22)",
+    "Cancelled web orders have no sales lines, so they are excluded"
+  ],
+  "assumptions": [
+    "'Last year' read as the last completed fiscal year, FY2025/26. The request is dated 2026-10-06, which falls in FY2026/27.",
+    "'Periods 9 and 10' read as fiscal periods 9 and 10 of the company fiscal calendar, not calendar months. Both are fully loaded.",
+    "'Share of web sales' read as a share of sales value (net EUR excluding VAT), not of order count. By order count the shares are 29.33% for P09 and 30.10% for P10.",
+    "Both periods are shown as separate rows because the request names two periods. Combined for P09 and P10 together, the share is 30.02% (104315.54 of 347431.30 EUR net).",
+    "Sales are before returns, because the question is about sales, not net-of-returns sales."
+  ],
+  "caveats": [
+    "Correction: click-and-collect lines were mis-tagged as channel_id 2 (Web home delivery) for sales dates 2026-01-12 to 2026-02-08, covering 758 orders and 43819.29 EUR net. The mis-tagging only shows from the order data: those orders are click_and_collect in fact_web_order. I classified by fulfilment_type instead of channel_id. Using channel_id 3 alone would give about 17.4% for the two periods combined, against the correct 30.02%. This affects P09 and P10.",
+    "The old channel_code column (ST/WB) is NULL on these lines, so channel_id is the only usable channel key for this period.",
+    "Returns are not netted off. If they were (refunds of 12279.65 EUR net on click-and-collect and 29810.74 EUR net on home delivery, for lines sold in P09 to P10), the combined share would be about 30.1%, which hardly changes the result.",
+    "Web orders with status 'cancelled' (291 orders in the window) have no sales lines, so they do not enter the figures.",
+    "Sale dates are local business dates (sale_date), so period boundaries differ slightly from UTC order timestamps."
+  ]
+}
+```

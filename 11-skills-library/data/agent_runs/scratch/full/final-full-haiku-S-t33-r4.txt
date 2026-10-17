@@ -1,0 +1,31 @@
+```json
+{
+  "sql": "WITH weekly_sales AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    d.fiscal_week_start_date,\n    d.fiscal_week_end_date,\n    SUM(rpt.net_sales) as net_sales\n  FROM rpt_daily_store_sales rpt\n  INNER JOIN dim_date d ON rpt.business_date = d.calendar_date\n  WHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND d.fiscal_week IN (5, 6, 7, 8)\n  GROUP BY d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\n)\nSELECT \n  current_year.fiscal_week,\n  current_year.fiscal_week_start_date,\n  current_year.fiscal_week_end_date,\n  ROUND(current_year.net_sales, 2) as net_sales_fy2025_26,\n  ROUND(prior_year.net_sales, 2) as net_sales_fy2024_25,\n  ROUND(((current_year.net_sales - prior_year.net_sales) / prior_year.net_sales) * 100, 2) as growth_pct\nFROM weekly_sales current_year\nINNER JOIN weekly_sales prior_year \n  ON current_year.fiscal_week = prior_year.fiscal_week \n  AND current_year.fiscal_year = 'FY2025/26' \n  AND prior_year.fiscal_year = 'FY2024/25'\nORDER BY current_year.fiscal_week",
+  "result": {
+    "columns": ["fiscal_week", "fiscal_week_start_date", "fiscal_week_end_date", "net_sales_fy2025_26", "net_sales_fy2024_25", "growth_pct"],
+    "rows": [
+      [5, "2025-05-26", "2025-06-01", 330868.04, 314616.63, 5.17],
+      [6, "2025-06-02", "2025-06-08", 329334.78, 310519.66, 6.06],
+      [7, "2025-06-09", "2025-06-15", 325472.70, 312365.84, 4.2],
+      [8, "2025-06-16", "2025-06-22", 210207.18, 189048.40, 11.19]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales from rpt_daily_store_sales (sales after returns, excluding VAT)",
+    "Fiscal calendar week definitions from dim_date",
+    "Fiscal period 2 encompasses fiscal weeks 5 through 8",
+    "Fiscal year FY2025/26 is current year; FY2024/25 is prior year"
+  ],
+  "assumptions": [
+    "Request for 'this year' interpreted as the most recent complete fiscal period 2, which is FY2025/26 (May 26 – June 22, 2025)",
+    "Prior year interpreted as FY2024/25 period 2",
+    "Net sales defined as total company sales across all stores and channels, after returns, excluding VAT",
+    "Growth percentage calculated as (current year - prior year) / prior year × 100"
+  ],
+  "caveats": [
+    "Store count differs between years: FY2025/26 has 40 stores in this period, FY2024/25 has 38 stores. Stores 136 and 137 are new in FY2025/26 and did not exist in the prior year, so growth includes contribution from new locations.",
+    "Week 8 in both years has lower sales than weeks 5–7, suggesting possible partial week or promotional pattern differences",
+    "All values are in EUR, excluding VAT"
+  ]
+}
+```

@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH sales_by_format AS (\n  SELECT \n    s.format,\n    SUM(f.net_amount) AS net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 2\n    AND s.store_id < 900\n  GROUP BY s.format\n),\nreturns_by_format AS (\n  SELECT \n    s.format,\n    SUM(r.refund_net) AS refund_net\n  FROM fact_return_line r\n  INNER JOIN fact_sales_line f ON r.sales_line_id = f.sales_line_id\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 2\n    AND s.store_id < 900\n  GROUP BY s.format\n)\nSELECT \n  sales.format AS store_format,\n  ROUND(COALESCE(returns.refund_net, 0) / sales.net_sales * 100, 2) AS return_share_pct\nFROM sales_by_format sales\nLEFT JOIN returns_by_format returns ON sales.format = returns.format\nORDER BY sales.format",
+  "result": {
+    "columns": ["store_format", "return_share_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28]
+    ]
+  },
+  "definitions_applied": [
+    "Physical store sales only (store_id < 900; excludes web/online)",
+    "Return share = refund net amount / sales net amount as percentage",
+    "Returns matched to original sales lines sold in the period",
+    "Period identified as FY2025/26 P02 (2025-05-26 to 2025-06-22)",
+    "Net amounts exclude VAT"
+  ],
+  "assumptions": [
+    "Last year interpreted as previous complete fiscal year (FY2025/26)",
+    "Returns are refunds issued for items sold in the period, regardless of when returned",
+    "Return share expressed as percentage of net sales value"
+  ],
+  "caveats": [
+    "Period fully loaded in warehouse (confirmed)",
+    "No planned store closures during the period",
+    "Store format values in data are Large, Medium, Small (not schema-documented Hyper, Standard, Express)"
+  ]
+}
+```

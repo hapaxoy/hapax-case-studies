@@ -1,0 +1,27 @@
+```json
+{
+  "sql": "WITH period_members AS (\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to &gt;= CAST('2025-12-21' AS DATE)\n  UNION\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_return_line f\n  INNER JOIN dim_date d ON f.return_date = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to &gt;= CAST('2025-12-21' AS DATE)\n  UNION\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_web_order f\n  INNER JOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to &gt;= CAST('2025-12-21' AS DATE)\n  UNION\n  SELECT DISTINCT m.member_id, m.tier\n  FROM fact_campaign_exposure f\n  INNER JOIN dim_date d ON CAST(f.contact_ts_utc AS DATE) = d.calendar_date\n  INNER JOIN dim_member m ON f.member_key = m.member_key\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period = 8\n    AND m.member_id IS NOT NULL\n    AND m.valid_to &gt;= CAST('2025-12-21' AS DATE)\n)\nSELECT tier, COUNT(DISTINCT member_id) AS active_members\nFROM period_members\nGROUP BY tier\nORDER BY tier",
+  "result": {
+    "columns": ["tier", "active_members"],
+    "rows": [
+      ["Basic", 16127],
+      ["Gold", 3344],
+      ["Silver", 10248]
+    ]
+  },
+  "definitions_applied": [
+    "Active member: member with at least one transaction (purchase, return, web order, or campaign contact) in fiscal period 8",
+    "Valid membership: member record valid_to date on or after 2025-12-21 (end of period 8)",
+    "Tier: loyalty tier from dim_member at the transaction date"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2025/26, the year prior to current FY2026/27",
+    "End of period 8 means the calendar date 2025-12-21",
+    "Active includes all transaction types to capture members with any engagement during the period"
+  ],
+  "caveats": [
+    "Campaign exposure contacts are included as activity but may not represent transactions; some campaigns may have been sent to members who did not engage",
+    "Members counted as active if they had any one of four transaction types (sales, returns, web orders, or campaign contacts); the definition includes passive contacts"
+  ]
+}
+```

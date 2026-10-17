@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t07-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T07",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "18a541cbdd3689ddb9d096b2087b2a7db1010387d4c4b81eb152e91414a89edf",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:08",
+   "statement": "SELECT fiscal_year, fiscal_quarter, fiscal_period, period_start_date, period_end_date, weeks_in_period, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2024/25' AND fiscal_quarter=4 ORDER BY 3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_quarter | fiscal_period | period_start_date | period_end_date | weeks_in_period | fully_loaded\nFY2024/25 | 4 | 10 | 2025-01-27 | 2025-02-23 | 4 | true\nFY2024/25 | 4 | 11 | 2025-02-24 | 2025-03-23 | 4 | true\nFY2024/25 | 4 | 12 | 2025-03-24 | 2025-04-27 | 5 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:09",
+   "statement": "SELECT region, count(*) n_versions, count(DISTINCT store_id) n_stores, min(valid_from), max(valid_from), sum(CASE WHEN is_current THEN 1 ELSE 0 END) cur FROM dim_store GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region | n_versions | n_stores | min(valid_from) | max(valid_from) | cur\nCapital Region | 5 | 5 | 2025-04-28 | 2025-04-28 | 5\nEast | 9 | 9 | 2000-01-01 | 2000-01-01 | 8\nHead office | 1 | 1 | 2000-01-01 | 2000-01-01 | 1\nNorth | 6 | 6 | 2000-01-01 | 2000-01-01 | 6\nOnline | 1 | 1 | 2000-01-01 | 2000-01-01 | 1\nSouth | 15 | 15 | 2000-01-01 | 2025-04-28 | 10\nWest | 10 | 10 | 2000-01-01 | 2024-09-02 | 10\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:16",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, cp.category, cp.subcategory, cp.brand,\n       SUM(n.net_sales) AS net_sales, SUM(n.net_sales - n.cost) AS gross_margin, count(*) n_lines\nFROM net_lines n\nJOIN dim_date d     ON d.calendar_date = n.business_date\nJOIN dim_store cs   ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4\n  AND cs.region = 'South'\nGROUP BY 1,2,3,4,5\nORDER BY gross_margin DESC\nLIMIT 15\n",
+   "n": 3,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sku | product_name | category | subcategory | brand | net_sales | gross_margin | n_lines\n103075 | Cushions & Throws Tuulikki 338 | Home Textiles & Decor | Cushions & Throws | Tuulikki | 5292.14 | 2927.42 | 393\n100955 | Interior Paint Norvik 298 | Paint & Decorating | Interior Paint | Norvik | 6816.15 | 2138.48 | 125\n101763 | Fixings & Fasteners Nordhem 594 | Tools & Hardware | Fixings & Fasteners | Nordhem | 3418.53 | 2074.88 | 148\n103390 | Bedroom Peltola 793 | Furniture | Bedroom | Peltola | 5877.95 | 1859.55 | 20\n100953 | Interior Paint Tuulikki 224 | Paint & Decorating | Interior Paint | Tuulikki | 4005.86 | 1383.86 | 74\n103062 | Cushions & Throws Kuusela 657 | Home Textiles & Decor | Cushions & Throws | Kuusela | 2494.08 | 1346.56 | 60\n102468 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | Plumbing Parts | Ahvenisto | 2317.30 | 1342.48 | 225\n102538 | Cookware Nordhem 469 | Kitchen & Dining | Cookware | Nordhem | 3196.78 | 1177.39 | 75\n101398 | Power Tools Havu Pro 689 | Tools & Hardware | Power Tools | Havu Pro | 3371.57 | 1095.66 | 47\n101888 | Indoor Lighting Havu 419 | Electrical | Indoor Lighting | Havu | 2340.12 | 978.84 | 37\n102116 | Smart Home Tuulikki 855 | Electrical | Smart Home | Tuulikki | 3032.49 | 935.46 | 65\n103415 | Home Office Peltola 918 | Furniture | Home Office | Peltola | 2726.78 | 925.28 | 29\n101512 | Hand Tools Havu 907 | Tools & Hardware | Hand Tools | Havu | 1600.80 | 899.28 | 65\n102359 | Bathroom Furniture Mäntylä 246 | Bathroom & Plumbing"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:22",
+   "statement": "SELECT 'sales' src, count(*) n_rows, count(DISTINCT sales_line_id) n_ids, count(DISTINCT (receipt_id, line_no)) n_rl, sum(CASE WHEN standard_cost IS NULL OR standard_cost=0 THEN 1 ELSE 0 END) zero_cost, sum(CASE WHEN net_amount IS NULL THEN 1 ELSE 0 END) null_net, min(sale_date) mn, max(sale_date) mx\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27'\nUNION ALL\nSELECT 'returns', count(*), count(DISTINCT return_line_id), count(DISTINCT sales_line_id), sum(CASE WHEN standard_cost_returned IS NULL OR standard_cost_returned=0 THEN 1 ELSE 0 END), sum(CASE WHEN refund_net IS NULL THEN 1 ELSE 0 END), min(return_date), max(return_date)\nFROM fact_return_line WHERE return_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "src | n_rows | n_ids | n_rl | zero_cost | null_net | mn | mx\nsales | 129694 | 129694 | 129694 | 0 | 0 | 2025-01-27 | 2025-04-27\nreturns | 4912 | 4912 | 4912 | 0 | 0 | 2025-01-27 | 2025-04-27\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:27",
+   "statement": "SELECT count(*) n, sum(CASE WHEN abs(f.standard_cost - f.quantity*p.standard_unit_cost) > 0.02 THEN 1 ELSE 0 END) cost_mismatch,\n       sum(CASE WHEN f.quantity <= 0 THEN 1 ELSE 0 END) nonpos_qty,\n       sum(CASE WHEN f.net_amount <= 0 THEN 1 ELSE 0 END) nonpos_net,\n       sum(CASE WHEN f.net_amount < f.standard_cost THEN 1 ELSE 0 END) below_cost,\n       sum(CASE WHEN s.store_id=900 THEN 1 ELSE 0 END) web_lines,\n       sum(CASE WHEN f.sale_date NOT BETWEEN p.valid_from AND p.valid_to THEN 1 ELSE 0 END) pk_out_of_validity\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\nWHERE f.sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND cs.region='South'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | cost_mismatch | nonpos_qty | nonpos_net | below_cost | web_lines | pk_out_of_validity\n25785 | 0 | 0 | 0 | 117 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:37",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, s.region AS region_then, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, s.region, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, ROUND(SUM(n.net_sales - n.cost),2) AS gross_margin_asis,\n       ROUND(SUM(CASE WHEN n.region_then='South' THEN n.net_sales - n.cost ELSE 0 END),2) AS gross_margin_aswas\nFROM net_lines n\nJOIN dim_date d     ON d.calendar_date = n.business_date\nJOIN dim_store cs   ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4\n  AND (cs.region = 'South' OR n.region_then = 'South')\nGROUP BY 1,2\nORDER BY (SUM(CASE WHEN cs.region='South' THEN n.net_sales - n.cost ELSE 0 END)) DESC\nLIMIT 10\n",
+   "n": 6,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "sku | product_name | gross_margin_asis | gross_margin_aswas\n103075 | Cushions & Throws Tuulikki 338 | 3866.86 | 3866.86\n100955 | Interior Paint Norvik 298 | 3694.11 | 3694.11\n101763 | Fixings & Fasteners Nordhem 594 | 3747.33 | 3277.05\n103390 | Bedroom Peltola 793 | 3048.27 | 3048.27\n100953 | Interior Paint Tuulikki 224 | 2828.49 | 2611.47\n103062 | Cushions & Throws Kuusela 657 | 2247.58 | 2247.58\n102468 | Plumbing Parts Ahvenisto 279 | 1622.44 | 1476.60\n102538 | Cookware Nordhem 469 | 1882.56 | 1693.80\n101398 | Power Tools Havu Pro 689 | 2181.77 | 2181.77\n101888 | Indoor Lighting Havu 419 | 1064.56 | 1064.56\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:45",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT RANK() OVER (ORDER BY SUM(n.net_sales - n.cost) DESC) AS rank, cp.sku, cp.product_name,\n       ROUND(SUM(n.net_sales - n.cost), 2) AS gross_margin\nFROM net_lines n\nJOIN dim_date d     ON d.calendar_date = n.business_date\nJOIN dim_store cs   ON cs.store_id = n.store_id AND cs.is_current\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 4\n  AND cs.region = 'South'\nGROUP BY cp.sku, cp.product_name\nORDER BY gross_margin DESC\nLIMIT 10\n",
+   "n": 7,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "rank | sku | product_name | gross_margin\n1 | 103075 | Cushions & Throws Tuulikki 338 | 2927.42\n2 | 100955 | Interior Paint Norvik 298 | 2138.48\n3 | 101763 | Fixings & Fasteners Nordhem 594 | 2074.88\n4 | 103390 | Bedroom Peltola 793 | 1859.55\n5 | 100953 | Interior Paint Tuulikki 224 | 1383.86\n6 | 103062 | Cushions & Throws Kuusela 657 | 1346.56\n7 | 102468 | Plumbing Parts Ahvenisto 279 | 1342.48\n8 | 102538 | Cookware Nordhem 469 | 1177.39\n9 | 101398 | Power Tools Havu Pro 689 | 1095.66\n10 | 101888 | Indoor Lighting Havu 419 | 978.84\n(10 rows)"
+  }
+ ]
+}

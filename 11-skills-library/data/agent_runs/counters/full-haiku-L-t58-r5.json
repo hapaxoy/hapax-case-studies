@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-L-t58-r5",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T58",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "059cfdf4ac033806d1b5103abea670b7fe5acb1cc8a9de8cdd61e27f55f2d78f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:37:18",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_year = 'FY2025/26' AND fiscal_period = 2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2025/26 | 2 | FY2025/26 P02 | 2025-05-26 | 2025-06-22\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:37:25",
+   "statement": "WITH params AS (\n    SELECT DATE '2025-05-26' AS start_date, DATE '2025-06-22' AS end_date\n),\nperiod_days AS (\n    SELECT d.calendar_date FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date BETWEEN params.start_date AND params.end_date AND d.is_trading_day\n),\ntrading_days AS (\n    SELECT cs.store_id, COUNT(*) AS trading_days\n    FROM dim_store cs\n    CROSS JOIN period_days pd\n    WHERE cs.is_current AND cs.store_id < 900\n      AND (cs.open_date IS NULL OR cs.open_date <= pd.calendar_date)\n      AND (cs.close_date IS NULL OR cs.close_date >= pd.calendar_date)\n      AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                      WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n    GROUP BY 1\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nstore_sales AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY ss.net_sales / td.trading_days DESC) AS rank, cs.store_id, cs.store_name, cs.format,\n       td.trading_days, ss.net_sales, ROUND(ss.net_sales / td.trading_days, 0) AS net_sales_per_trading_day\nFROM store_sales ss\nJOIN trading_days td ON td.store_id = ss.store_id\nJOIN dim_store cs    ON cs.store_id = ss.store_id AND cs.is_current\nORDER BY rank\n",
+   "n": 2,
+   "ok": true,
+   "rows": 39,
+   "output_preview": "rank | store_id | store_name | format | trading_days | net_sales | net_sales_per_trading_day\n1 | 115 | Tampere Hervanta | Large | 26 | 67349.15 | 2590.0\n2 | 102 | Helsinki Pitäjänmäki | Large | 26 | 55860.66 | 2148.0\n3 | 108 | Lahti | Large | 26 | 44190.85 | 1700.0\n4 | 116 | Tampere Lielahti | Large | 26 | 44030.28 | 1693.0\n5 | 131 | Oulu Kaakkuri | Large | 26 | 43902.35 | 1689.0\n6 | 110 | Turku Kupittaa | Large | 26 | 43320.63 | 1666.0\n7 | 104 | Vantaa Tammisto | Large | 26 | 41753.32 | 1606.0\n8 | 125 | Kuopio | Large | 26 | 39139.74 | 1505.0\n9 | 117 | Tampere Kaleva | Medium | 26 | 37878.72 | 1457.0\n10 | 121 | Vaasa | Medium | 26 | 37558.24 | 1445.0\n11 | 119 | Pori | Medium | 26 | 36385.27 | 1399.0\n12 | 128 | Lappeenranta | Medium | 26 | 35633.18 | 1371.0\n13 | 101 | Helsinki Vuosaari | Medium | 26 | 34066.47 | 1310.0\n14 | 124 | Jyväskylä Palokka | Medium | 26 | 32696.54 | 1258.0\n15 | 118 | Nokia | Medium | 26 | 32175.72 | 1238.0\n16 | 132 | Oulu Linnanmaa | Medium | 26 | 30194.27 | 1161.0\n17 | 126 | Joensuu | Medium | 26 | 29473.43 | 1134.0\n18 | 122 | Seinäjoki | Medium | 26 | 27540.58 | 1059.0\n19 | 136 | Tampere Lamminpää | Medium | 26 | 27295.10 | 1050.0\n20 | 107 | Hyvinkää | Medium | 26 | 26584.74 | 1022.0\n21 | 109 | Hämeenlinna | Medium | 26 | 26106.65 | 1004.0\n22 | 114 | Kouvola | Medium | 26 | 24580.69 | 945.0\n23 | 111 | Turku Härmälä | Medium | 26 | 23845.46 | 917.0\n24 | 103 | Espoo Lommila | Medium | 26 | 23565.97 | 906.0\n25 | 127 | Mikkeli | Medium | 26 | 21756.47 |"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:37:36",
+   "statement": "query-check/scripts/query_check.py --file q.sql --control --control-stores physical --start 2025-05-26 --end 2025-06-22",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 39 rows, 7 columns: rank, store_id, store_name, format, trading_days, net_sales, net_sales_per_trading_day\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2025-05-26 to 2025-06-22 (28 days; fiscal: FY2025/26 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 7 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 13 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2025-05-26 to 2025-06-22, stores: physical, at level: store_id.\n  [INFO] Result total 1,044,877.35; control total 1,044,877.35; gap -0.00.\n  [PASS] No gap above 0.01 at level store_id.\n\n== Preview (first 10 rows) ==\n  rank | store_id | store_name | format | trading_days | net_sales | net_sales_per_trading_day\n  1 | 115 | Tampere Hervanta | Large | 26 | 67349.15 | 2590.0\n  2 | 102 | Helsinki Pit�j�nm�ki | Large | 26 | 55860.66 | 2148.0\n  3 | 108 | Lahti | Large | 2"
+  }
+ ]
+}

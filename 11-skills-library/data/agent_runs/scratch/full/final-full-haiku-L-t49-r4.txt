@@ -1,0 +1,32 @@
+Perfect. I now understand the gap - the control total includes web and training stores (207,538.45), whereas my ATV query correctly filters to physical stores only (store_id &lt; 900), and additionally excludes staff purchases as per the ATV definition. This is the expected behavior.
+
+My ATV calculation is correct. Let me prepare the final response:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period\n)\nSELECT s.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id &lt; 900                         -- stores only: no web, no training store\n  AND NOT f.staff_purchase_flag                -- staff purchases are out of ATV\n  AND p.category &lt;&gt; 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY 1\nORDER BY atv DESC;",
+  "result": {
+    "columns": ["format", "atv"],
+    "rows": [
+      ["Large", 60.67],
+      ["Medium", 60.27],
+      ["Small", 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV (average transaction value): net sales before returns divided by number of receipts",
+    "Store scope: physical stores only (store_id &lt; 900); staff purchases and test articles excluded",
+    "Fiscal calendar: Period 4 of FY2026/27 (fiscal weeks 14-17, 2026-08-03 to 2026-08-30)"
+  ],
+  "assumptions": [
+    "Store format is the same across all store versions, so current-version join unnecessary",
+    "Net sales before returns means sales amounts from fact_sales_line without accounting for returns",
+    "Period 4 is the most recent completed period as of the request date (2026-10-09)"
+  ],
+  "caveats": [
+    "Staff purchases are excluded from ATV per company definition, reducing net sales by €14,796.76",
+    "Category 'ZZ Test' is excluded from the calculation",
+    "Web channel (store 900) and training store (999) are excluded; this is an ATV restriction, not a data issue"
+  ]
+}
+```

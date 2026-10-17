@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t28-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T28",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "c34ca76021e057434f4d4c860589fe2f51fb72673f0912efc335e58d93ca090c",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:48",
+   "statement": "SELECT week_ending_date, count(*) AS n, count(DISTINCT (store_key, product_key)) AS dist_keys, count(DISTINCT etl_loaded_at) AS loads, min(etl_loaded_at) AS min_load, max(etl_loaded_at) AS max_load, sum(closing_units) AS units, min(closing_units) AS min_units\nFROM fact_stock_week\nWHERE week_ending_date BETWEEN DATE '2026-08-23' AND DATE '2026-10-04'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "week_ending_date | n | dist_keys | loads | min_load | max_load | units | min_units\n2026-08-23 | 27143 | 27143 | 1 | 2026-08-24T01:00:00 | 2026-08-24T01:00:00 | 214218 | 2\n2026-08-30 | 27143 | 27143 | 1 | 2026-08-31T01:00:00 | 2026-08-31T01:00:00 | 213666 | 2\n2026-09-06 | 27143 | 27143 | 1 | 2026-09-07T01:00:00 | 2026-09-07T01:00:00 | 212544 | 2\n2026-09-13 | 27143 | 27143 | 1 | 2026-09-14T01:00:00 | 2026-09-14T01:00:00 | 212352 | 2\n2026-09-20 | 27143 | 27143 | 1 | 2026-09-21T01:00:00 | 2026-09-21T01:00:00 | 211748 | 2\n2026-09-27 | 27143 | 27143 | 1 | 2026-09-28T01:00:00 | 2026-09-28T01:00:00 | 211157 | 2\n2026-10-04 | 27143 | 27143 | 1 | 2026-10-05T01:00:00 | 2026-10-05T01:00:00 | 210323 | 2\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:56",
+   "statement": "SELECT count(*) AS n, count(DISTINCT (s.store_id, p.sku)) AS dist_nat,\n count(DISTINCT s.store_id) AS stores, min(s.store_id) AS min_store, max(s.store_id) AS max_store,\n sum(CASE WHEN s.store_id >= 900 THEN 1 ELSE 0 END) AS rows_900plus,\n sum(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS rows_test,\n sum(CASE WHEN p.delisted_on IS NOT NULL AND p.delisted_on <= DATE '2026-09-27' THEN 1 ELSE 0 END) AS rows_delisted,\n sum(CASE WHEN s.close_date IS NOT NULL THEN 1 ELSE 0 END) AS rows_closed_store,\n sum(CASE WHEN fs.closing_units<=0 THEN 1 ELSE 0 END) AS nonpos,\n sum(CASE WHEN s.valid_from > DATE '2026-09-27' OR s.valid_to < DATE '2026-09-27' OR p.valid_from > DATE '2026-09-27' OR p.valid_to < DATE '2026-09-27' THEN 1 ELSE 0 END) AS stale_versions\nFROM fact_stock_week fs JOIN dim_store s ON s.store_key=fs.store_key JOIN dim_product p ON p.product_key=fs.product_key\nWHERE fs.week_ending_date = DATE '2026-09-27'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | dist_nat | stores | min_store | max_store | rows_900plus | rows_test | rows_delisted | rows_closed_store | nonpos | stale_versions\n27143 | 27143 | 38 | 101 | 139 | 0 | 0 | 0 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:04",
+   "statement": "SELECT count(*) AS n, count(DISTINCT sales_line_id) AS dist_ids, count(DISTINCT (receipt_id, line_no)) AS dist_rl,\n count(DISTINCT etl_loaded_at) AS loads, min(sale_date) AS d0, max(sale_date) AS d1, count(DISTINCT sale_date) AS days,\n sum(CASE WHEN quantity<=0 THEN 1 ELSE 0 END) AS nonpos_qty,\n sum(CASE WHEN s.store_id>=900 THEN 1 ELSE 0 END) AS rows_900plus,\n sum(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS test_rows\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2026-08-24' AND DATE '2026-09-20'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | dist_ids | dist_rl | loads | d0 | d1 | days | nonpos_qty | rows_900plus | test_rows\n47032 | 47032 | 47032 | 28 | 2026-08-24 | 2026-09-20 | 28 | 0 | 6681 | 40\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:12",
+   "statement": "WITH params AS (\n    SELECT DATE '2026-09-27' AS week_ending\n),\nclosing AS (\n    SELECT cp.category, SUM(fs.closing_units) AS closing_units\n    FROM fact_stock_week fs\n    JOIN dim_store s    ON s.store_key = fs.store_key\n    JOIN dim_product p  ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date = params.week_ending\n      AND s.store_id < 900 AND p.category <> 'ZZ Test'\n    GROUP BY 1\n),\nsold AS (\n    SELECT cp.category, SUM(f.quantity) AS units_sold_4w\n    FROM fact_sales_line f\n    JOIN dim_store s    ON s.store_key = f.store_key\n    JOIN dim_product p  ON p.product_key = f.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7\n      AND s.store_id < 900 AND p.category <> 'ZZ Test'\n    GROUP BY 1\n)\nSELECT 'FY2026/27' AS fiscal_year, 5 AS fiscal_period, c.category, c.closing_units,\n       ROUND(s.units_sold_4w / 4.0, 1) AS avg_weekly_units_sold,\n       ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) AS weeks_of_cover\nFROM closing c LEFT JOIN sold s ON s.category = c.category\nORDER BY c.category\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "fiscal_year | fiscal_period | category | closing_units | avg_weekly_units_sold | weeks_of_cover\nFY2026/27 | 5 | Bathroom & Plumbing | 12237 | 1057.8 | 11.6\nFY2026/27 | 5 | Cleaning & Household | 18212 | 2393.5 | 7.6\nFY2026/27 | 5 | Electrical | 23887 | 2601.3 | 9.2\nFY2026/27 | 5 | Furniture | 4963 | 168.0 | 29.5\nFY2026/27 | 5 | Garden | 45196 | 2751.3 | 16.4\nFY2026/27 | 5 | Home Textiles & Decor | 18354 | 1504.3 | 12.2\nFY2026/27 | 5 | Kitchen & Dining | 14037 | 961.8 | 14.6\nFY2026/27 | 5 | Paint & Decorating | 18302 | 1453.8 | 12.6\nFY2026/27 | 5 | Seasonal | 25570 | 524.3 | 48.8\nFY2026/27 | 5 | Tools & Hardware | 30399 | 3943.8 | 7.7\n(10 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:04:17",
+   "statement": "fiscal-calendar/scripts/fiscal.py last period --as-of 2026-10-07",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: last period    as of: 2026-10-07    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: 'Last period' = the last completed fiscal period (CAL-RELATIVE).\n\n[exit code 0]"
+  }
+ ]
+}

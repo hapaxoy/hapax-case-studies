@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.receipt_id, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id AND s.store_id = 900 WHERE f.sale_date BETWEEN DATE '2026-04-01' AND DATE '2026-08-31' AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND NOT f.staff_purchase_flag) SELECT 'FY2026/27' AS fiscal_year, 1 AS first_fiscal_period, 3 AS last_fiscal_period, ROUND(SUM(net_amount) / COUNT(DISTINCT receipt_id), 2) AS atv_eur FROM lines WHERE business_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'",
+  "result": {
+    "columns": ["fiscal_year", "first_fiscal_period", "last_fiscal_period", "atv_eur"],
+    "rows": [["FY2026/27", 1, 3, 56.14]]
+  },
+  "definitions_applied": [
+    "ATV = net sales before returns (net_amount, excluding VAT) divided by the number of distinct sales receipts",
+    "Staff purchases (staff_purchase_flag) left out of ATV",
+    "Store 999 (training store) and category ZZ Test left out",
+    "Web shop (store_id 900) identified by store_id, not channel_code or channel_id",
+    "Web orders dated on the Helsinki dispatch date (status delivered or collected); cancelled and processing orders have no sales lines and are not counted",
+    "Stores dated by sale_date",
+    "Fiscal calendar: P1 to P3 of FY2026/27 = Monday 4 May 2026 to Sunday 2 August 2026 (4+4+5 weeks)",
+    "Control total: store-level receipts and net sales before returns checked against rpt_daily_store_sales"
+  ],
+  "assumptions": [
+    "\"This year\" is read as the current fiscal year, FY2026/27. \"Periods 1 to 3\" are fiscal periods, which is the first quarter. All three periods are complete.",
+    "\"The whole company\" is read as all physical stores plus the web shop, giving one figure.",
+    "Web orders are dated on the Helsinki dispatch date, which is the company's date for web sales. For click-and-collect this is the date the order was ready for collection. Dating web orders by order date instead would move a few hundred web lines across the period boundaries.",
+    "Each web order counts as one receipt, the same way a store receipt does."
+  ],
+  "caveats": [
+    "Correction: the company ATV definition covers stores only and leaves web orders out. Mika asked for web orders to be included, so I followed the request and added web orders (store 900) as receipts. For comparison, the stores-only ATV is 55.52 EUR on 66,984 receipts. The web-only ATV is 59.33 EUR on 13,004 orders. This figure is therefore not comparable with ATV figures that exclude web.",
+    "Correction: three web test orders with ZZ Test articles, dispatched in the period, were removed. This does not change the figure at the rounding shown.",
+    "Staff purchases are excluded, as in the standard ATV. No web lines carry the staff flag.",
+    "The stores part reconciles exactly with rpt_daily_store_sales. Across all stores and days in the period, receipts (68,021) and net sales before returns (3,767,921.27 EUR) match to the cent. That comparison included staff receipts, because the control table does not exclude them. It does not cover web.",
+    "The result is net sales before returns, excluding VAT: 4,490,717.08 EUR over 79,988 receipts (staff, store 999 and test articles excluded).",
+    "I did not use rpt.v_daily_sales or any stg_, bak_, tmp_ or _old table, and I did not use channel_code.",
+    "Kuopio (store 125) is shut for refit from 15 June to 26 July 2026. Its receipts only cover the weeks it traded, so no adjustment was needed for ATV."
+  ]
+}
+```

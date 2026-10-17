@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH params AS (SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period) SELECT s.format, ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date CROSS JOIN params WHERE s.store_id < 900 AND NOT f.staff_purchase_flag AND p.category <> 'ZZ Test' AND d.fiscal_year = params.fiscal_year AND d.fiscal_period = params.fiscal_period GROUP BY s.format ORDER BY s.format",
+  "result": {
+    "columns": ["format", "atv"],
+    "rows": [
+      ["Large", 60.67],
+      ["Medium", 60.27],
+      ["Small", 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV = net sales before returns (EUR, excluding VAT) divided by the number of distinct sales receipts",
+    "ATV is a store measure: physical stores only (store_id below 900), so the web shop is excluded",
+    "Staff purchases excluded (staff_purchase_flag)",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Sales dated by sale_date (Helsinki business date); returns do not enter ATV",
+    "Fiscal period 4 taken from dim_date (fiscal_year FY2026/27, fiscal_period 4)",
+    "Format taken from dim_store on the sale date's store version; the format is the same in every store version",
+    "Control total: store-day net sales before returns and receipt counts checked against rpt_daily_store_sales"
+  ],
+  "assumptions": [
+    "\"Period 4 this year\" was read as fiscal period 4 of the current fiscal year, FY2026/27. The period runs 3 August to 30 August 2026 (fiscal weeks 14 to 17) and was fully loaded when the request was received on 6 October 2026.",
+    "\"Store format\" means the dim_store format (Large, Medium, Small). The Web and Training formats do not appear because web orders and store 999 are outside ATV.",
+    "ATV for a format is total net sales before returns divided by total receipts in all its stores, not an average of the store-level ATVs.",
+    "Result values are in EUR excluding VAT, rounded to 2 decimals."
+  ],
+  "caveats": [
+    "Corrections and exclusions applied: web shop (store 900), staff purchases, store 999 and ZZ Test articles were left out of ATV. In the period this removed 3,229 web receipts, 55 receipts at store 999 and 24 ZZ Test receipts, plus staff receipts at the stores. Staff purchases are 280 receipts, shown by the control reconciliation below.",
+    "Receipts behind the figures: Large 6,508, Medium 8,641, Small 2,598 (17,747 in total). Net sales before returns: Large 394,865.46, Medium 520,763.45, Small 131,841.05 (EUR, excluding VAT).",
+    "Checks found no data problems in the period: no duplicate sales lines at receipt and line number, no receipt spanning several stores, dates or staff flags, and no zero or negative quantities or amounts.",
+    "Including staff purchases, store-day net sales before returns and receipt counts match rpt_daily_store_sales exactly for all 1,064 store-days (38 trading physical stores x 28 days; Savonlinna closed 25 January 2026), 1,062,266.72 EUR and 18,027 receipts.",
+    "The deprecated views rpt.v_daily_sales and rpt.v_weekly_store_sales were not used.",
+    "Small stores have a clearly lower ATV, about 10 EUR below Large and Medium. Large and Medium differ by only 0.40 EUR."
+  ]
+}
+```

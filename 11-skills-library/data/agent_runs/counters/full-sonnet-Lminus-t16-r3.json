@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t16-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T16",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "d7cb093b7e385158ffc68fe68438129fd3cdf99a3ba602ee665212505f37fe20",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:09",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, weeks_in_period, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_period IN (9,10) ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | fully_loaded\nFY2024/25 | 9 | FY2024/25 P09 | 2024-12-23 | 2025-01-26 | 5 | true\nFY2024/25 | 10 | FY2024/25 P10 | 2025-01-27 | 2025-02-23 | 4 | true\nFY2025/26 | 9 | FY2025/26 P09 | 2025-12-22 | 2026-01-25 | 5 | true\nFY2025/26 | 10 | FY2025/26 P10 | 2026-01-26 | 2026-02-22 | 4 | true\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:16",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 9 AS first_period, 10 AS last_period\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n    SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, o.fulfilment_type, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period,\n       SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) AS click_collect_net,\n       SUM(l.net_sales) AS web_net,\n       ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 1) AS click_collect_share_pct\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.business_date\nCROSS JOIN params\nWHERE d.fiscal_year = params.fiscal_year AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1,2\nORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | click_collect_net | web_net | click_collect_share_pct\nFY2025/26 | 9 | 58536.07 | 200208.58 | 29.2\nFY2025/26 | 10 | 37861.39 | 123131.15 | 30.7\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:18",
+   "statement": "SELECT count(*) AS n, count(DISTINCT web_order_id) AS d, count(*) FILTER (WHERE order_ts_utc >= TIMESTAMP '2025-12-01' AND order_ts_utc < TIMESTAMP '2026-03-01') AS n_window, (SELECT count(*) - count(DISTINCT (receipt_id, line_no)) FROM fact_sales_line) AS dup_sales_lines, (SELECT count(*) - count(DISTINCT return_line_id) FROM fact_return_line) AS dup_returns FROM fact_web_order\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | n_window | dup_sales_lines | dup_returns\n94876 | 94876 | 10696 | 418 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:22",
+   "statement": "WITH d AS (\n  SELECT receipt_id, line_no, count(*) c, count(DISTINCT sales_line_id) ids, min(sale_date) sd, min(channel_code) cc, min(store_key) sk, count(DISTINCT net_amount) nets, count(DISTINCT etl_loaded_at) loads\n  FROM fact_sales_line GROUP BY 1,2 HAVING count(*)>1)\nSELECT strftime(sd,'%Y-%m') ym, cc, count(*) groups, sum(c) lines, max(ids) max_ids, max(nets) max_nets, max(loads) max_loads FROM d GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"groups\"\n\nLINE 4: SELECT strftime(sd,'%Y-%m') ym, cc, count(*) groups, sum(c) lines, max(ids) max_ids, max(nets) max_nets...\n                                                     ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:26",
+   "statement": "WITH d AS (\n  SELECT receipt_id, line_no, count(*) c, count(DISTINCT sales_line_id) ids, min(sale_date) sd, min(channel_code) cc, min(store_key) sk, count(DISTINCT net_amount) nets, count(DISTINCT etl_loaded_at) loads\n  FROM fact_sales_line GROUP BY 1,2 HAVING count(*)>1)\nSELECT strftime(sd,'%Y-%m') ym, cc, count(*) n_groups, sum(c) n_lines, max(ids) max_ids, max(nets) max_nets, max(loads) max_loads FROM d GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "ym | cc | n_groups | n_lines | max_ids | max_nets | max_loads\n2025-09 | ST | 418 | 836 | 2 | 1 | 2\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:31",
+   "statement": "SELECT d.fiscal_period, sum(r.net_sales) control_web_net, sum(r.net_sales_before_returns) before_ret, sum(r.returns_net) ret\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\nWHERE r.store_id = 900 AND d.fiscal_year='FY2025/26' AND d.fiscal_period IN (9,10) GROUP BY 1 ORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_period | control_web_net | before_ret | ret\n9 | 200208.58 | 219929.50 | 19720.92\n10 | 123131.15 | 137569.07 | 14437.92\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:33",
+   "statement": "SELECT status, fulfilment_type, count(*) n, count(dispatch_ts_utc) with_dispatch, min(order_ts_utc) mn, max(order_ts_utc) mx\nFROM fact_web_order WHERE order_ts_utc >= TIMESTAMP '2025-12-15' AND order_ts_utc < TIMESTAMP '2026-03-05' GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 7,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "status | fulfilment_type | n | with_dispatch | mn | mx\ncancelled | click_and_collect | 104 | 0 | 2025-12-15T11:52:56 | 2026-03-03T15:15:13\ncancelled | home_delivery | 269 | 0 | 2025-12-15T10:45:02 | 2026-03-04T17:27:16\ncollected | click_and_collect | 2483 | 2483 | 2025-12-15T01:35:50 | 2026-03-04T20:58:32\ndelivered | home_delivery | 6042 | 6042 | 2025-12-15T01:15:37 | 2026-03-04T23:09:07\n(4 rows)"
+  }
+ ]
+}

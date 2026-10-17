@@ -1,0 +1,45 @@
+```json
+{
+  "sql": "WITH wk AS (SELECT DISTINCT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date FROM dim_date WHERE fiscal_year IN ('FY2024/25','FY2025/26') AND fiscal_quarter = 3), store_weeks AS (SELECT st.store_id, w.fiscal_year, w.fiscal_week, (st.open_date IS NULL OR st.open_date &lt;= w.fiscal_week_start_date) AND (st.close_date IS NULL OR st.close_date &gt;= w.fiscal_week_end_date) AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id = st.store_id AND c.closure_start_date &lt;= w.fiscal_week_end_date AND c.closure_end_date &gt;= w.fiscal_week_start_date) AS trading FROM dim_store st CROSS JOIN wk w WHERE st.is_current AND st.store_id &lt; 900), lfl_store_weeks AS (SELECT ty.store_id, ty.fiscal_week FROM store_weeks ty JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = 'FY2024/25' JOIN dim_store st ON st.store_id = ty.store_id AND st.is_current WHERE ty.fiscal_year = 'FY2025/26' AND ty.trading AND ly.trading AND (st.open_date IS NULL OR st.open_date &lt;= DATE '2025-10-27' - 364)), net_lines AS (SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id &lt; 900 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt; 900 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'), lfl_sales AS (SELECT cs.region, d.fiscal_year, SUM(n.net_sales) AS net_sales FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current WHERE d.fiscal_year IN ('FY2025/26','FY2024/25') AND d.fiscal_quarter = 3 GROUP BY 1, 2) SELECT ty.region, 'FY2025/26' AS fiscal_year, 3 AS fiscal_quarter, ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct FROM lfl_sales ty JOIN lfl_sales ly ON ly.region = ty.region AND ly.fiscal_year = 'FY2024/25' WHERE ty.fiscal_year = 'FY2025/26' ORDER BY ty.region",
+  "result": {
+    "columns": ["region", "fiscal_year", "fiscal_quarter", "lfl_growth_pct"],
+    "rows": [
+      ["Capital Region", "FY2025/26", 3, 0.36],
+      ["East", "FY2025/26", 3, 1.62],
+      ["North", "FY2025/26", 3, 6.73],
+      ["South", "FY2025/26", 3, 0.02],
+      ["West", "FY2025/26", 3, 4.77]
+    ]
+  },
+  "definitions_applied": [
+    "LFL growth: net sales in LFL stores for the period vs the same fiscal weeks last year, week by week, physical stores only",
+    "LFL store base: open at least 364 days before the first day of the period (open_date &lt;= 2025-10-27 minus 364 days)",
+    "LFL store-week: the store traded in that fiscal week in both years (open_date, close_date and ref_store_closure checked)",
+    "Net sales: net_amount excluding VAT, minus refunds (refund_net) on their return date",
+    "Store 999 and category ZZ Test excluded",
+    "Web shop (store 900) excluded from LFL",
+    "Regions as-is: current dim_store version, so Capital Region covers stores 101-105 in both years",
+    "Fiscal calendar: fiscal_year and fiscal_quarter from dim_date, weeks 27 to 39 of each year compared by fiscal week, not calendar date",
+    "Control total: store-level net sales checked against rpt_daily_store_sales",
+    "Open and close dates taken from the current dim_store version"
+  ],
+  "assumptions": [
+    "The request was received on 5 October 2026 (FY2026/27). I read 'Q3 last year' as Q3 of FY2025/26: weeks 27 to 39, 27 Oct 2025 to 25 Jan 2026. This follows the 12 to 27 May 2026 precedent that took 'last year' as FY2025/26 (REQ-D04, REQ-D08).",
+    "The comparator is Q3 of FY2024/25: weeks 27 to 39, 28 Oct 2024 to 26 Jan 2025.",
+    "Regions are as-is, the management-reporting default. The requester did not ask for as-was.",
+    "One row per region, because the request asks for a breakdown by region. There is no total row.",
+    "Both quarters have 13 weeks and week 53 is not in the range, so it does not affect the result.",
+    "Savonlinna (129) closed on 25 Jan 2026, which is the last Sunday of week 39. I counted it as trading in all 13 weeks, which the rule (close_date on or after the week's Sunday) gives. It has sales in all 13 weeks in both years.",
+    "Percentages are net sales growth, rounded to 2 decimals."
+  ],
+  "caveats": [
+    "Lohja (137) is left out of the LFL base. It opened on 4 Nov 2024, which is after 28 Oct 2024 (the opening-rule cut-off of 2025-10-27 minus 364 days). It did not trade in week 27 of the comparator year, and it joins the base on 3 Nov 2025 (week 28), after the quarter starts. This follows the REQ-D08 precedent. 38 stores are in the base: Capital Region 5, East 8, North 6, South 9, West 10.",
+    "Tampere Lamminpää (136) opened on 2 Sep 2024, so it is in the base. Its sales grew from about 70.6k to 98.0k (about 39%) as a young store, which lifts the West figure of 4.77%. The result is correct under the rule, but the West number is flattered by that one store.",
+    "Neither refit closure (Pori 8 Sep to 12 Oct 2025, Tammisto 8 Jul to 11 Aug 2024) overlaps Q3 in either year. No store-weeks dropped out for refits.",
+    "I found 418 duplicated sales lines: the same receipt_id and line_no loaded twice with different sales_line_id, on 15 to 21 Sep 2025 (fiscal week 21 of FY2025/26). They fall outside both Q3 windows, so they do not affect this answer. They would double-count any sales query covering that week.",
+    "Store-level net sales (sales plus returns) for Q3 of both years match rpt_daily_store_sales exactly for every physical store, so no unexplained gap.",
+    "I did not use channel_code or rpt.v_daily_sales. The deprecated objects are not involved, since web is not in LFL.",
+    "Returns are booked on their return date, so some Q3 sales may still be returned after the quarter. This is the company definition and was not adjusted."
+  ]
+}
+```

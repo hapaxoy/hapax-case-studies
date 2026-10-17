@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH p AS (SELECT min(calendar_date) AS period_start, max(calendar_date) AS period_end FROM dim_date WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 2), sold AS (SELECT st.format, sum(f.net_amount) AS sold_net FROM fact_sales_line f JOIN dim_store st ON st.store_key = f.store_key, p WHERE f.sale_date BETWEEN p.period_start AND p.period_end AND NOT f.staff_purchase_flag AND st.store_id &lt; 900 GROUP BY 1), ret AS (SELECT st.format, sum(r.refund_net) AS refunded_net FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_store st ON st.store_key = f.store_key, p WHERE f.sale_date BETWEEN p.period_start AND p.period_end AND NOT f.staff_purchase_flag AND st.store_id &lt; 900 GROUP BY 1) SELECT 'FY2025/26' AS fiscal_year, 2 AS fiscal_period, sold.format AS store_format, round(ret.refunded_net / sold.sold_net * 100, 2) AS returned_share_pct FROM sold JOIN ret USING (format) ORDER BY CASE sold.format WHEN 'Large' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_format", "returned_share_pct"],
+    "rows": [
+      ["FY2025/26", 2, "Large", 4.45],
+      ["FY2025/26", 2, "Medium", 4.56],
+      ["FY2025/26", 2, "Small", 4.3]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal period 2 of FY2025/26 (2025-05-26 to 2025-06-22, from dim_date and ref_fiscal_calendar)",
+    "Net sales and refunds both in EUR excluding VAT (net_amount and refund_net)",
+    "Store format taken from dim_store through the store_key on the original sales line (the store version at the sale date)",
+    "Returns linked to the sales line they came from (sales_line_id)",
+    "Staff purchases excluded (staff_purchase_flag)",
+    "Training store (999) and web shop (900) are not stores and are excluded; the web shop has no store format"
+  ],
+  "assumptions": [
+    "Today is 2026-10-06, which falls in FY2026/27, so 'last year' means FY2025/26 and 'period 2' means fiscal period 2, not calendar month 2.",
+    "'What share of what was sold came back' is read as the EUR value (excluding VAT) of refunds on lines sold in the period, divided by the net value sold in the period.",
+    "Returns are counted whenever they happened, so a line sold in the period and returned in July still counts. The longest gap between sale and return is 34 days, and the warehouse holds returns well past the period (to at least 2025-07-23), so the cohort is complete.",
+    "Staff purchases are left out because they are a different kind of sale, with a much lower return rate (about 2%). Including them changes the figures by less than 0.05 percentage points.",
+    "The web shop is reported separately in the caveats and not as a store format row."
+  ],
+  "caveats": [
+    "Format labels in dim_store are Large, Medium and Small, but the column comment says Hyper, Standard or Express. I used the labels the data carries. The mapping to the comment's names is not documented.",
+    "Training store 999 (format 'Training') has sales in the period, 2,222 EUR net. I excluded it because it is not a trading store.",
+    "The web shop (format 'Web') is excluded from the split. Its returned share for the same period and basis is 12.23% (22,388 EUR refunded on 183,102 EUR sold), well above the stores. A total across all channels would therefore be higher than the three rows suggest.",
+    "Returns are attributed to the format of the store where the item was sold, not where it was returned. 156 of the 2,514 returns tied to this period (sales or refunds in it) were booked at a different store version than the sale. Using the return's own store_key would move some refunds between formats.",
+    "A booked-in-period basis (refunds booked in P2 divided by sales in P2, as the daily store sales report does) gives a different answer: Large 5.36%, Medium 5.26%, Small 4.48%. It includes refunds on sales from earlier periods and staff purchases, so it is not the share of what was sold in the period.",
+    "Several store attributes changed on 2025-04-28 (the Capital Region stores moved from South). That affects region only, not format, so the format split is unaffected.",
+    "Row counts: 53,094 sales lines in the period (784 staff purchases excluded), with no duplicate sales lines or return lines found and no returns without a matching sale."
+  ]
+}
+```

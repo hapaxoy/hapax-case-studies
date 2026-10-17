@@ -1,0 +1,85 @@
+{
+ "run_id": "full-sonnet-D-t01-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T01",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "3470d9dcdcc4e6892460f3ed088f516fff0a449e83303458eb8a4fba59e1f6d2",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:38:59",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_period=4 AND fiscal_year IN ('FY2025/26','FY2026/27')\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2025/26 | 4 | 2025-07-28 | 2025-08-24 | 14 | 17 | true\nFY2026/27 | 4 | 2026-08-03 | 2026-08-30 | 14 | 17 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:00",
+   "statement": "SELECT store_key, store_id, store_name, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE store_id>=900 OR open_date IS NOT NULL OR close_date IS NOT NULL OR store_id IN (119,125,104) ORDER BY store_id, valid_from\n",
+   "n": 2,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "store_key | store_id | store_name | region | format | open_date | close_date | valid_from | valid_to | is_current\n7 | 104 | Vantaa Tammisto | South | Large | NULL | NULL | 2000-01-01 | 2025-04-27 | false\n8 | 104 | Vantaa Tammisto | Capital Region | Large | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n25 | 119 | Pori | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n31 | 125 | Kuopio | East | Large | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n35 | 129 | Savonlinna | East | Small | NULL | 2026-01-25 | 2000-01-01 | 9999-12-31 | true\n42 | 136 | Tampere Lamminpää | West | Medium | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n43 | 137 | Lohja | South | Small | 2024-11-04 | NULL | 2024-11-04 | 9999-12-31 | true\n46 | 900 | Tuomimetsä web shop | Online | Web | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n47 | 999 | Training store | Head office | Training | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:08",
+   "statement": "SELECT 'closure' k, CAST(store_id AS VARCHAR) a, closure_type b, CAST(closure_start_date AS VARCHAR) c, CAST(closure_end_date AS VARCHAR) d FROM ref_store_closure\nUNION ALL\nSELECT 'dupes_sales', d.fiscal_year, CAST(COUNT(*) AS VARCHAR), CAST(COUNT(DISTINCT (f.receipt_id, f.line_no)) AS VARCHAR), CAST(COUNT(DISTINCT f.sales_line_id) AS VARCHAR)\nFROM fact_sales_line f JOIN dim_date d ON d.calendar_date=f.sale_date WHERE d.fiscal_period=4 AND d.fiscal_year IN ('FY2025/26','FY2026/27') GROUP BY d.fiscal_year\nUNION ALL\nSELECT 'dupes_ret', d.fiscal_year, CAST(COUNT(*) AS VARCHAR), CAST(COUNT(DISTINCT return_line_id) AS VARCHAR), CAST(COUNT(DISTINCT r.sales_line_id) AS VARCHAR)\nFROM fact_return_line r JOIN dim_date d ON d.calendar_date=r.return_date WHERE d.fiscal_period=4 AND d.fiscal_year IN ('FY2025/26','FY2026/27') GROUP BY d.fiscal_year\nUNION ALL\nSELECT 'stores_count', CAST(COUNT(DISTINCT store_id) AS VARCHAR), CAST(COUNT(*) AS VARCHAR), '', '' FROM dim_store WHERE store_id<900\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "k | a | b | c | d\nclosure | 104 | refit | 2024-07-08 | 2024-08-11\nclosure | 119 | refit | 2025-09-08 | 2025-10-12\nclosure | 125 | refit | 2026-06-15 | 2026-07-26\ndupes_sales | FY2026/27 | 48107 | 48107 | 48107\ndupes_sales | FY2025/26 | 47097 | 47097 | 47097\ndupes_ret | FY2025/26 | 1801 | 1801 | 1801\ndupes_ret | FY2026/27 | 1926 | 1926 | 1926\nstores_count | 39 | 45 |  | \n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:17",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nmine AS (\n  SELECT d.fiscal_year, n.store_id, SUM(n.net_sales) AS ns\n  FROM net_lines n JOIN dim_date d ON d.calendar_date=n.business_date\n  WHERE d.fiscal_period=4 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND n.store_id<900 GROUP BY 1,2\n),\nctl AS (\n  SELECT d.fiscal_year, r.store_id, SUM(r.net_sales) AS cs\n  FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\n  WHERE d.fiscal_period=4 AND d.fiscal_year IN ('FY2025/26','FY2026/27') GROUP BY 1,2\n)\nSELECT COALESCE(m.fiscal_year,c.fiscal_year) fy, COALESCE(m.store_id,c.store_id) sid, m.ns, c.cs, ROUND(COALESCE(m.ns,0)-COALESCE(c.cs,0),2) diff\nFROM mine m FULL JOIN ctl c ON c.fiscal_year=m.fiscal_year AND c.store_id=m.store_id\nWHERE ABS(COALESCE(m.ns,0)-COALESCE(c.cs,0))>0.5 OR m.ns IS NULL OR c.cs IS NULL\nORDER BY 1,2\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fy | sid | ns | cs | diff\nFY2025/26 | 900 | NULL | 155372.15 | -155372.15\nFY2026/27 | 900 | NULL | 184965.47 | -184965.47\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:24",
+   "statement": "WITH x AS (\n SELECT r.store_id, st.store_name, st.open_date, st.close_date,\n  SUM(CASE WHEN d.fiscal_year='FY2026/27' THEN r.net_sales END) ty,\n  SUM(CASE WHEN d.fiscal_year='FY2025/26' THEN r.net_sales END) ly,\n  COUNT(DISTINCT CASE WHEN d.fiscal_year='FY2026/27' THEN d.fiscal_week END) wk_ty,\n  COUNT(DISTINCT CASE WHEN d.fiscal_year='FY2025/26' THEN d.fiscal_week END) wk_ly,\n  COUNT(DISTINCT CASE WHEN d.fiscal_year='FY2026/27' THEN d.calendar_date END) days_ty,\n  COUNT(DISTINCT CASE WHEN d.fiscal_year='FY2025/26' THEN d.calendar_date END) days_ly\n FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\n JOIN dim_store st ON st.store_id=r.store_id AND st.is_current\n WHERE d.fiscal_period=4 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND r.store_id<900 GROUP BY 1,2,3,4)\nSELECT *, ROUND(100.0*(ty/ly-1),1) g FROM x ORDER BY g\n",
+   "n": 5,
+   "ok": true,
+   "rows": 39,
+   "output_preview": "store_id | store_name | open_date | close_date | ty | ly | wk_ty | wk_ly | days_ty | days_ly | g\n127 | Mikkeli | NULL | NULL | 19921.39 | 27002.23 | 4 | 4 | 28 | 28 | -26.2\n109 | Hämeenlinna | NULL | NULL | 23588.06 | 28614.15 | 4 | 4 | 28 | 28 | -17.6\n105 | Kerava | NULL | NULL | 8503.09 | 10118.08 | 4 | 4 | 28 | 28 | -16.0\n138 | Iisalmi | NULL | NULL | 8976.69 | 10024.01 | 4 | 4 | 28 | 28 | -10.4\n119 | Pori | NULL | NULL | 32011.94 | 35671.41 | 4 | 4 | 28 | 28 | -10.3\n110 | Turku Kupittaa | NULL | NULL | 41376.61 | 45165.18 | 4 | 4 | 28 | 28 | -8.4\n126 | Joensuu | NULL | NULL | 30156.45 | 32760.33 | 4 | 4 | 28 | 28 | -7.9\n113 | Salo | NULL | NULL | 9555.04 | 10100.56 | 4 | 4 | 28 | 28 | -5.4\n106 | Porvoo | NULL | NULL | 11133.95 | 11697.17 | 4 | 4 | 28 | 28 | -4.8\n122 | Seinäjoki | NULL | NULL | 25295.06 | 26236.96 | 4 | 4 | 28 | 28 | -3.6\n115 | Tampere Hervanta | NULL | NULL | 64076.81 | 66117.96 | 4 | 4 | 28 | 28 | -3.1\n132 | Oulu Linnanmaa | NULL | NULL | 30420.56 | 31193.18 | 4 | 4 | 28 | 28 | -2.5\n136 | Tampere Lamminpää | 2024-09-02 | NULL | 29819.11 | 30449.95 | 4 | 4 | 28 | 28 | -2.1\n121 | Vaasa | NULL | NULL | 31410.77 | 31970.99 | 4 | 4 | 28 | 28 | -1.8\n104 | Vantaa Tammisto | NULL | NULL | 41196.69 | 41971.64 | 4 | 4 | 28 | 28 | -1.8\n116 | Tampere Lielahti | NULL | NULL | 40365.05 | 40872.94 | 4 | 4 | 28 | 28 | -1.2\n101 | Helsinki Vuosaari | NULL | NULL | 31715.79 | 31622.99 | 4 | 4 | 28 | 28 | 0.3\n117 | Tampere Kaleva | NULL | NULL | 37826.15 | 37532.97 | 4 | 4 "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:30",
+   "statement": "SELECT r.store_id, d.fiscal_week, SUM(CASE WHEN d.fiscal_year='FY2026/27' THEN r.net_sales END) ty, SUM(CASE WHEN d.fiscal_year='FY2025/26' THEN r.net_sales END) ly,\n SUM(CASE WHEN d.fiscal_year='FY2026/27' THEN r.receipts END) rc_ty, SUM(CASE WHEN d.fiscal_year='FY2025/26' THEN r.receipts END) rc_ly\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\nWHERE d.fiscal_week BETWEEN 14 AND 17 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND r.store_id IN (127,109,105,138,115)\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 6,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "store_id | fiscal_week | ty | ly | rc_ty | rc_ly\n105 | 14 | 2559.36 | 2314.89 | 46 | 54\n105 | 15 | 2468.59 | 1834.44 | 53 | 44\n105 | 16 | 1714.40 | 2941.22 | 41 | 51\n105 | 17 | 1760.74 | 3027.53 | 37 | 55\n109 | 14 | 6217.37 | 7631.92 | 113 | 122\n109 | 15 | 6472.50 | 6786.34 | 130 | 106\n109 | 16 | 4583.27 | 7439.06 | 107 | 120\n109 | 17 | 6314.92 | 6756.83 | 120 | 123\n115 | 14 | 15947.82 | 16645.34 | 288 | 278\n115 | 15 | 15504.93 | 17186.50 | 281 | 277\n115 | 16 | 15386.70 | 16024.86 | 265 | 276\n115 | 17 | 17237.36 | 16261.26 | 268 | 283\n127 | 14 | 5295.13 | 6452.83 | 103 | 118\n127 | 15 | 5183.89 | 7221.41 | 107 | 112\n127 | 16 | 4576.14 | 5947.95 | 91 | 99\n127 | 17 | 4866.23 | 7380.04 | 95 | 112\n138 | 14 | 2330.88 | 3101.06 | 44 | 55\n138 | 15 | 2277.05 | 2043.59 | 53 | 35\n138 | 16 | 2467.44 | 2814.86 | 58 | 49\n138 | 17 | 1901.32 | 2064.50 | 48 | 46\n(20 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:32",
+   "statement": "SELECT d.fiscal_year, COUNT(*) n_lines, COUNT(DISTINCT f.sales_line_id) n_ids, COUNT(DISTINCT f.etl_loaded_at) loads, MIN(f.etl_loaded_at) mn, MAX(f.etl_loaded_at) mx,\n SUM(CASE WHEN f.store_key NOT IN (SELECT store_key FROM dim_store) THEN 1 ELSE 0 END) orphan_store,\n SUM(CASE WHEN f.net_amount<0 THEN 1 ELSE 0 END) neg_lines,\n SUM(CASE WHEN f.quantity<=0 THEN 1 ELSE 0 END) nonpos_qty\nFROM fact_sales_line f JOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE d.fiscal_week BETWEEN 14 AND 17 AND d.fiscal_year IN ('FY2025/26','FY2026/27') GROUP BY 1\n",
+   "n": 7,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | n_lines | n_ids | loads | mn | mx | orphan_store | neg_lines | nonpos_qty\nFY2026/27 | 48107 | 48107 | 28 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00 | 0 | 0 | 0\nFY2025/26 | 47097 | 47097 | 28 | 2025-07-29T01:00:00 | 2025-08-25T01:00:00 | 0 | 0 | 0\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:39:43",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nstore_weeks AS (\n    SELECT st.store_id, d.fiscal_year, d.fiscal_week,\n           (st.open_date IS NULL OR st.open_date <= d.fiscal_week_start_date)\n           AND (st.close_date IS NULL OR st.close_date >= d.fiscal_week_end_date)\n           AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                           WHERE c.store_id = st.store_id\n                             AND c.closure_start_date <= d.fiscal_week_end_date\n                             AND c.closure_end_date >= d.fiscal_week_start_date) AS trading\n    FROM dim_store st\n    CROSS JOIN (SELECT DISTINCT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date\n                FROM dim_date\n                WHERE fiscal_year IN ('FY2025/26', 'FY2026/27') AND fiscal_week BETWEEN 14 AND 17) d\n    WHERE st.is_current AND st.store_id < 900\n),\nlfl_store_weeks AS (\n    SELECT ty.store_id, ty.fiscal_week\n    FROM store_weeks ty\n    JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = 'FY2025/26'\n    JOIN dim_store st ON st.store_id = ty.store_id AND st.is_current\n    WHERE ty.fiscal_year = 'FY2026/27' AND ty.trading AND ly.trading\n      AND (st.open_date IS NULL OR st.open_date <= DATE '2026-08-03' - 364)\n),\nlfl_sales AS (\n    SELECT d.fiscal_year, SUM(n.net_sales) AS net_sales, COUNT(DISTINCT n.store_id) AS stores\n    FROM net_lines n\n    JOIN dim_date d ON d.calendar_date = n.business_date\n    JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week\n    WHERE d.fiscal_year IN ('FY2026/27', 'FY2025/26') AND d.fiscal_week BETWEEN 14 AND 17\n    GROUP BY 1\n)\nSELECT ty.net_sales AS this_year, ly.net_sales AS last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct, ty.stores, ly.stores, (SELECT COUNT(*) FROM lfl_store_weeks) sw\nFROM lfl_sales ty, lfl_sales ly\nWHERE ty.fiscal_year = 'FY2026/27' AND ly.fiscal_year = 'FY2025/26'\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "this_year | last_year | lfl_growth_pct | stores | stores | sw\n1010478.52 | 1010743.32 | -0.03 | 38 | 38 | 152\n(1 row)"
+  }
+ ]
+}

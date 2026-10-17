@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t48-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T48",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "525140425a19d73353fc6daf580c397b9f4c96b2e9a6ab22b9da1c3f5a304b4b",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:15:47",
+   "statement": "fiscal-calendar/scripts/fiscal.py P3",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P3    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P03\n  fiscal_weeks                       9-13\n  start_date                         2026-06-29\n  end_date                           2026-08-02\n  weeks                              5\n  days                               35\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-02\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 9 AND 13)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:00",
+   "statement": "SELECT DISTINCT category, subcategory FROM dim_product\nWHERE category ILIKE '%paint%' OR category ILIKE '%decor%' \n   OR subcategory ILIKE '%paint%' OR subcategory ILIKE '%decor%'\nORDER BY category, subcategory;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "category | subcategory\nHome Textiles & Decor | Candles & Frames\nHome Textiles & Decor | Curtains & Blinds\nHome Textiles & Decor | Cushions & Throws\nHome Textiles & Decor | Rugs\nPaint & Decorating | Brushes & Rollers\nPaint & Decorating | Exterior Paint\nPaint & Decorating | Interior Paint\nPaint & Decorating | Wallpaper & Decor Film\nSeasonal | Christmas Decorations\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:05",
+   "statement": "-- Average stock value at cost for Paint & Decorating category during FY2026/27 P03 (weeks 9-13)\nWITH params AS (\n    SELECT DATE '2026-06-29' AS start_date, DATE '2026-08-02' AS end_date\n),\nweekly_totals AS (\n    -- Sum closing value across all stores and products within each week\n    SELECT fs.week_ending_date,\n           SUM(fs.closing_value) AS weekly_chain_value\n    FROM fact_stock_week fs\n    JOIN dim_store s ON s.store_key = fs.store_key\n    JOIN dim_product p ON p.product_key = fs.product_key\n    CROSS JOIN params\n    WHERE fs.week_ending_date BETWEEN params.start_date AND params.end_date\n      AND s.store_id < 900\n      AND p.category = 'Paint & Decorating'\n      AND p.category <> 'ZZ Test'\n    GROUP BY 1\n)\n-- Average across weeks\nSELECT ROUND(AVG(weekly_chain_value), 2) AS avg_chain_stock_value_eur\nFROM weekly_totals;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "avg_chain_stock_value_eur\n344466.83\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:16:10",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 5 rows, 2 columns: week_ending_date, weekly_chain_value\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Result covers 2026-07-05 to 2026-08-02 on week_ending_date (5 distinct dates).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 5 rows) ==\n  week_ending_date | weekly_chain_value\n  2026-07-05 | 341138.89\n  2026-07-12 | 341742.53\n  2026-07-19 | 344245.91\n  2026-07-26 | 349160.39\n  2026-08-02 | 346046.42\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:26",
+   "statement": "-- Average closing stock value at cost for Paint & Decorating category for the whole chain\n-- during FY2026/27 P03 (fiscal weeks 9-13, period 3 this year)\nWITH params AS (\n    -- FY2026/27 P03: weeks 9-13, dates 2026-06-29 to 2026-08-02\n    SELECT DATE '2026-06-29' AS period_start_date, DATE '2026-08-02' AS period_end_date\n),\nweekly_chain_totals AS (\n    -- Step 1: Sum closing value across all stores and products within each week\n    SELECT fs.week_ending_date,\n           SUM(fs.closing_value) AS weekly_total_value\n    FROM fact_stock_week fs\n    JOIN dim_store s ON s.store_key = fs.store_key\n    JOIN dim_product p ON p.product_key = fs.product_key\n    CROSS JOIN params\n    WHERE fs.week_ending_date BETWEEN params.period_start_date AND params.period_end_date\n      AND s.store_id < 900  -- Physical stores only\n      AND p.category = 'Paint & Decorating'\n      AND p.category <> 'ZZ Test'  -- Exclude test articles\n    GROUP BY fs.week_ending_date\n)\n-- Step 2: Average the weekly totals (do not sum across weeks)\nSELECT ROUND(AVG(weekly_total_value), 2) AS average_stock_value_eur\nFROM weekly_chain_totals;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "average_stock_value_eur\n344466.83\n(1 row)"
+  }
+ ]
+}

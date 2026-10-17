@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH stock_by_cat AS (\n  SELECT dp.category, \n         SUM(fsw.closing_units) as closing_units\n  FROM fact_stock_week fsw\n  INNER JOIN dim_product dp ON fsw.product_key = dp.product_key\n  WHERE fsw.week_ending_date = '2026-09-27'\n  GROUP BY dp.category\n),\nsales_by_cat AS (\n  SELECT dp.category,\n         SUM(fsl.quantity) as total_units_sold\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE dd.fiscal_year = 'FY2026/27' AND dd.fiscal_period = 5\n  GROUP BY dp.category\n)\nSELECT s.category,\n       ROUND(s.closing_units * 4.0 / sal.total_units_sold, 2) as weeks_of_cover\nFROM stock_by_cat s\nINNER JOIN sales_by_cat sal ON s.category = sal.category\nORDER BY s.category",
+  "result": {
+    "columns": ["category", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 9.96],
+      ["Cleaning &amp; Household", 6.56],
+      ["Electrical", 7.36],
+      ["Furniture", 21.21],
+      ["Garden", 15.9],
+      ["Home Textiles &amp; Decor", 10.01],
+      ["Kitchen &amp; Dining", 11.75],
+      ["Paint &amp; Decorating", 11.59],
+      ["Seasonal", 36.46],
+      ["Tools &amp; Hardware", 6.6]
+    ]
+  },
+  "definitions_applied": [
+    "Weeks of cover = (closing stock units × weeks in period) ÷ units sold in period",
+    "Last period = FY2026/27 fiscal period 5 (fully loaded period ending 2026-09-27)",
+    "Fiscal period 5 contains 4 weeks and ran from 2026-08-31 to 2026-09-27",
+    "Stock counted at week-ending date 2026-09-27 (Sunday of fiscal week 22)",
+    "All quantities measured in units; excludes value calculations"
+  ],
+  "assumptions": [
+    "Interpreted 'last period' as the most recently fully-loaded fiscal period (P05), not the in-progress P06",
+    "Weeks of cover calculated as inventory that covers current demand levels, using the formula: closing units × weeks in period ÷ period sales",
+    "Report includes only categories with both closing inventory and period sales; excludes categories with zero stock or zero sales"
+  ],
+  "caveats": [
+    "Category ZZ Test had 28 units sold during P05 but zero closing stock, suggesting stock-out or a test/placeholder product; excluded from report as it has no inventory to measure cover for",
+    "Weeks of cover varies significantly by category: Garden and Seasonal categories show high cover (15.9 and 36.5 weeks), while Cleaning &amp; Household and Tools &amp; Hardware show lower cover (6.56 and 6.6 weeks), indicating different inventory strategies or turnover rates",
+    "All figures are current at the end of P05 (2026-09-27); week-ending date stock comes from the Sunday closing, and period sales span the full 28-day period"
+  ]
+}
+```

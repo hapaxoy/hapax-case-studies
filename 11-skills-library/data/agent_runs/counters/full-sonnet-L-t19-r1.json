@@ -1,0 +1,94 @@
+{
+ "run_id": "full-sonnet-L-t19-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T19",
+ "budget": 30,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "0fc2cde1790c33e103ce87f25b36536657beeab629253365e6e5983067155417",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:32:49",
+   "statement": "fiscal-calendar/scripts/fiscal.py Q3 FY2025/26 --compare --as-of 2026-10-06",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: Q3 FY2025/26    as of: 2026-10-06    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P07, FY2025/26 P08, FY2025/26 P09\n  fiscal_weeks                       27-39\n  start_date                         2025-10-27\n  end_date                           2026-01-25\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-01-25\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 27 AND 39)\n  note: Q1 = P1-P3 (weeks 1-13), Q2 = P4-P6, Q3 = P7-P9, Q4 = P10-P12 (CAL-PERIODS).\n\nPrior-year comparator (same fiscal week numbers)\n------------------------------------------------\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P07, FY2024/25 P08, FY2024/25 P09\n  fiscal_weeks                       27-39\n  start_date                         2024-10-28\n  end_date                           2025-01-26\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-01-26\n  aligned_on                         fiscal week number (CAL-COMPARE)\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETW"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:32:57",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nq AS (\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    WHERE d.fiscal_year IN ('FY2025/26','FY2024/25') AND d.fiscal_week BETWEEN 27 AND 39\n    GROUP BY 1, 2\n)\nSELECT ty.region, ty.net_sales AS fy2025_26, ly.net_sales AS fy2024_25,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct\nFROM q ty JOIN q ly ON ly.region = ty.region AND ly.fiscal_year = 'FY2024/25'\nWHERE ty.fiscal_year = 'FY2025/26'\nORDER BY ty.region;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | fy2025_26 | fy2024_25 | growth_pct\nCapital Region | 527026.01 | 525151.30 | 0.4\nEast | 597583.01 | 588069.69 | 1.6\nNorth | 413618.24 | 387519.62 | 6.7\nOnline | 580450.93 | 447645.43 | 29.7\nSouth | 729021.20 | 710020.17 | 2.7\nWest | 997953.07 | 952479.50 | 4.8\n(6 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:33:07",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain business_date,store_id --start 2025-10-27 --end 2026-01-25 --control --value-col net_sales --control-measure net_sales --control-stores all",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 3406 rows, 3 columns: business_date, store_id, net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (business_date, store_id): 3406 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-10-27 to 2026-01-25 (91 days; fiscal: FY2025/26 P08, FY2025/26 P09, FY2025/26 P07).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 3 rows in the range only in Helsinki time, 5 only in UTC; fact_sales_line.sale_ts_utc: 5 rows in the range only in Helsinki time, 11 only in UTC.\n  [INFO] Result covers 2025-10-27 to 2026-01-25 on business_date (91 distinct dates).\n  [PASS] Every day of the requested range is present, none outside it.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2025-10-27 to 2026-01-25, stores: all, at level: business_date x store_id.\n  [INFO] Result total 3,845,652.46; control total 3,845,652.46; gap 0.00.\n  [PASS] No gap above 0.01 at level business_date x store_id.\n\n== Preview (first 10 rows) ==\n  business_date | store_id | net_sales\n  2025-10-27 | 113 | 50.27\n  2025-10-29 | 132 | 603.79\n  2025-10-29 | 133 | 372.81\n  2025-10-29 | 116 | 1437.06\n  2025-10-30 | 117 | 1783.01\n  2025-10-30 | 112 | 529.26\n  2025-"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:33:10",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain business_date,store_id --start 2024-10-28 --end 2025-01-26 --control --value-col net_sales --control-measure net_sales --control-stores all",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 3398 rows, 3 columns: business_date, store_id, net_sales\n\n== Duplicate keys ==\n  [PASS] Unique at grain (business_date, store_id): 3398 keys.\n\n== Date coverage ==\n  [INFO] Requested 2024-10-28 to 2025-01-26 (91 days; fiscal: FY2024/25 P08, FY2024/25 P09, FY2024/25 P07).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 5 rows in the range only in Helsinki time, 6 only in UTC; fact_sales_line.sale_ts_utc: 8 rows in the range only in Helsinki time, 8 only in UTC.\n  [INFO] Result covers 2024-10-28 to 2025-01-26 on business_date (91 distinct dates).\n  [PASS] Every day of the requested range is present, none outside it.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2024-10-28 to 2025-01-26, stores: all, at level: business_date x store_id.\n  [INFO] Result total 3,610,885.71; control total 3,610,885.71; gap -0.00.\n  [PASS] No gap above 0.01 at level business_date x store_id.\n\n== Preview (first 10 rows) ==\n  business_date | store_id | net_sales\n  2024-10-29 | 118 | 806.28\n  2024-10-29 | 110 | 511.77\n  2024-10-29 | 131 | 935.31\n  2024-10-29 | 106 | 386.02\n  2024-10-29 | 115 | 1851.34\n  2024-10-30 | 900 | 3863.94\n  2024"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:19",
+   "statement": "SELECT 'dup_receipt_line' AS chk, count(*) AS n FROM (SELECT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-10-21' AND DATE '2026-01-31' GROUP BY 1,2 HAVING count(*)>1)\nUNION ALL SELECT 'dup_sales_line_id', count(*) FROM (SELECT sales_line_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-10-21' AND DATE '2026-01-31' GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'dup_return_id', count(*) FROM (SELECT return_line_id FROM fact_return_line GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'web_lines_without_order_or_noncounted_status', count(*) FROM fact_sales_line f LEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id WHERE f.channel_code='WB' AND f.sale_date BETWEEN DATE '2024-10-21' AND DATE '2026-01-31' AND (w.web_order_id IS NULL)\nUNION ALL SELECT 'web_status_' || status, count(*) FROM fact_web_order WHERE order_ts_utc BETWEEN TIMESTAMP '2024-10-27' AND TIMESTAMP '2026-01-27' GROUP BY status\nUNION ALL SELECT 'stores_by_region_current_' || region, count(*) FROM dim_store WHERE is_current GROUP BY region\n",
+   "n": 5,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "chk | n\ndup_receipt_line | 418\ndup_sales_line_id | 0\ndup_return_id | 0\nweb_lines_without_order_or_noncounted_status | 0\nweb_status_cancelled | 2017\nweb_status_delivered | 34519\nweb_status_collected | 12375\nstores_by_region_current_East | 8\nstores_by_region_current_Capital Region | 5\nstores_by_region_current_North | 6\nstores_by_region_current_South | 10\nstores_by_region_current_West | 10\nstores_by_region_current_Online | 1\nstores_by_region_current_Head office | 1\n(14 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:22",
+   "statement": "WITH d AS (SELECT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-10-21' AND DATE '2026-01-31' GROUP BY 1,2 HAVING count(*)>1)\nSELECT f.sales_line_id, f.receipt_id, f.line_no, f.sale_date, f.sale_ts_utc, f.store_key, f.product_key, f.member_key, f.channel_code, f.quantity, f.net_amount, f.etl_loaded_at\nFROM fact_sales_line f JOIN d USING (receipt_id, line_no)\nORDER BY f.receipt_id, f.line_no, f.sales_line_id\nLIMIT 40\n",
+   "n": 6,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "sales_line_id | receipt_id | line_no | sale_date | sale_ts_utc | store_key | product_key | member_key | channel_code | quantity | net_amount | etl_loaded_at\n841511 | 10326117 | 1 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2323 | NULL | ST | 1 | 9.68 | 2025-09-16T01:00:00\n1510224 | 10326117 | 1 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2323 | NULL | ST | 1 | 9.68 | 2025-09-23T03:12:00\n841512 | 10326117 | 2 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2017 | NULL | ST | 3 | 42.12 | 2025-09-16T01:00:00\n1510225 | 10326117 | 2 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2017 | NULL | ST | 3 | 42.12 | 2025-09-23T03:12:00\n841513 | 10326118 | 1 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 395 | NULL | ST | 1 | 12.37 | 2025-09-16T01:00:00\n1510226 | 10326118 | 1 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 395 | NULL | ST | 1 | 12.37 | 2025-09-23T03:12:00\n841514 | 10326118 | 2 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 3763 | NULL | ST | 1 | 20.10 | 2025-09-16T01:00:00\n1510227 | 10326118 | 2 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 3763 | NULL | ST | 1 | 20.10 | 2025-09-23T03:12:00\n841519 | 10326121 | 1 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 3014 | 85091 | ST | 1 | 22.55 | 2025-09-16T01:00:00\n1510228 | 10326121 | 1 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 3014 | 85091 | ST | 1 | 22.55 | 2025-09-23T03:12:00\n841520 | 10326121 | 2 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 1446 | 85091 | ST | 1 | 81.30 | 2025-09-16T01:00:00\n1510229 | 10326121 | 2 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 1446 | 85"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:25",
+   "statement": "WITH d AS (SELECT receipt_id, line_no, count(*) c, min(sale_date) dt, count(DISTINCT sale_ts_utc) ts, count(DISTINCT net_amount) na, count(DISTINCT product_key) pk, count(DISTINCT etl_loaded_at) el FROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-10-21' AND DATE '2026-01-31' GROUP BY 1,2 HAVING count(*)>1)\nSELECT c, ts, na, pk, el, count(*) n, min(dt) mind, max(dt) maxd FROM d GROUP BY ALL ORDER BY n DESC\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "c | ts | na | pk | el | n | mind | maxd\n2 | 1 | 1 | 1 | 2 | 418 | 2025-09-15 | 2025-09-21\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:35",
+   "statement": "SELECT 'head_office_store' AS chk, CAST(store_id AS VARCHAR) || ' ' || store_name AS v FROM dim_store WHERE is_current AND region = 'Head office'\nUNION ALL SELECT 'delivered_null_dispatch', CAST(count(*) AS VARCHAR) FROM fact_web_order WHERE status IN ('delivered','collected') AND dispatch_ts_utc IS NULL\nUNION ALL SELECT 'sales_orphan_store_key', CAST(count(*) AS VARCHAR) FROM fact_sales_line f LEFT JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_key IS NULL\nUNION ALL SELECT 'stores_in_q3_' || CAST(s.store_id AS VARCHAR) || '_' || s.store_name || '_' || s.region, CAST(count(*) AS VARCHAR) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE f.sale_date BETWEEN DATE '2025-10-27' AND DATE '2026-01-25' AND s.store_id IN (129,136,137,900) GROUP BY s.store_id, s.store_name, s.region\n",
+   "n": 8,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "chk | v\nhead_office_store | 999 Training store\ndelivered_null_dispatch | 0\nsales_orphan_store_key | 0\nstores_in_q3_900_Tuomimetsä web shop_Online | 23324\nstores_in_q3_129_Savonlinna_East | 1556\nstores_in_q3_136_Tampere Lamminpää_West | 3991\nstores_in_q3_137_Lohja_South | 2084\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:33:43",
+   "statement": "SELECT d.fiscal_year, sum(f.net_amount) AS excluded_net_sales_sold_lines, count(*) AS lines\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE (s.store_id=999 OR p.category='ZZ Test') AND d.fiscal_year IN ('FY2025/26','FY2024/25') AND d.fiscal_week BETWEEN 27 AND 39\nGROUP BY 1\n",
+   "n": 9,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | excluded_net_sales_sold_lines | lines\nFY2024/25 | 6485.90 | 374\nFY2025/26 | 6887.98 | 376\n(2 rows)"
+  }
+ ]
+}

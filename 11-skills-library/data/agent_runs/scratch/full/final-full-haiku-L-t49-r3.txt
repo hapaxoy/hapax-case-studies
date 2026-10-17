@@ -1,0 +1,30 @@
+My analysis is complete. The difference from the control total is expected because ATV is calculated on net sales BEFORE returns, while the control table includes return adjustments. My query correctly implements the company's definition of ATV.
+
+Here is my final answer:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS first_period, 4 AS last_period\n)\nSELECT s.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id &lt; 900\n  AND NOT f.staff_purchase_flag\n  AND p.category &lt;&gt; 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY s.format\nORDER BY atv DESC;",
+  "result": {
+    "columns": ["format", "atv"],
+    "rows": [["Large", 60.67], ["Medium", 60.27], ["Small", 50.75]]
+  },
+  "definitions_applied": [
+    "DEF-ATV: Average transaction value = net sales before returns / number of sales receipts",
+    "REG-STORE-SCOPE: Physical stores only (store_id &lt; 900); web and training store excluded",
+    "REG-STAFF-PURCHASE: Staff purchases excluded from ATV",
+    "REG-TEST-SKU: Test articles (category ZZ Test) excluded",
+    "Fiscal calendar: Period 4 of FY2026/27 = fiscal weeks 14-17 (2026-08-03 to 2026-08-30)"
+  ],
+  "assumptions": [
+    "Reported as-is (current store format; format is stable across all store versions)",
+    "ATV shown by store format grouping as requested",
+    "Period 4 of FY2026/27 is complete as of the warehouse load date (2026-10-04)"
+  ],
+  "caveats": [
+    "Store formats in the warehouse are Large, Medium and Small (not the Hyper/Standard/Express schema labels)",
+    "ATV is calculated on net sales before returns are deducted (per company definition), so it does not reflect the 36,991 EUR in returns booked during P4",
+    "No stores in the Small format group appear to have closed during P4; the group is stable across the period"
+  ]
+}
+```

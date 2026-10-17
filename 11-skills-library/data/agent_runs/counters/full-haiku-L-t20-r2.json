@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t20-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T20",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "66d6bedbfe4f9560ba48be2633495549723547833d5283abf7b3b01e859967b4",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:59:58",
+   "statement": "fiscal-calendar/scripts/fiscal.py this year",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: this year    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P01, FY2026/27 P02, FY2026/27 P03, FY2026/27 P04, FY2026/27 P05, FY2026/27 P06\n  fiscal_weeks                       1-22\n  start_date                         2026-05-04\n  end_date                           2027-05-02\n  weeks                              22\n  days                               364\n  includes_week_53                   False\n  complete_as_of                     False\n  loaded_through                     2026-10-04\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 22)\n  note: 'This year' = the current fiscal year (CAL-RELATIVE).\n  note: Only 22 of the 52 fiscal weeks are in dim_date.\n  note: The range runs past the last loaded date (2026-10-04); only data through 2026-10-04 exists (CAL-DATA-THROUGH).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:11",
+   "statement": "WITH dim_date_filter AS (\n  SELECT DISTINCT fiscal_year, fiscal_week, calendar_date\n  FROM dim_date\n  WHERE fiscal_year = 'FY2026/27' AND fiscal_week BETWEEN 1 AND 22\n),\nnet_lines AS (\n  -- Sales from FY2026/27 weeks 1-22\n  SELECT \n    f.sale_date,\n    s.store_id,\n    cs.region,\n    SUM(f.net_amount) AS sale_net,\n    SUM(f.standard_cost) AS cost\n  FROM fact_sales_line f\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  JOIN dim_date_filter dd ON d.fiscal_year = dd.fiscal_year AND d.fiscal_week = dd.fiscal_week\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE s.store_id < 900\n    AND s.store_id != 999\n    AND cp.category != 'ZZ Test'\n  GROUP BY f.sale_date, s.store_id, cs.region\n),\nreturns AS (\n  -- Returns from FY2026/27 weeks 1-22\n  SELECT \n    r.return_date,\n    s.store_id,\n    cs.region,\n    SUM(r.refund_net) AS refund_net,\n    SUM(r.standard_cost_returned) AS cost_returned\n  FROM fact_return_line r\n  JOIN dim_date d ON d.calendar_date = r.return_date\n  JOIN dim_date_filter dd ON d.fiscal_year = dd.fiscal_year AND d.fiscal_week = dd.fiscal_week\n  JOIN dim_store s ON s.store_key = r.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  WHERE s.store_id < 900\n    AND s.store_id != 999\n  GROUP BY r.return_date, s.store_id, cs.region\n),\nregion_totals AS (\n  SELECT \n    region,\n    SUM(sale_net) AS net_sales_sales,\n    SUM(refund_net) AS net_sales_returns\n  FROM (\n    SELECT region, sale_net AS net_sales_sales, 0 AS refund_net\n    FROM net_lines\n    UNION ALL\n    SELECT region, 0, refund_net\n    FROM returns\n  )\n  GROUP BY region\n)\nSELECT \n  region,\n  COALESCE(net_sales_sales, 0) - COALESCE(net_sales_returns, 0) AS net_sales,\n  ROW_NUMBER() OVER (ORDER BY COALESCE(net_sales_sales, 0) - COALESCE(net_sales_returns, 0) DESC) AS rank\nFROM region_totals\nORDER BY rank\n",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Referenced column \"sale_net\" not found in FROM clause!\nCandidate bindings: \"net_sales_sales\", \"refund_net\", \"region\"\n\nLINE 46:     SUM(sale_net) AS net_sales_sales,\n                 ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:18",
+   "statement": "WITH net_sales AS (\n  -- Sales lines from FY2026/27 weeks 1-22\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    cs.region,\n    SUM(f.net_amount) AS sales_amount,\n    0 AS return_amount\n  FROM fact_sales_line f\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id < 900\n    AND s.store_id != 999\n    AND cp.category != 'ZZ Test'\n  GROUP BY d.fiscal_year, d.fiscal_week, cs.region\n  \n  UNION ALL\n  \n  -- Return lines from FY2026/27 weeks 1-22\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    cs.region,\n    0 AS sales_amount,\n    SUM(r.refund_net) AS return_amount\n  FROM fact_return_line r\n  JOIN dim_date d ON d.calendar_date = r.return_date\n  JOIN dim_store s ON s.store_key = r.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id < 900\n    AND s.store_id != 999\n  GROUP BY d.fiscal_year, d.fiscal_week, cs.region\n),\nregion_totals AS (\n  SELECT \n    region,\n    SUM(sales_amount) - SUM(return_amount) AS net_sales,\n    ROW_NUMBER() OVER (ORDER BY SUM(sales_amount) - SUM(return_amount) DESC) AS rank\n  FROM net_sales\n  GROUP BY region\n)\nSELECT \n  rank,\n  region,\n  ROUND(net_sales, 2) AS net_sales\nFROM region_totals\nORDER BY rank\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "rank | region | net_sales\n1 | West | 1815139.47\n2 | South | 1309213.51\n3 | East | 959424.31\n4 | Capital Region | 948667.50\n5 | North | 730386.24\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:00:25",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 5 rows, 3 columns: rank, region, net_sales\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 5 rows) ==\n  rank | region | net_sales\n  1 | West | 1815139.47\n  2 | South | 1309213.51\n  3 | East | 959424.31\n  4 | Capital Region | 948667.50\n  5 | North | 730386.24\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:00:31",
+   "statement": "-- Control total from rpt_daily_store_sales\nSELECT \n  'rpt_daily_store_sales' AS source,\n  SUM(net_sales) AS total_net_sales\nFROM rpt_daily_store_sales\nWHERE business_date >= '2026-05-04' AND business_date <= '2026-10-04'\n  AND store_id < 900\n  AND store_id != 999\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "source | total_net_sales\nrpt_daily_store_sales | 5762831.03\n(1 row)"
+  }
+ ]
+}

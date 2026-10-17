@@ -1,0 +1,103 @@
+{
+ "run_id": "full-haiku-L-t13-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T13",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "e8ea10907cc6bccefc9fec3eb539804048aeaa799327800c2e91e1993acbc08c",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:44:58",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:15",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period\n)\nSELECT s.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900                         -- stores only: no web, no training store\n  AND NOT f.staff_purchase_flag                -- staff purchases are out of ATV\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY 1\nORDER BY atv DESC;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | receipts | net_sales_before_returns | atv\nLarge | 6508 | 394865.46 | 60.67\nMedium | 8641 | 520763.45 | 60.27\nSmall | 2598 | 131841.05 | 50.75\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:19",
+   "statement": "SELECT DISTINCT format\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY format;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format\nLarge\nMedium\nSmall\nTraining\nWeb\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:45:25",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain format --period FY2026/27 P04 --control",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 4 columns: format, receipts, net_sales_before_returns, atv\n\n== Duplicate keys ==\n  [PASS] Unique at grain (format): 3 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-08-03 to 2026-08-30 (28 days; fiscal: FY2026/27 P04).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 9 rows in the range only in Helsinki time, 8 only in UTC; fact_sales_line.sale_ts_utc: 20 rows in the range only in Helsinki time, 14 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales_before_returns with rpt_daily_store_sales.net_sales_before_returns, 2026-08-03 to 2026-08-30, stores: all, at level: total.\n  [INFO] Result total 1,047,469.96; control total 1,269,805.17; gap -222,335.21.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 1,047,469.96 vs control 1,269,805.17 (gap -222,335.21). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (first 3 rows) ==\n  format | receipts | net_sales_be"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:45:35",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain format --period FY2026/27 P04 --control",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 4 columns: format, receipts, net_sales_before_returns, atv\n\n== Duplicate keys ==\n  [PASS] Unique at grain (format): 3 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-08-03 to 2026-08-30 (28 days; fiscal: FY2026/27 P04).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 9 rows in the range only in Helsinki time, 8 only in UTC; fact_sales_line.sale_ts_utc: 20 rows in the range only in Helsinki time, 14 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales_before_returns with rpt_daily_store_sales.net_sales_before_returns, 2026-08-03 to 2026-08-30, stores: all, at level: total.\n  [INFO] Result total 1,062,266.72; control total 1,269,805.17; gap -207,538.45.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 1,062,266.72 vs control 1,269,805.17 (gap -207,538.45). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (first 3 rows) ==\n  format | receipts | net_sales_be"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:47",
+   "statement": "WITH date_filter AS (\n    SELECT DISTINCT business_date\n    FROM rpt_daily_store_sales\n    WHERE business_date BETWEEN '2026-08-03' AND '2026-08-30'\n)\nSELECT COUNT(DISTINCT business_date) as days_in_report,\n       COUNT(DISTINCT store_id) as stores_in_report,\n       SUM(net_sales_before_returns) as total_net_sales_before_returns\nFROM rpt_daily_store_sales\nWHERE business_date IN (SELECT business_date FROM date_filter);\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "days_in_report | stores_in_report | total_net_sales_before_returns\n28 | 39 | 1269805.17\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:51",
+   "statement": "SELECT COUNT(DISTINCT s.store_id) as stores_with_sales,\n       SUM(f.net_amount) as total_net_amount\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nWHERE s.store_id < 900\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_period = 4;\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "stores_with_sales | total_net_amount\n38 | 1062266.72\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:55",
+   "statement": "SELECT DISTINCT s.store_id\nFROM rpt_daily_store_sales s\nWHERE business_date BETWEEN '2026-08-03' AND '2026-08-30'\n  AND s.store_id NOT IN (\n    SELECT DISTINCT s2.store_id\n    FROM fact_sales_line f\n    JOIN dim_store s2 ON s2.store_key = f.store_key\n    JOIN dim_date d ON d.calendar_date = f.sale_date\n    WHERE s2.store_id < 900\n      AND d.fiscal_year = 'FY2026/27'\n      AND d.fiscal_period = 4\n  );\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id\n900\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:59",
+   "statement": "SELECT SUM(net_sales_before_returns) as web_sales\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-08-03' AND '2026-08-30'\n  AND store_id = 900;\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "web_sales\n207538.45\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:46:17",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period\n)\nSELECT s.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900                         -- physical stores only, no web or training store\n  AND NOT f.staff_purchase_flag                -- staff purchases excluded from ATV\n  AND p.category <> 'ZZ Test'                 -- test articles excluded\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY 1\nORDER BY atv DESC;\n",
+   "n": 10,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | receipts | net_sales_before_returns | atv\nLarge | 6508 | 394865.46 | 60.67\nMedium | 8641 | 520763.45 | 60.27\nSmall | 2598 | 131841.05 | 50.75\n(3 rows)"
+  }
+ ]
+}

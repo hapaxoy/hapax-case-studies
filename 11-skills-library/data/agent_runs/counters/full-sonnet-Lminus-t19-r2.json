@@ -1,0 +1,94 @@
+{
+ "run_id": "full-sonnet-Lminus-t19-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T19",
+ "budget": 30,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "d01a70fef511a9b7e4f2a44ea53df18584378ad899a0cafdfe529f5a66c2ee80",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:51",
+   "statement": "SELECT fiscal_year, fiscal_quarter, min(calendar_date) mn, max(calendar_date) mx, count(*) n, min(fiscal_week) w1, max(fiscal_week) w2, count(distinct fiscal_week) nw\nFROM dim_date WHERE fiscal_year IN ('FY2024/25','FY2025/26') AND fiscal_quarter=3 GROUP BY 1,2 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_quarter | mn | mx | n | w1 | w2 | nw\nFY2024/25 | 3 | 2024-10-28 | 2025-01-26 | 91 | 27 | 39 | 13\nFY2025/26 | 3 | 2025-10-27 | 2026-01-25 | 91 | 27 | 39 | 13\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:52",
+   "statement": "SELECT store_id, store_key, store_name, region, format, valid_from, valid_to, is_current FROM dim_store WHERE store_id IN (101,114,129,136,137,900,999) OR store_id IN (SELECT store_id FROM dim_store GROUP BY 1 HAVING count(*)>1) ORDER BY store_id, valid_from\n",
+   "n": 2,
+   "ok": true,
+   "rows": 17,
+   "output_preview": "store_id | store_key | store_name | region | format | valid_from | valid_to | is_current\n101 | 1 | Helsinki Vuosaari | South | Medium | 2000-01-01 | 2025-04-27 | false\n101 | 2 | Helsinki Vuosaari | Capital Region | Medium | 2025-04-28 | 9999-12-31 | true\n102 | 3 | Helsinki Pitäjänmäki | South | Large | 2000-01-01 | 2025-04-27 | false\n102 | 4 | Helsinki Pitäjänmäki | Capital Region | Large | 2025-04-28 | 9999-12-31 | true\n103 | 5 | Espoo Lommila | South | Medium | 2000-01-01 | 2025-04-27 | false\n103 | 6 | Espoo Lommila | Capital Region | Medium | 2025-04-28 | 9999-12-31 | true\n104 | 7 | Vantaa Tammisto | South | Large | 2000-01-01 | 2025-04-27 | false\n104 | 8 | Vantaa Tammisto | Capital Region | Large | 2025-04-28 | 9999-12-31 | true\n105 | 9 | Kerava | South | Small | 2000-01-01 | 2025-04-27 | false\n105 | 10 | Kerava | Capital Region | Small | 2025-04-28 | 9999-12-31 | true\n114 | 19 | Kouvola | East | Medium | 2000-01-01 | 2025-04-27 | false\n114 | 20 | Kouvola | South | Medium | 2025-04-28 | 9999-12-31 | true\n129 | 35 | Savonlinna | East | Small | 2000-01-01 | 9999-12-31 | true\n136 | 42 | Tampere Lamminpää | West | Medium | 2024-09-02 | 9999-12-31 | true\n137 | 43 | Lohja | South | Small | 2024-11-04 | 9999-12-31 | true\n900 | 46 | Tuomimetsä web shop | Online | Web | 2000-01-01 | 9999-12-31 | true\n999 | 47 | Training store | Head office | Training | 2000-01-01 | 9999-12-31 | true\n(17 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:02",
+   "statement": "SELECT 'sales dup line id' k, count(*) - count(distinct sales_line_id) v FROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-10-01' AND DATE '2026-02-28'\nUNION ALL SELECT 'sales dup receipt+line', count(*) - count(distinct (receipt_id, line_no)) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-10-01' AND DATE '2026-02-28'\nUNION ALL SELECT 'return dup id', count(*) - count(distinct return_line_id) FROM fact_return_line WHERE return_date BETWEEN DATE '2024-10-01' AND DATE '2026-02-28'\nUNION ALL SELECT 'web order dup', count(*) - count(distinct web_order_id) FROM fact_web_order\nUNION ALL SELECT 'web lines with non-delivered order', count(*) FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE o.status NOT IN ('delivered','collected')\nUNION ALL SELECT 'web lines no order row', count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key LEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id=900 AND o.web_order_id IS NULL\nUNION ALL SELECT 'store lines matching web order id', count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id<>900\nUNION ALL SELECT 'null store_key sales', count(*) FROM fact_sales_line WHERE store_key IS NULL OR product_key IS NULL\nUNION ALL SELECT 'returns orphan', count(*) FROM fact_return_line r LEFT JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id WHERE f.sales_line_id IS NULL\nUNION ALL SELECT 'delivered w/o dispatch', count(*) FROM fact_web_order WHERE status IN ('delivered','collected') AND dispatch_ts_utc IS NULL\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "k | v\nsales dup line id | 0\nsales dup receipt+line | 418\nreturn dup id | 0\nweb order dup | 0\nweb lines with non-delivered order | 0\nweb lines no order row | 0\nstore lines matching web order id | 0\nnull store_key sales | 0\nreturns orphan | 0\ndelivered w/o dispatch | 0\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:06",
+   "statement": "WITH d AS (SELECT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2024-10-01' AND DATE '2026-02-28' GROUP BY 1,2 HAVING count(*)>1)\nSELECT f.sales_line_id, f.receipt_id, f.line_no, f.sale_date, f.sale_ts_utc, f.store_key, f.product_key, f.member_key, f.quantity, f.net_amount, f.gross_amount, f.etl_loaded_at\nFROM fact_sales_line f JOIN d USING (receipt_id, line_no) ORDER BY f.receipt_id, f.line_no, f.sales_line_id LIMIT 24\n",
+   "n": 4,
+   "ok": true,
+   "rows": 24,
+   "output_preview": "sales_line_id | receipt_id | line_no | sale_date | sale_ts_utc | store_key | product_key | member_key | quantity | net_amount | gross_amount | etl_loaded_at\n841511 | 10326117 | 1 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2323 | NULL | 1 | 9.68 | 12.15 | 2025-09-16T01:00:00\n1510224 | 10326117 | 1 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2323 | NULL | 1 | 9.68 | 12.15 | 2025-09-23T03:12:00\n841512 | 10326117 | 2 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2017 | NULL | 3 | 42.12 | 52.86 | 2025-09-16T01:00:00\n1510225 | 10326117 | 2 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2017 | NULL | 3 | 42.12 | 52.86 | 2025-09-23T03:12:00\n841513 | 10326118 | 1 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 395 | NULL | 1 | 12.37 | 15.52 | 2025-09-16T01:00:00\n1510226 | 10326118 | 1 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 395 | NULL | 1 | 12.37 | 15.52 | 2025-09-23T03:12:00\n841514 | 10326118 | 2 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 3763 | NULL | 1 | 20.10 | 25.23 | 2025-09-16T01:00:00\n1510227 | 10326118 | 2 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 3763 | NULL | 1 | 20.10 | 25.23 | 2025-09-23T03:12:00\n841519 | 10326121 | 1 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 3014 | 85091 | 1 | 22.55 | 28.30 | 2025-09-16T01:00:00\n1510228 | 10326121 | 1 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 3014 | 85091 | 1 | 22.55 | 28.30 | 2025-09-23T03:12:00\n841520 | 10326121 | 2 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 1446 | 85091 | 1 | 81.30 | 102.03 | 2025-09-16T01:00:00\n1510229 | 10326121 | 2 | 2025-09-15 | 20"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:08",
+   "statement": "WITH d AS (SELECT receipt_id, line_no, count(*) c, min(sale_date) mn, max(sale_date) mx, count(distinct etl_loaded_at) ne, sum(net_amount) tot FROM fact_sales_line GROUP BY 1,2 HAVING count(*)>1)\nSELECT count(*) groups, sum(c) lines, min(mn) first_date, max(mx) last_date, sum(CASE WHEN ne>1 THEN 1 ELSE 0 END) multi_load, sum(tot) net_total_all_copies, max(c) maxc FROM d\n",
+   "n": 5,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"groups\"\n\nLINE 2: SELECT count(*) groups, sum(c) lines, min(mn) first_date, max(mx) last_date...\n                        ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:12",
+   "statement": "WITH d AS (SELECT receipt_id, line_no, count(*) c, min(sale_date) mn, max(sale_date) mx, count(distinct etl_loaded_at) ne, count(distinct net_amount) nv, sum(net_amount) tot FROM fact_sales_line GROUP BY 1,2 HAVING count(*)>1)\nSELECT count(*) grp, sum(c) nlines, min(mn) first_date, max(mx) last_date, sum(CASE WHEN ne>1 THEN 1 ELSE 0 END) multi_load, sum(CASE WHEN nv>1 THEN 1 ELSE 0 END) differing_amt, max(c) maxc FROM d\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "grp | nlines | first_date | last_date | multi_load | differing_amt | maxc\n418 | 836 | 2025-09-15 | 2025-09-21 | 418 | 0 | 2\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:24",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nq3 AS (\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    WHERE d.fiscal_quarter = 3 AND d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    GROUP BY 1, 2\n)\nSELECT ty.region, ty.net_sales AS fy2025_26, ly.net_sales AS fy2024_25,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct\nFROM q3 ty JOIN q3 ly ON ly.region = ty.region AND ly.fiscal_year = 'FY2024/25'\nWHERE ty.fiscal_year = 'FY2025/26'\nORDER BY ty.region\n",
+   "n": 7,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | fy2025_26 | fy2024_25 | growth_pct\nCapital Region | 527026.01 | 525151.30 | 0.4\nEast | 597583.01 | 588069.69 | 1.6\nNorth | 413618.24 | 387519.62 | 6.7\nOnline | 580450.93 | 447645.43 | 29.7\nSouth | 729021.20 | 710020.17 | 2.7\nWest | 997953.07 | 952479.50 | 4.8\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:26",
+   "statement": "SELECT d.fiscal_year, sum(r.net_sales) control_net, sum(CASE WHEN r.store_id=900 THEN r.net_sales END) web_control, count(distinct r.store_id) nstores, min(r.business_date) mn, max(r.business_date) mx\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date\nWHERE d.fiscal_quarter=3 AND d.fiscal_year IN ('FY2025/26','FY2024/25') GROUP BY 1 ORDER BY 1\n",
+   "n": 8,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | control_net | web_control | nstores | mn | mx\nFY2024/25 | 3610885.71 | 447645.43 | 40 | 2024-10-28 | 2025-01-26\nFY2025/26 | 3845652.46 | 580450.93 | 40 | 2025-10-27 | 2026-01-25\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:36",
+   "statement": "SELECT 'ret dup same line/date/qty' k, count(*) v FROM (SELECT sales_line_id, return_date, quantity_returned, refund_net FROM fact_return_line WHERE return_date BETWEEN DATE '2024-10-28' AND DATE '2026-01-25' GROUP BY 1,2,3,4 HAVING count(*)>1)\nUNION ALL SELECT 'returns exceeding sale qty', count(*) FROM (SELECT r.sales_line_id FROM fact_return_line r JOIN fact_sales_line f USING (sales_line_id) GROUP BY r.sales_line_id, f.quantity HAVING sum(r.quantity_returned) > f.quantity)\nUNION ALL SELECT 'regions in dim_store current', count(distinct region) FROM dim_store WHERE is_current\nUNION ALL SELECT 'sales lines in Q3 FY25/26 with ZZ Test or 999', count(*) FROM fact_sales_line f JOIN dim_store s USING (store_key) JOIN dim_product p USING (product_key) WHERE f.sale_date BETWEEN DATE '2025-10-27' AND DATE '2026-01-25' AND (s.store_id=999 OR p.category='ZZ Test')\nUNION ALL SELECT 'sales lines in Q3 FY24/25 with ZZ Test or 999', count(*) FROM fact_sales_line f JOIN dim_store s USING (store_key) JOIN dim_product p USING (product_key) WHERE f.sale_date BETWEEN DATE '2024-10-28' AND DATE '2025-01-26' AND (s.store_id=999 OR p.category='ZZ Test')\n",
+   "n": 9,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "k | v\nret dup same line/date/qty | 0\nreturns exceeding sale qty | 0\nregions in dim_store current | 7\nsales lines in Q3 FY25/26 with ZZ Test or 999 | 376\nsales lines in Q3 FY24/25 with ZZ Test or 999 | 374\n(5 rows)"
+  }
+ ]
+}

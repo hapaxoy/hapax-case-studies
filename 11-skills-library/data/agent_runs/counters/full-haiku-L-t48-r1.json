@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-L-t48-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T48",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "7a4a3d87e64b57f0115e82a7d1c667ca88e5424142db4154c88bd129e28d4c69",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:47:26",
+   "statement": "fiscal-calendar/scripts/fiscal.py P3 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P3 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P03\n  fiscal_weeks                       9-13\n  start_date                         2026-06-29\n  end_date                           2026-08-02\n  weeks                              5\n  days                               35\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-02\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 9 AND 13)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:47:35",
+   "statement": "SELECT DISTINCT dp.category\nFROM dim_product dp\nWHERE dp.category LIKE '%Paint%' OR dp.category LIKE '%Decor%'\nORDER BY dp.category\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category\nHome Textiles & Decor\nPaint & Decorating\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:47:40",
+   "statement": "WITH weekly_totals AS (\n  SELECT \n    d.fiscal_week,\n    SUM(fsw.closing_value) AS weekly_value\n  FROM fact_stock_week fsw\n  JOIN dim_product dp ON fsw.product_key = dp.product_key\n  JOIN dim_store ds ON fsw.store_key = ds.store_key\n  JOIN dim_date d ON fsw.week_ending_date = d.calendar_date\n  WHERE dp.category = 'Paint & Decorating'\n    AND ds.store_id < 900\n    AND dp.category <> 'ZZ Test'\n    AND d.fiscal_year = 'FY2026/27'\n    AND d.fiscal_week BETWEEN 9 AND 13\n  GROUP BY d.fiscal_week\n)\nSELECT AVG(weekly_value) AS average_closing_stock_value_eur\nFROM weekly_totals\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "average_closing_stock_value_eur\n344466.828\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:47:44",
+   "statement": "SELECT \n  d.fiscal_week,\n  COUNT(*) AS row_count,\n  SUM(fsw.closing_value) AS weekly_value\nFROM fact_stock_week fsw\nJOIN dim_product dp ON fsw.product_key = dp.product_key\nJOIN dim_store ds ON fsw.store_key = ds.store_key\nJOIN dim_date d ON fsw.week_ending_date = d.calendar_date\nWHERE dp.category = 'Paint & Decorating'\n  AND ds.store_id < 900\n  AND dp.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_week BETWEEN 9 AND 13\nGROUP BY d.fiscal_week\nORDER BY d.fiscal_week\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "fiscal_week | row_count | weekly_value\n9 | 2699 | 341138.89\n10 | 2674 | 341742.53\n11 | 2674 | 344245.91\n12 | 2674 | 349160.39\n13 | 2674 | 346046.42\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:47:49",
+   "statement": "SELECT \n  fsw.store_key,\n  fsw.product_key,\n  fsw.week_ending_date,\n  COUNT(*) AS record_count\nFROM fact_stock_week fsw\nJOIN dim_product dp ON fsw.product_key = dp.product_key\nJOIN dim_store ds ON fsw.store_key = ds.store_key\nJOIN dim_date d ON fsw.week_ending_date = d.calendar_date\nWHERE dp.category = 'Paint & Decorating'\n  AND ds.store_id < 900\n  AND dp.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_week BETWEEN 9 AND 13\nGROUP BY fsw.store_key, fsw.product_key, fsw.week_ending_date\nHAVING COUNT(*) > 1\nLIMIT 10\n",
+   "n": 5,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "store_key | product_key | week_ending_date | record_count\n(0 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:47:54",
+   "statement": "query-check/scripts/query_check.py --file q.sql --period FY2026/27 P03",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 1 rows, 1 columns: average_closing_stock_value_eur\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2026-06-29 to 2026-08-02 (35 days; fiscal: FY2026/27 P03).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 3 rows in the range only in Helsinki time, 9 only in UTC; fact_sales_line.sale_ts_utc: 6 rows in the range only in Helsinki time, 20 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  average_closing_stock_value_eur\n  344466.828\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

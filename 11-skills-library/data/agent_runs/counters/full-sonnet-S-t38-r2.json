@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-S-t38-r2",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T38",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "97747f4eecdf57d4103b3d6fb34f85a110d3ffce9727b8eb512fe584e6d002ff",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:44:28",
+   "statement": "SELECT c.*, (SELECT count(*) FROM campaign_holdout h WHERE h.campaign_id=c.campaign_id) AS h_rows, (SELECT count(DISTINCT member_id) FROM campaign_holdout h WHERE h.campaign_id=c.campaign_id) AS h_distinct FROM dim_campaign c ORDER BY start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 23,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | channels | target_group | holdout_pct | mailing_list_size | holdout_size | h_rows | h_distinct\n1 | Spring Garden Launch 2024 | 2024-05-06 | 2024-05-26 | email+sms | All members with marketing consent at the campaign start | 0.100 | 7918 | 841 | 841 | 841\n2 | Midsummer Terrace 2024 | 2024-06-10 | 2024-06-23 | email | Silver and Gold tier members with marketing consent at the campaign start | 0.100 | 2557 | 281 | 281 | 281\n3 | Back to School Home Office 2024 | 2024-08-12 | 2024-09-01 | email+push | All members with marketing consent at the campaign start | 0.100 | 9258 | 941 | 941 | 941\n4 | Autumn Refresh Paint 2024 | 2024-09-16 | 2024-10-06 | email | All members with marketing consent at the campaign start | 0.100 | 9876 | 1033 | 1033 | 1033\n5 | Black Week 2024 | 2024-11-25 | 2024-12-01 | email+sms+push | All members with marketing consent at the campaign start | 0.100 | 18693 | 1928 | 1928 | 1928\n6 | Christmas Last Orders 2024 | 2024-12-09 | 2024-12-22 | email+sms | Silver and Gold tier members with marketing consent at the campaign start | 0.100 | 3544 | 359 | 359 | 359\n7 | New Year Storage Sale | 2025-01-06 | 2025-01-26 | email | All members with marketing consent at the campaign start | 0.100 | 11160 | 1064 | 1064 | 1064\n8 | Sauna and Winter Warmers 2025 | 2025-02-03 | 2025-02-23 | email | Members with marketing consent whose home store is in the North or East region at the campaign start | 0.100 | 3094 | 306 | 306 | 30"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:44:29",
+   "statement": "SELECT * FROM bak_dim_campaign_2025 ORDER BY start_date\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | channels | target_group | holdout_pct | mailing_list_size | holdout_size\n1 | Spring Garden Launch 2024 | 2024-05-06 | 2024-05-26 | email+sms | All members with marketing consent at the campaign start | 0.100 | 7918 | 841\n2 | Midsummer Terrace 2024 | 2024-06-10 | 2024-06-23 | email | Silver and Gold tier members with marketing consent at the campaign start | 0.100 | 2557 | 281\n3 | Back to School Home Office 2024 | 2024-08-12 | 2024-09-01 | email+push | All members with marketing consent at the campaign start | 0.100 | 9258 | 941\n4 | Autumn Refresh Paint 2024 | 2024-09-16 | 2024-10-06 | email | All members with marketing consent at the campaign start | 0.100 | 9876 | 1033\n5 | Black Week 2024 | 2024-11-25 | 2024-12-01 | email+sms+push | All members with marketing consent at the campaign start | 0.100 | 18693 | 1928\n6 | Christmas Last Orders 2024 | 2024-12-09 | 2024-12-22 | email+sms | Silver and Gold tier members with marketing consent at the campaign start | 0.100 | 3544 | 359\n7 | New Year Storage Sale | 2025-01-06 | 2025-01-26 | email | All members with marketing consent at the campaign start | 0.100 | 11160 | 1064\n8 | Sauna and Winter Warmers 2025 | 2025-02-03 | 2025-02-23 | email | Members with marketing consent whose home store is in the North or East region at the campaign start | 0.100 | 3094 | 306\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:44:38",
+   "statement": "WITH h AS (SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id=15),\nex AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=15),\nhm AS (SELECT h.member_id,\n  (SELECT count(*) FROM dim_member m WHERE m.member_id=h.member_id) AS versions,\n  (SELECT bool_or(m.marketing_consent) FROM dim_member m WHERE m.member_id=h.member_id AND m.valid_from<=DATE '2025-11-24' AND m.valid_to>=DATE '2025-11-24') AS consent_at_start,\n  (SELECT count(*) FROM dim_member m WHERE m.member_id=h.member_id AND m.valid_from<=DATE '2025-11-24' AND m.valid_to>=DATE '2025-11-24') AS n_valid_at_start\n FROM h)\nSELECT count(*) AS holdout_members,\n count(*) FILTER (WHERE versions=0) AS not_in_dim,\n count(*) FILTER (WHERE n_valid_at_start=0) AS none_valid_at_start,\n count(*) FILTER (WHERE n_valid_at_start>1) AS multi_valid,\n count(*) FILTER (WHERE consent_at_start) AS consent_true,\n count(*) FILTER (WHERE consent_at_start IS NOT TRUE) AS consent_not_true,\n (SELECT count(*) FROM ex) AS exposed_members,\n (SELECT count(*) FROM ex WHERE member_id IN (SELECT member_id FROM h)) AS exposed_and_held_out,\n (SELECT count(*) FROM fact_campaign_exposure WHERE campaign_id=15) AS exp_rows,\n (SELECT count(*) FROM stg_campaign_contact_load WHERE campaign_id=15) AS stg_rows\nFROM hm\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "holdout_members | not_in_dim | none_valid_at_start | multi_valid | consent_true | consent_not_true | exposed_members | exposed_and_held_out | exp_rows | stg_rows\n2747 | 0 | 0 | 0 | 2747 | 0 | 23818 | 0 | 50043 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:44:44",
+   "statement": "WITH elig AS (SELECT DISTINCT member_id FROM dim_member WHERE marketing_consent AND valid_from<=DATE '2025-11-24' AND valid_to>=DATE '2025-11-24' AND join_date<=DATE '2025-11-24'),\nh AS (SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id=15),\nex AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=15)\nSELECT (SELECT count(*) FROM elig) AS eligible,\n (SELECT count(*) FROM elig WHERE member_id NOT IN (SELECT member_id FROM h) AND member_id NOT IN (SELECT member_id FROM ex)) AS eligible_neither,\n (SELECT count(*) FROM ex WHERE member_id NOT IN (SELECT member_id FROM elig)) AS exposed_not_eligible,\n (SELECT count(*) FROM h WHERE member_id NOT IN (SELECT member_id FROM elig)) AS held_not_eligible,\n (SELECT count(*) FROM campaign_holdout WHERE campaign_id=15) AS rows_total\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "eligible | eligible_neither | exposed_not_eligible | held_not_eligible | rows_total\n33080 | 6515 | 0 | 0 | 2747\n(1 row)"
+  }
+ ]
+}

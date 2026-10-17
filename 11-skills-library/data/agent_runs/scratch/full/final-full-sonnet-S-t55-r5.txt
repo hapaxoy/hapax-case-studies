@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, d.fiscal_period, round(100.0 * sum(CASE WHEN o.member_key IS NOT NULL THEN f.net_amount ELSE 0 END) / sum(f.net_amount), 1) AS member_share_of_web_net_sales_pct FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id = f.receipt_id JOIN dim_date d ON d.calendar_date = f.sale_date WHERE f.channel_id IN (2, 3) AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 9 AND 11 GROUP BY d.fiscal_year, d.fiscal_period ORDER BY d.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "member_share_of_web_net_sales_pct"],
+    "rows": [
+      ["FY2025/26", 9, 67.4],
+      ["FY2025/26", 10, 67.3],
+      ["FY2025/26", 11, 67.1]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales = fact_sales_line rows with channel_id 2 (web home delivery) or 3 (click and collect), i.e. the web shop store 900. channel_code is NULL in this date range, so it is not used.",
+    "Sales value = net_amount (EUR excluding VAT, after line discounts).",
+    "Loyalty member sale = the web order has a member_key (logged-in order). Guest orders count as non-member.",
+    "Fiscal periods from dim_date and ref_fiscal_calendar: FY2025/26 P09 = 2025-12-22 to 2026-01-25, P10 = 2026-01-26 to 2026-02-22, P11 = 2026-02-23 to 2026-03-22.",
+    "Period assigned by sale_date, which is the local business date."
+  ],
+  "assumptions": [
+    "'Last year' means the last completed fiscal year, FY2025/26. The request is dated 2026-10-09, which falls in FY2026/27, and the fiscal year starts in late April or May.",
+    "'Periods 9 to 11' are fiscal periods 9, 10 and 11 of that year, reported as three separate rows.",
+    "'Share of web sales' is the value share (member net sales divided by total web net sales), not an order count or line count share.",
+    "Web sales are shown before returns, and cancelled orders are not an issue. Every web line in the range belongs to a delivered or collected order.",
+    "Both web fulfilment types, home delivery and click and collect, are included as web."
+  ],
+  "caveats": [
+    "Correction applied: 1,309 web sales lines (EUR 37,981 net) have a NULL member_key on fact_sales_line even though their web order is logged_in with a member_key on fact_web_order. These lines were loaded between 2026-02-10 and 2026-03-02 and fall mostly in P10 and P11. I took membership from fact_web_order.member_key. Using the line-level member_key, as a plain query would, understates the member share: P10 would show 48.9% instead of 67.3%, and P11 58.7% instead of 67.1%. P9 is unaffected at 67.4%.",
+    "After the correction the share is stable at about 67% in all three periods. Where both keys exist they never disagree, and every order-level member_key exists in dim_member and was valid on the sale date.",
+    "The source of the missing line-level member keys is an ETL gap, which should be fixed in fact_sales_line. I did not trace the cause.",
+    "I did not net out web returns from fact_return_line, so the figures are shares of sales before returns.",
+    "Shares are rounded to one decimal place."
+  ]
+}
+```

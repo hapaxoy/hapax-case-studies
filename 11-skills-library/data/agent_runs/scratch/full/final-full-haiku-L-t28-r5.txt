@@ -1,0 +1,38 @@
+Perfect! The query validation passed. Let me format the final response.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2026-09-27' AS week_ending\n),\nclosing AS (\n    SELECT cp.category, SUM(fs.closing_units) AS closing_units\n    FROM fact_stock_week fs\n    JOIN dim_store s ON s.store_key = fs.store_key\n    JOIN dim_product p ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date = params.week_ending\n      AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n    GROUP BY 1\n),\nsold AS (\n    SELECT cp.category, SUM(f.quantity) AS units_sold_4w\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7\n      AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n    GROUP BY 1\n)\nSELECT c.category, c.closing_units,\n       ROUND(COALESCE(s.units_sold_4w, 0) / 4.0, 1) AS avg_weekly_units_sold,\n       CASE WHEN COALESCE(s.units_sold_4w, 0) = 0 THEN NULL\n            ELSE ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) END AS weeks_of_cover\nFROM closing c\nLEFT JOIN sold s ON s.category = c.category\nORDER BY c.category;",
+  "result": {
+    "columns": ["category", "closing_units", "avg_weekly_units_sold", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 12237, 1057.8, 11.6],
+      ["Cleaning &amp; Household", 18212, 2393.5, 7.6],
+      ["Electrical", 23887, 2601.3, 9.2],
+      ["Furniture", 4963, 168.0, 29.5],
+      ["Garden", 45196, 2751.3, 16.4],
+      ["Home Textiles &amp; Decor", 18354, 1504.3, 12.2],
+      ["Kitchen &amp; Dining", 14037, 961.8, 14.6],
+      ["Paint &amp; Decorating", 18302, 1453.8, 12.6],
+      ["Seasonal", 25570, 524.3, 48.8],
+      ["Tools &amp; Hardware", 30399, 3943.8, 7.7]
+    ]
+  },
+  "definitions_applied": [
+    "Weeks of cover: closing stock units divided by average weekly units sold over prior four fiscal weeks",
+    "Stock scope: physical stores only (store_id &lt; 900), test category (ZZ Test) excluded",
+    "Semi-additive aggregation: closing units summed across stores and products within the snapshot week"
+  ],
+  "assumptions": [
+    "Last period interpreted as FY2026/27 P05, ending 2026-09-27 (the last completed fiscal period as of warehouse load date 2026-10-04)",
+    "Prior four weeks calculated as 34 days before to 7 days before snapshot date (covering fiscal weeks 18-21 of FY2026/27)",
+    "Weeks of cover aggregated across all physical stores, one figure per category"
+  ],
+  "caveats": [
+    "Categories shown are only those with closing inventory at the snapshot date; categories with zero stock do not appear",
+    "Seasonal category shows unusually high weeks of cover (48.8 weeks), consistent with pre-holiday inventory buildup typical for seasonal merchandise",
+    "Weeks of cover is null for any category with zero sales in the prior four weeks; this does not occur in the current result",
+    "Snapshot date is 27 September 2026, the Sunday ending fiscal week 21 of FY2026/27 P05"
+  ]
+}
+```

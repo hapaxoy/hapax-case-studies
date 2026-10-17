@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t32-r5",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T32",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "46338a354d52b6b7061bd1e3c2f106d24f989467a95c9c2d61a43bac226319f4",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:52:20",
+   "statement": "fiscal-calendar/scripts/fiscal.py P3 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P3 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P03\n  fiscal_weeks                       9-13\n  start_date                         2026-06-29\n  end_date                           2026-08-02\n  weeks                              5\n  days                               35\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-02\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 9 AND 13)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:23",
+   "statement": "-- Find Lahti store\nSELECT store_id, store_name, city, region, format, is_current\nFROM dim_store\nWHERE city = 'Lahti' AND is_current\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | city | region | format | is_current\n108 | Lahti | Lahti | South | Large | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:26",
+   "statement": "-- Find Interior Paint products\nSELECT DISTINCT sku, product_name, category, subcategory, is_current\nFROM dim_product\nWHERE (product_name ILIKE '%Interior Paint%' OR product_name ILIKE '%Paint%' OR subcategory ILIKE '%Paint%')\n  AND is_current\nLIMIT 20\n",
+   "n": 3,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "sku | product_name | category | subcategory | is_current\n100938 | Interior Paint Norvik 469 | Paint & Decorating | Interior Paint | true\n100961 | Interior Paint Kajo 520 | Paint & Decorating | Interior Paint | true\n100979 | Interior Paint Havu Pro 386 | Paint & Decorating | Interior Paint | true\n100980 | Interior Paint Havu 423 | Paint & Decorating | Interior Paint | true\n101001 | Interior Paint Havu 400 | Paint & Decorating | Interior Paint | true\n101005 | Interior Paint Ahvenisto 548 | Paint & Decorating | Interior Paint | true\n101014 | Interior Paint Nordhem 881 | Paint & Decorating | Interior Paint | true\n101015 | Interior Paint Raudikko 918 | Paint & Decorating | Interior Paint | true\n101020 | Interior Paint Havu 303 | Paint & Decorating | Interior Paint | true\n101048 | Interior Paint Harmaja 539 | Paint & Decorating | Interior Paint | true\n101054 | Interior Paint Havu 761 | Paint & Decorating | Interior Paint | true\n101062 | Exterior Paint Harmaja 257 | Paint & Decorating | Exterior Paint | true\n101065 | Exterior Paint Selkämaa 368 | Paint & Decorating | Exterior Paint | true\n101077 | Exterior Paint Mäntylä 812 | Paint & Decorating | Exterior Paint | true\n101085 | Exterior Paint Havu 308 | Paint & Decorating | Exterior Paint | true\n101106 | Exterior Paint Poutaranta Home 285 | Paint & Decorating | Exterior Paint | true\n101107 | Exterior Paint Koivuranta 322 | Paint & Decorating | Exterior Paint | true\n101118 | Exterior Paint Kuusela 729 | Paint & Decorating | Exterior Pain"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:52:31",
+   "statement": "-- Units of Interior Paint sold in Lahti store in P3 FY26/27\nSELECT \n  SUM(f.quantity) AS units_sold\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE s.store_id = 108  -- Lahti store\n  AND p.subcategory = 'Interior Paint'\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_week BETWEEN 9 AND 13\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "units_sold\n194\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:52:41",
+   "statement": "query-check/scripts/query_check.py --file q.sql --period FY2026/27 P03",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n  [WARN] Sales lines used without a filter on category 'ZZ Test' (REG-TEST-SKU, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 1 rows, 1 columns: units_sold\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2026-06-29 to 2026-08-02 (35 days; fiscal: FY2026/27 P03).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 3 rows in the range only in Helsinki time, 9 only in UTC; fact_sales_line.sale_ts_utc: 6 rows in the range only in Helsinki time, 20 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  units_sold\n  194\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

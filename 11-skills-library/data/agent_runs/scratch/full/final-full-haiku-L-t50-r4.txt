@@ -1,0 +1,32 @@
+Perfect. The data is complete and consistent. Let me now prepare the final JSON response.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 6 AS first_period, 8 AS last_period\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n    SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, o.fulfilment_type, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year,\n       d.fiscal_period,\n       ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 1) AS click_collect_share_pct\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.business_date\nCROSS JOIN params\nWHERE d.fiscal_year = params.fiscal_year AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1, 2\nORDER BY 2;",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 6, 27.9],
+      ["FY2025/26", 7, 25.4],
+      ["FY2025/26", 8, 27.0]
+    ]
+  },
+  "definitions_applied": [
+    "DEF-WEB-RECOGNITION: Web sales recognised on dispatch date in Helsinki time",
+    "DEF-NET-SALES: Net sales excluding VAT, after returns",
+    "DEF-CLICK-COLLECT: Click-and-collect counted as part of web sales, identified by fulfilment_type",
+    "REG-STORE-900: Web shop identified as store 900",
+    "REG-RETURN-LAG: Returns booked on return date, matched to original order via sales_line_id",
+    "REG-MIGRATION: Platform migration 3 Nov 2025; fulfilment_type used consistently across migration"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (fiscal year prior to current FY2026/27), following accepted practice for relative-date requests made during FY2026/27",
+    "Web shop sales refers to net sales excluding VAT",
+    "Only delivered and collected orders included; cancelled and processing orders excluded",
+    "Test articles (category ZZ Test) excluded from share calculations"
+  ],
+  "caveats": [
+    "None: requested period FY2025/26 P6-P8 is fully loaded in the warehouse (through 2025-12-21)"
+  ]
+}
+```

@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-Lminus-t41-r2",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T41",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "68a26f99d0200441eb190cd6334bf875d79c978342b1ffbf629b40b14b21a012",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:36",
+   "statement": "SELECT member_id, member_key, join_date, tier, home_store_id, marketing_consent, valid_from, valid_to, is_current\nFROM dim_member\nWHERE join_date = DATE '2026-10-03'\nORDER BY member_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 29,
+   "output_preview": "member_id | member_key | join_date | tier | home_store_id | marketing_consent | valid_from | valid_to | is_current\n70003330 | 4968 | 2026-10-03 | Basic | 900 | true | 2026-10-03 | 9999-12-31 | true\n70004508 | 6729 | 2026-10-03 | Basic | 900 | true | 2026-10-03 | 9999-12-31 | true\n70004953 | 7394 | 2026-10-03 | Silver | 900 | false | 2026-10-03 | 9999-12-31 | true\n70009784 | 14653 | 2026-10-03 | Basic | 104 | true | 2026-10-03 | 9999-12-31 | true\n70010402 | 15554 | 2026-10-03 | Basic | 118 | true | 2026-10-03 | 9999-12-31 | true\n70013744 | 20489 | 2026-10-03 | Silver | 119 | true | 2026-10-03 | 9999-12-31 | true\n70015032 | 22431 | 2026-10-03 | Basic | 900 | true | 2026-10-03 | 9999-12-31 | true\n70015332 | 22887 | 2026-10-03 | Silver | 127 | false | 2026-10-03 | 9999-12-31 | true\n70019974 | 29818 | 2026-10-03 | Basic | 110 | true | 2026-10-03 | 9999-12-31 | true\n70021242 | 31699 | 2026-10-03 | Silver | 112 | true | 2026-10-03 | 9999-12-31 | true\n70021262 | 31726 | 2026-10-03 | Basic | 900 | true | 2026-10-03 | 9999-12-31 | true\n70023294 | 34768 | 2026-10-03 | Basic | 137 | true | 2026-10-03 | 9999-12-31 | true\n70027520 | 41069 | 2026-10-03 | Basic | 900 | false | 2026-10-03 | 9999-12-31 | true\n70032718 | 48786 | 2026-10-03 | Basic | 128 | true | 2026-10-03 | 9999-12-31 | true\n70033184 | 49489 | 2026-10-03 | Basic | 127 | true | 2026-10-03 | 9999-12-31 | true\n70035412 | 52816 | 2026-10-03 | Basic | 900 | false | 2026-10-03 | 9999-12-31 | true\n70036718 | 54750 | 2026-10-03 | Basi"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:42",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id, valid_from,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from) AS vn,\n         COUNT(DISTINCT join_date) OVER (PARTITION BY member_id) AS n_join_dates\n  FROM dim_member)\nSELECT 'join_date=3Oct' AS chk, COUNT(*) AS rows_, COUNT(DISTINCT member_id) AS members, MAX(n_join_dates) AS max_dates, SUM(CASE WHEN home_store_id=999 THEN 1 ELSE 0 END) AS s999 FROM fv WHERE join_date = DATE '2026-10-03'\nUNION ALL\nSELECT 'first_version_valid_from=3Oct', COUNT(*), COUNT(DISTINCT member_id), MAX(n_join_dates), 0 FROM fv WHERE vn=1 AND valid_from = DATE '2026-10-03'\nUNION ALL\nSELECT 'neighbours 2Oct', COUNT(*), COUNT(DISTINCT member_id), 0, 0 FROM fv WHERE vn=1 AND join_date = DATE '2026-10-02'\nUNION ALL\nSELECT 'neighbours 4Oct', COUNT(*), COUNT(DISTINCT member_id), 0, 0 FROM fv WHERE vn=1 AND join_date = DATE '2026-10-04'\nUNION ALL\nSELECT 'neighbours 5Oct', COUNT(*), COUNT(DISTINCT member_id), 0, 0 FROM fv WHERE vn=1 AND join_date = DATE '2026-10-05'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "chk | rows_ | members | max_dates | s999\njoin_date=3Oct | 29 | 29 | 1 | 0\nfirst_version_valid_from=3Oct | 29 | 29 | 1 | 0\nneighbours 2Oct | 40 | 40 | 0 | 0\nneighbours 4Oct | 40 | 40 | 0 | 0\nneighbours 5Oct | 0 | 0 | 0 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:03:47",
+   "statement": "WITH d AS (\n  SELECT join_date, dayname(join_date) AS dow, COUNT(DISTINCT member_id) AS n\n  FROM dim_member WHERE join_date BETWEEN DATE '2026-09-14' AND DATE '2026-10-04' GROUP BY 1,2),\ns AS (\n  SELECT join_date, COUNT(DISTINCT member_id) AS n_stg,\n         COUNT(DISTINCT CASE WHEN member_id NOT IN (SELECT member_id FROM dim_member) THEN member_id END) AS n_stg_not_in_dim\n  FROM stg_member_updates WHERE join_date BETWEEN DATE '2026-09-14' AND DATE '2026-10-04' GROUP BY 1)\nSELECT d.join_date, d.dow, d.n, s.n_stg, s.n_stg_not_in_dim FROM d LEFT JOIN s USING (join_date) ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 21,
+   "output_preview": "join_date | dow | n | n_stg | n_stg_not_in_dim\n2026-09-14 | Monday | 30 | 30 | 0\n2026-09-15 | Tuesday | 35 | 35 | 0\n2026-09-16 | Wednesday | 26 | 26 | 0\n2026-09-17 | Thursday | 40 | 40 | 0\n2026-09-18 | Friday | 44 | 44 | 0\n2026-09-19 | Saturday | 27 | 27 | 0\n2026-09-20 | Sunday | 37 | 37 | 0\n2026-09-21 | Monday | 35 | 35 | 0\n2026-09-22 | Tuesday | 30 | 30 | 0\n2026-09-23 | Wednesday | 39 | 39 | 0\n2026-09-24 | Thursday | 41 | 41 | 0\n2026-09-25 | Friday | 39 | 39 | 0\n2026-09-26 | Saturday | 44 | 44 | 0\n2026-09-27 | Sunday | 41 | 41 | 0\n2026-09-28 | Monday | 33 | 33 | 0\n2026-09-29 | Tuesday | 33 | 33 | 0\n2026-09-30 | Wednesday | 31 | 31 | 0\n2026-10-01 | Thursday | 36 | 36 | 0\n2026-10-02 | Friday | 40 | 40 | 0\n2026-10-03 | Saturday | 29 | 29 | 0\n2026-10-04 | Sunday | 40 | 40 | 0\n(21 rows)"
+  }
+ ]
+}

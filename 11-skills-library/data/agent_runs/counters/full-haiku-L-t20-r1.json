@@ -1,0 +1,139 @@
+{
+ "run_id": "full-haiku-L-t20-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T20",
+ "budget": 30,
+ "used": 14,
+ "refused": 0,
+ "packet_sha256": "7109a850ff31c01028a8e94e3b5bf614122f351425baa37959e5d8785c8991ec",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:35:15",
+   "statement": "fiscal-calendar/scripts/fiscal.py this year",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: this year    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P01, FY2026/27 P02, FY2026/27 P03, FY2026/27 P04, FY2026/27 P05, FY2026/27 P06\n  fiscal_weeks                       1-22\n  start_date                         2026-05-04\n  end_date                           2027-05-02\n  weeks                              22\n  days                               364\n  includes_week_53                   False\n  complete_as_of                     False\n  loaded_through                     2026-10-04\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 22)\n  note: 'This year' = the current fiscal year (CAL-RELATIVE).\n  note: Only 22 of the 52 fiscal weeks are in dim_date.\n  note: The range runs past the last loaded date (2026-10-04); only data through 2026-10-04 exists (CAL-DATA-THROUGH).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:35:23",
+   "statement": "WITH sales_with_returns AS (\n  SELECT \n    s.region,\n    SUM(fsl.net_amount) - COALESCE(SUM(frl.refund_net), 0) as net_sales\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON fsl.store_key = s.store_key\n  INNER JOIN dim_product p ON fsl.product_key = p.product_key\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n  GROUP BY s.region\n)\nSELECT \n  region,\n  net_sales,\n  ROW_NUMBER() OVER (ORDER BY net_sales DESC) as rank\nFROM sales_with_returns\nORDER BY rank\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | net_sales | rank\nWest | 1829734.36 | 1\nSouth | 1319298.77 | 2\nEast | 965859.69 | 3\nCapital Region | 956399.45 | 4\nNorth | 733819.89 | 5\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:35:34",
+   "statement": "WITH sales_lines AS (\n  SELECT \n    s.region,\n    fsl.sales_line_id,\n    fsl.net_amount,\n    COALESCE(SUM(frl.refund_net), 0) as refund_net\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON fsl.store_key = s.store_key\n  INNER JOIN dim_product p ON fsl.product_key = p.product_key\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n  GROUP BY s.region, fsl.sales_line_id, fsl.net_amount\n)\nSELECT \n  region,\n  ROUND(SUM(net_amount - refund_net), 2) as net_sales,\n  ROW_NUMBER() OVER (ORDER BY SUM(net_amount - refund_net) DESC) as rank\nFROM sales_lines\nGROUP BY region\nORDER BY rank\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | net_sales | rank\nWest | 1829734.36 | 1\nSouth | 1319298.77 | 2\nEast | 965859.69 | 3\nCapital Region | 956399.45 | 4\nNorth | 733819.89 | 5\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:35:39",
+   "statement": "query-check/scripts/query_check.py --file q.sql --start 2026-05-04 --end 2026-10-04 --grain region",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 5 rows, 3 columns: region, net_sales, rank\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 5 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-05-04 to 2026-10-04 (154 days; fiscal: FY2026/27 P02, FY2026/27 P05, FY2026/27 P04, FY2026/27 P03, FY2026/27 P06, FY2026/27 P01).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 5 rows) ==\n  region | net_sales | rank\n  West | 1829734.36 | 1\n  South | 1319298.77 | 2\n  East | 965859.69 | 3\n  Capital Region | 956399.45 | 4\n  North | 733819.89 | 5\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:35:47",
+   "statement": "query-check/scripts/query_check.py --file q.sql --start 2026-05-04 --end 2026-10-04 --grain region --control",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 5 rows, 3 columns: region, net_sales, rank\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 5 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-05-04 to 2026-10-04 (154 days; fiscal: FY2026/27 P03, FY2026/27 P04, FY2026/27 P05, FY2026/27 P06, FY2026/27 P01, FY2026/27 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2026-05-04 to 2026-10-04, stores: all, at level: total.\n  [INFO] Result total 5,805,112.16; control total 6,872,871.91; gap -1,067,759.75.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 5,805,112.16 vs control 6,872,871.91 (gap -1,067,759.75). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (first 5 rows) ==\n  region "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:35:54",
+   "statement": "WITH store_details AS (\n  SELECT DISTINCT s.store_id, s.store_name, s.region\n  FROM dim_store s\n  WHERE s.is_current\n  ORDER BY s.store_id\n)\nSELECT * FROM store_details\n",
+   "n": 6,
+   "ok": true,
+   "rows": 41,
+   "output_preview": "store_id | store_name | region\n101 | Helsinki Vuosaari | Capital Region\n102 | Helsinki Pitäjänmäki | Capital Region\n103 | Espoo Lommila | Capital Region\n104 | Vantaa Tammisto | Capital Region\n105 | Kerava | Capital Region\n106 | Porvoo | South\n107 | Hyvinkää | South\n108 | Lahti | South\n109 | Hämeenlinna | South\n110 | Turku Kupittaa | South\n111 | Turku Härmälä | South\n112 | Raisio | South\n113 | Salo | South\n114 | Kouvola | South\n115 | Tampere Hervanta | West\n116 | Tampere Lielahti | West\n117 | Tampere Kaleva | West\n118 | Nokia | West\n119 | Pori | West\n120 | Rauma | West\n121 | Vaasa | West\n122 | Seinäjoki | West\n123 | Kokkola | West\n124 | Jyväskylä Palokka | East\n125 | Kuopio | East\n126 | Joensuu | East\n127 | Mikkeli | East\n128 | Lappeenranta | East\n129 | Savonlinna | East\n130 | Kotka | East\n131 | Oulu Kaakkuri | North\n132 | Oulu Linnanmaa | North\n133 | Kemi | North\n134 | Rovaniemi | North\n135 | Kajaani | North\n136 | Tampere Lamminpää | West\n137 | Lohja | South\n138 | Iisalmi | East\n139 | Raahe | North\n900 | Tuomimetsä web shop | Online\n999 | Training store | Head office\n(41 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:35:58",
+   "statement": "SELECT \n  store_id,\n  SUM(net_sales) as control_total\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-05-04' AND '2026-10-04'\nGROUP BY store_id\nORDER BY store_id\n",
+   "n": 7,
+   "ok": true,
+   "rows": 39,
+   "output_preview": "store_id | control_total\n101 | 180089.21\n102 | 335012.09\n103 | 132930.25\n104 | 248472.96\n105 | 52162.99\n106 | 60515.02\n107 | 157267.05\n108 | 261144.57\n109 | 149888.04\n110 | 236068.97\n111 | 116079.61\n112 | 62312.20\n113 | 59448.88\n114 | 133103.00\n115 | 372967.51\n116 | 235030.63\n117 | 220657.78\n118 | 191200.81\n119 | 188888.61\n120 | 50991.30\n121 | 182149.06\n122 | 142484.92\n123 | 62750.72\n124 | 183257.62\n125 | 176196.72\n126 | 173686.28\n127 | 121289.34\n128 | 173838.98\n130 | 75563.09\n131 | 256862.90\n132 | 170738.86\n133 | 63431.20\n134 | 112231.63\n135 | 53455.86\n136 | 168018.13\n137 | 73386.17\n138 | 55592.28\n139 | 73665.79\n900 | 1110040.88\n(39 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:03",
+   "statement": "SELECT \n  CASE WHEN store_id < 900 THEN 'Stores' ELSE 'Web' END as channel,\n  SUM(net_sales) as control_total\nFROM rpt_daily_store_sales\nWHERE business_date BETWEEN '2026-05-04' AND '2026-10-04'\nGROUP BY CASE WHEN store_id < 900 THEN 'Stores' ELSE 'Web' END\nORDER BY channel\n",
+   "n": 8,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "channel | control_total\nStores | 5762831.03\nWeb | 1110040.88\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:09",
+   "statement": "WITH detailed_sales AS (\n  SELECT \n    s.region,\n    s.store_id,\n    SUM(fsl.net_amount) as gross_sales,\n    COALESCE(SUM(frl.refund_net), 0) as total_refunds,\n    SUM(fsl.net_amount) - COALESCE(SUM(frl.refund_net), 0) as net_sales\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON fsl.store_key = s.store_key\n  INNER JOIN dim_product p ON fsl.product_key = p.product_key\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n  GROUP BY s.region, s.store_id\n)\nSELECT \n  region,\n  SUM(net_sales) as net_sales\nFROM detailed_sales\nGROUP BY region\nORDER BY region\n",
+   "n": 9,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | net_sales\nCapital Region | 956399.45\nEast | 965859.69\nNorth | 733819.89\nSouth | 1319298.77\nWest | 1829734.36\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:15",
+   "statement": "SELECT \n  MIN(calendar_date) as min_date,\n  MAX(calendar_date) as max_date\nFROM dim_date\nWHERE fiscal_year = 'FY2026/27' AND fiscal_week BETWEEN 1 AND 22\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min_date | max_date\n2026-05-04 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:22",
+   "statement": "WITH returns_by_line AS (\n  SELECT \n    sales_line_id,\n    SUM(refund_net) as total_refund\n  FROM fact_return_line\n  GROUP BY sales_line_id\n),\nsales_with_region AS (\n  SELECT \n    s.region,\n    fsl.net_amount,\n    COALESCE(r.total_refund, 0) as refund_net\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON fsl.store_key = s.store_key\n  INNER JOIN dim_product p ON fsl.product_key = p.product_key\n  LEFT JOIN returns_by_line r ON fsl.sales_line_id = r.sales_line_id\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n)\nSELECT \n  region,\n  ROUND(SUM(net_amount - refund_net), 2) as net_sales,\n  ROW_NUMBER() OVER (ORDER BY SUM(net_amount - refund_net) DESC) as rank\nFROM sales_with_region\nGROUP BY region\nORDER BY rank\n",
+   "n": 11,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | net_sales | rank\nWest | 1829734.36 | 1\nSouth | 1319298.77 | 2\nEast | 965859.69 | 3\nCapital Region | 956399.45 | 4\nNorth | 733819.89 | 5\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:29",
+   "statement": "WITH returns_in_range AS (\n  SELECT \n    sales_line_id,\n    SUM(refund_net) as total_refund\n  FROM fact_return_line frl\n  INNER JOIN dim_date d ON frl.return_date = d.calendar_date\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n  GROUP BY sales_line_id\n),\nsales_in_range AS (\n  SELECT \n    s.region,\n    fsl.net_amount,\n    COALESCE(r.total_refund, 0) as refund_net\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON fsl.store_key = s.store_key\n  INNER JOIN dim_product p ON fsl.product_key = p.product_key\n  LEFT JOIN returns_in_range r ON fsl.sales_line_id = r.sales_line_id\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 1 AND 22\n    AND s.store_id < 900\n    AND p.category != 'ZZ Test'\n)\nSELECT \n  region,\n  ROUND(SUM(net_amount - refund_net), 2) as net_sales,\n  ROW_NUMBER() OVER (ORDER BY SUM(net_amount - refund_net) DESC) as rank\nFROM sales_in_range\nGROUP BY region\nORDER BY rank\n",
+   "n": 12,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | net_sales | rank\nWest | 1829734.36 | 1\nSouth | 1319298.77 | 2\nEast | 965859.69 | 3\nCapital Region | 956399.45 | 4\nNorth | 733819.89 | 5\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:36:45",
+   "statement": "WITH net_lines AS (\n    -- sales: stores on the sale date\n    SELECT f.sale_date AS business_date, s.store_id,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id <> 999 AND s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nby_region AS (\n    SELECT d.fiscal_year, d.fiscal_week, cs.region, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d  ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 22\n    GROUP BY 1, 2, 3\n)\nSELECT \n  region,\n  ROUND(SUM(net_sales), 2) as net_sales,\n  ROW_NUMBER() OVER (ORDER BY SUM(net_sales) DESC) as rank\nFROM by_region\nGROUP BY region\nORDER BY rank\n",
+   "n": 13,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | net_sales | rank\nWest | 1815139.47 | 1\nSouth | 1309213.51 | 2\nEast | 959424.31 | 3\nCapital Region | 948667.50 | 4\nNorth | 730386.24 | 5\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:36:52",
+   "statement": "query-check/scripts/query_check.py --file q.sql --start 2026-05-04 --end 2026-10-04 --grain region --control",
+   "n": 14,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.2 s.\n\n== Row count ==\n  [PASS] 5 rows, 3 columns: region, net_sales, rank\n\n== Duplicate keys ==\n  [PASS] Unique at grain (region): 5 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-05-04 to 2026-10-04 (154 days; fiscal: FY2026/27 P01, FY2026/27 P02, FY2026/27 P05, FY2026/27 P06, FY2026/27 P03, FY2026/27 P04).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 0 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 0 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2026-05-04 to 2026-10-04, stores: all, at level: total.\n  [INFO] Result total 5,762,831.03; control total 6,872,871.91; gap -1,110,040.88.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 5,762,831.03 vs control 6,872,871.91 (gap -1,110,040.88). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (first 5 rows) ==\n  region "
+  }
+ ]
+}

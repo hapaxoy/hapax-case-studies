@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), gross_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.region, f.gross_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id <> 999 AND p.category <> 'ZZ Test') SELECT region, SUM(CASE WHEN business_date BETWEEN DATE '2024-08-01' AND DATE '2024-08-31' THEN gross_amount ELSE 0 END) AS august_2024_gross_incl_vat, SUM(CASE WHEN business_date BETWEEN DATE '2024-09-01' AND DATE '2024-09-30' THEN gross_amount ELSE 0 END) AS september_2024_gross_incl_vat FROM gross_lines WHERE business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' GROUP BY region ORDER BY region",
+  "result": {
+    "columns": ["region", "august_2024_gross_incl_vat", "september_2024_gross_incl_vat"],
+    "rows": [
+      ["East", 296762.31, 249751.64],
+      ["North", 175960.85, 149625.27],
+      ["Online", 173563.99, 160307.64],
+      ["South", 489776.38, 445837.96],
+      ["West", 402582.35, 363697.29]
+    ]
+  },
+  "definitions_applied": [
+    "Gross sales including VAT = sum of gross_amount on the sales lines, before returns (the request asked for gross instead of the net default, so I followed it)",
+    "Each line carries its own VAT rate: 24% general rate in August 2024, 25.5% from 1 September 2024, reduced rates 14% and 10% unchanged; no flat rate applied",
+    "As-was regions: region taken from the dim_store version on the fact's store_key, valid on the transaction date (four regions plus Online in 2024)",
+    "Company date convention: store lines on sale_date, web lines on the Helsinki dispatch date (UTC converted to Europe/Helsinki)",
+    "Web orders counted only if delivered or collected",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Staff purchases included",
+    "Web shop (store 900) shown as its own region, Online",
+    "Returns excluded (before returns)"
+  ],
+  "assumptions": [
+    "August and September 2024 are calendar months (1-31 August, 1-30 September 2024), not fiscal periods, because the figures are for a VAT filing",
+    "'Regions as they were at the time, as in the old reports' is an as-was request, so I used the pre-reorganisation regions (South, West, East, North). The Capital Region only exists from 28 April 2025",
+    "Web sales appear as a separate Online row because Online is its own region in the warehouse. Marjatta can drop that row if the filing covers stores only",
+    "Web sales are dated by dispatch, per the company definition. The brief did not ask for order-date timing"
+  ],
+  "caveats": [
+    "Online is dated by dispatch, not order date. Using order date would give August 173,402.41 and September 160,391.86 for Online. Orders placed late in August and dispatched in September carry the 24% rate set at order time. A web line therefore does not always have the VAT rate of the month it is reported in. If the VAT point of supply is the order date, the Online row should be re-cut.",
+    "Cancelled and still-processing web orders are excluded as non-sales. None appeared in the date range.",
+    "Store 999 and ZZ Test lines were removed. This changes the total only if those lines exist in the period.",
+    "No duplicate sales lines were found (sales_line_id and receipt_id with line_no are both unique). No days with zero trading were missing.",
+    "Check: net sales before returns by month (stores and web separately) reconcile exactly to rpt_daily_store_sales on the same definition (August stores 1,101,807.91, web 140,078.41; September stores 964,016.09, web 127,903.40).",
+    "Line VAT rates are consistent with product VAT class and date: 24% before 1 September 2024 and 25.5% from then on for standard-rated items.",
+    "The figures are before returns. Refunds including VAT are not netted off and would reduce the VAT base for the filing. They are not shown here."
+  ]
+}
+```

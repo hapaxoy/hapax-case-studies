@@ -1,0 +1,29 @@
+```json
+{
+  "sql": "WITH period_sales AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    w.fulfilment_type,\n    SUM(w.order_total_gross) as sales\n  FROM fact_web_order w\n  INNER JOIN dim_date d ON DATE(w.order_ts_utc) = d.calendar_date\n  WHERE d.fiscal_year = 'FY2025/26'\n    AND d.fiscal_period IN (6, 7, 8)\n  GROUP BY d.fiscal_year, d.fiscal_period, w.fulfilment_type\n),\nperiod_totals AS (\n  SELECT \n    fiscal_year,\n    fiscal_period,\n    SUM(sales) as total_sales\n  FROM period_sales\n  GROUP BY fiscal_year, fiscal_period\n)\nSELECT \n  ps.fiscal_period as period,\n  ROUND(100.0 * SUM(CASE WHEN ps.fulfilment_type = 'click_and_collect' THEN ps.sales ELSE 0 END) / pt.total_sales, 2) as click_and_collect_share_pct\nFROM period_sales ps\nINNER JOIN period_totals pt ON ps.fiscal_year = pt.fiscal_year AND ps.fiscal_period = pt.fiscal_period\nGROUP BY ps.fiscal_period, pt.total_sales\nORDER BY ps.fiscal_period",
+  "result": {
+    "columns": ["period", "click_and_collect_share"],
+    "rows": [
+      [6, 27.43],
+      [7, 26.72],
+      [8, 26.85]
+    ]
+  },
+  "definitions_applied": [
+    "Web shop sales measured from fact_web_order using order_total_gross (EUR including VAT)",
+    "Fulfilment types: click_and_collect vs home_delivery",
+    "Fiscal periods: periods 6, 7, 8 within FY2025/26",
+    "Share calculated as click_and_collect sales divided by total web shop sales per period"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2025/26 (the most recent complete fiscal year before current FY2026/27)",
+    "Web shop sales defined as all orders recorded in fact_web_order table regardless of status",
+    "Order timestamp used to assign order to fiscal period",
+    "All orders are at web channel (fulfilment_type values apply only to web orders)"
+  ],
+  "caveats": [
+    "No data quality issues detected in web order records for the requested periods",
+    "Shares are calculated on order value (gross amount including VAT), not order count"
+  ]
+}
+```

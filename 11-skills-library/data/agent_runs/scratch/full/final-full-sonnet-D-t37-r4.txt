@@ -1,0 +1,27 @@
+```json
+{
+  "sql": "SELECT s.store_id, s.store_name, p.sku, p.product_name, d.fiscal_year, d.fiscal_week, fs.week_ending_date, SUM(fs.closing_units) AS closing_units FROM fact_stock_week fs JOIN dim_store s ON s.store_key = fs.store_key JOIN dim_product p ON p.product_key = fs.product_key JOIN dim_date d ON d.calendar_date = fs.week_ending_date WHERE s.store_id = 124 AND p.sku = 100011 AND p.category &lt;&gt; 'ZZ Test' AND fs.week_ending_date = DATE '2026-10-04' GROUP BY 1, 2, 3, 4, 5, 6, 7",
+  "result": {
+    "columns": ["store_id", "store_name", "sku", "product_name", "fiscal_year", "fiscal_week", "week_ending_date", "closing_units"],
+    "rows": [[124, "Jyväskylä Palokka", 100011, "Plants &amp; Flowers Kuusela 570", "FY2026/27", 22, "2026-10-04", 11]]
+  },
+  "definitions_applied": [
+    "Closing stock is the fiscal-week-end snapshot in fact_stock_week, read for one week only and not summed across weeks",
+    "Fiscal calendar: weeks run Monday to Sunday, and the warehouse is loaded through Sunday 4 October 2026 (FY2026/27 week 22)",
+    "Stock by store covers physical stores only (store_id below 900), with test articles (ZZ Test) and store 999 excluded; this store and SKU are unaffected",
+    "Store and product resolved through their natural keys (store_id 124, sku 100011) via the version keys on the fact; each has a single version, so there is no row multiplication",
+    "Grain check on fact_stock_week: one row per store_key, product_key and week_ending_date (27,143 rows for each of the last five weeks, no duplicates)"
+  ],
+  "assumptions": [
+    "'Last week' is the last completed fiscal week as of the request date (Thursday 8 October 2026): FY2026/27 week 22, Monday 28 September to Sunday 4 October 2026. Week 23 is only just under way and is not in the warehouse.",
+    "'Jyväskylä Palokka' is store_id 124 (store_key 30), the only store with that name. 'SKU 100011' is Plants &amp; Flowers Kuusela 570 (Garden, Plants &amp; Flowers).",
+    "'In stock' is the closing units at the end of the week (Sunday 4 October), the point-in-time figure the request implies."
+  ],
+  "caveats": [
+    "No data problem found for this store and SKU. I rolled the stock forward from sales, receipts and adjustments (20 on 30 Aug, then 16, 13, 13, 11 and 11), and every weekly closing matches the units sold, so the 11 is internally consistent.",
+    "The figure is the snapshot taken at Sunday close, with the load stamped Monday 5 October 2026 01:00. Anything sold or received after Sunday 4 October is not in it.",
+    "The store has no sales of this SKU in week 22 and no receipts or adjustments, so the closing stock is unchanged from the previous week (11 units, valued at 46.64 EUR at standard cost).",
+    "Store-level control total against rpt_daily_store_sales does not apply: this is a stock count for one SKU in one store, not net sales."
+  ]
+}
+```

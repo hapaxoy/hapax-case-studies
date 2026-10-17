@@ -1,0 +1,45 @@
+```json
+{
+  "sql": "WITH q AS (SELECT DISTINCT d.fiscal_year AS fy, d.fiscal_quarter AS fq, min(d.calendar_date) AS qs, max(d.calendar_date) AS qe FROM dim_date d WHERE d.fiscal_year='FY2024/25' AND d.fiscal_quarter=4 GROUP BY 1,2), sales AS (SELECT p.sku AS sku, f.net_amount AS rev, f.standard_cost AS cogs, f.quantity AS units FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN q ON f.sale_date BETWEEN q.qs AND q.qe WHERE s.region='South' AND s.store_id &lt; 900 AND NOT f.staff_purchase_flag), rets AS (SELECT p.sku AS sku, -r.refund_net AS rev, -r.standard_cost_returned AS cogs, -r.quantity_returned AS units FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key JOIN q ON r.return_date BETWEEN q.qs AND q.qe WHERE s.region='South' AND s.store_id &lt; 900 AND NOT f.staff_purchase_flag), u AS (SELECT * FROM sales UNION ALL SELECT * FROM rets), cur AS (SELECT sku, product_name, category, row_number() OVER (PARTITION BY sku ORDER BY valid_from DESC) AS rn FROM dim_product) SELECT (SELECT fy FROM q) AS fiscal_year, (SELECT fq FROM q) AS fiscal_quarter, u.sku AS sku, c.product_name AS product_name, round(sum(u.rev)-sum(u.cogs),2) AS gross_margin FROM u JOIN cur c ON c.sku=u.sku AND c.rn=1 GROUP BY ALL ORDER BY gross_margin DESC LIMIT 10",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_quarter", "sku", "product_name", "gross_margin"],
+    "rows": [
+      ["FY2024/25", 4, 103075, "Cushions &amp; Throws Tuulikki 338", 3816.37],
+      ["FY2024/25", 4, 100955, "Interior Paint Norvik 298", 3637.87],
+      ["FY2024/25", 4, 101763, "Fixings &amp; Fasteners Nordhem 594", 3259.86],
+      ["FY2024/25", 4, 103390, "Bedroom Peltola 793", 2971.80],
+      ["FY2024/25", 4, 100953, "Interior Paint Tuulikki 224", 2583.78],
+      ["FY2024/25", 4, 103062, "Cushions &amp; Throws Kuusela 657", 2236.06],
+      ["FY2024/25", 4, 101398, "Power Tools Havu Pro 689", 2164.26],
+      ["FY2024/25", 4, 102538, "Cookware Nordhem 469", 1672.44],
+      ["FY2024/25", 4, 101369, "Power Tools Koivuranta 416", 1519.19],
+      ["FY2024/25", 4, 102468, "Plumbing Parts Ahvenisto 279", 1469.28]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2024/25 Q4 = periods 10-12, 27 Jan 2025 to 27 Apr 2025 (dim_date / ref_fiscal_calendar, all periods fully loaded)",
+    "Gross margin = net sales excluding VAT (net_amount, after line discounts) minus standard cost (standard_cost on the sales line), in EUR",
+    "Returns netted: refund_net and standard_cost_returned for returns dated in the quarter are subtracted, matched to the store version at the return date",
+    "Staff purchases excluded (staff_purchase_flag), including returns of staff-purchase lines",
+    "Store dimension is slowly changing: region taken from the store version in force at the sale or return date (the fact tables' store_key)",
+    "Products aggregated by sku, not product_key, so product versions are combined; latest version's name used",
+    "Physical stores only: web shop (900) and training store (999) excluded; South contains no pseudo-locations"
+  ],
+  "assumptions": [
+    "'South region' means the region as recorded at the time. In Q4 FY24/25 South was stores 101-113 (Helsinki, Espoo, Vantaa, Kerava, Porvoo, Hyvinkää, Lahti, Hämeenlinna, Turku, Raisio, Salo) plus Lohja (137, opened 4 Nov 2024). Kouvola (114) was East.",
+    "'Products' means individual SKUs, not categories or brands.",
+    "'Gross margin' means margin in EUR at standard cost, not margin percentage; the ranking is by absolute EUR.",
+    "Staff purchases are not real commercial sales, so I left them out. Their margin is lower (30.6% against 41.0%), which suggests discounted sales.",
+    "Web orders are not in the South region, since the web shop is the separate 'Online' location, so they are excluded.",
+    "Returns count against the quarter and store where the refund was booked, as in the daily sales report."
+  ],
+  "caveats": [
+    "On 28 April 2025, the day after the quarter ended, the regions were reorganised. Stores 101-105 (Helsinki, Espoo, Vantaa, Kerava) moved from South to a new 'Capital Region', and Kouvola (114) moved from East to South. Under today's South (stores 106-114 and 137) the top 10 differs: ranks 1-8 keep the same SKUs and order, but 101369 Power Tools Koivuranta 416 and 102468 Plumbing Parts Ahvenisto 279 fall out. 101888 and 102116 take their places in ranks 10 and 11, and margins are much lower since five large stores are gone. I used the structure in force during the quarter. Hanna should say if she wants the current structure.",
+    "Margin uses standard cost, not actual purchase cost, so it is a standard margin. Standard costs are revalued each April, and this quarter ends before the April 2025 revaluation takes effect.",
+    "Staff purchases are excluded (638 lines, EUR 13.4k net sales in South). Including them would not change the ranking materially, but I did not test this.",
+    "Returns were netted. 94 of the quarter's 1,528 South returns relate to sales made before 27 Jan 2025, and 108 were returned at a different store version than the sale. These are attributed to the return date and the returning store.",
+    "Checked and found clean for this quarter: no duplicate sales lines, no zero or negative quantities or net amounts, no orphan returns, standard cost matches quantity times product-version unit cost on every line, and VAT-to-gross is consistent.",
+    "The warehouse also holds backup, staging and temporary tables (bak_*, stg_*, tmp_*, *_old). I did not use them, only the live fact and dimension tables."
+  ]
+}
+```

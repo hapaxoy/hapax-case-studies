@@ -1,0 +1,30 @@
+Perfect! The query-check passed with no failures. Now I'll format the final answer. Let me prepare the JSON response:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.format;",
+  "result": {
+    "columns": ["format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate on sale-week cohort",
+    "Net sales excluding VAT",
+    "Physical stores only (store_id &lt; 900)",
+    "Excluded store 999 and category ZZ Test"
+  ],
+  "assumptions": [
+    "Period 2 last year interpreted as FY2025/26 P2 (2025-05-26 to 2025-06-22)",
+    "Store format refers to current format values on the sale date",
+    "Return rate is computed as returned net amount divided by sold net amount, for each format"
+  ],
+  "caveats": [
+    "Format values in the warehouse are Large, Medium, Small (the schema documentation references Hyper, Standard, Express but these are not present in current data)",
+    "Cohort is complete: sufficient time has elapsed (more than 30 days from last sale on 2025-06-22 to warehouse load date 2026-10-04) to capture returns within the typical 30-day window"
+  ]
+}
+```

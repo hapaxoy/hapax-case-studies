@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t26-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T26",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "700dff2613ce3afc4345e567981d8821c1e3a70e483de4a871975b16094577ac",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:27:29",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P02\n  fiscal_weeks                       5-8\n  start_date                         2026-06-01\n  end_date                           2026-06-28\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-06-28\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:27:39",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain store_id --start 2026-06-01 --end 2026-06-28 --control --control-stores physical --value-col net_sales --control-measure net_sales",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 38 rows, 6 columns: rank, store_id, store_name, trading_days, net_sales, net_sales_per_trading_day\n\n== Duplicate keys ==\n  [PASS] Unique at grain (store_id): 38 keys.\n\n== Date coverage ==\n  [INFO] Requested 2026-06-01 to 2026-06-28 (28 days; fiscal: FY2026/27 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 3 only in UTC; fact_sales_line.sale_ts_utc: 11 rows in the range only in Helsinki time, 6 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2026-06-01 to 2026-06-28, stores: physical, at level: store_id.\n  [INFO] Result total 1,063,916.20; control total 1,063,916.20; gap 0.00.\n  [PASS] No gap above 0.01 at level store_id.\n\n== Preview (first 10 rows) ==\n  rank | store_id | store_name | trading_days | net_sales | net_sales_per_trading_day\n  1 | 115 | Tampere Hervanta | 26 | 72687.05 | 2796.0\n  2 | 102 | Helsinki Pit�j�nm�ki | 26 | 55562.42 | 2137.0\n  3 | 108 | Lahti | 26 | 46899.91 | 1804.0\n  4 | 104 | Vantaa Tammisto"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:27:49",
+   "statement": "WITH params AS (\n    SELECT DATE '2026-06-01' AS start_date, DATE '2026-06-28' AS end_date\n),\nperiod_days AS (\n    SELECT d.calendar_date FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date BETWEEN params.start_date AND params.end_date AND d.is_trading_day\n),\ntrading_days AS (\n    SELECT cs.store_id, COUNT(*) AS trading_days\n    FROM dim_store cs\n    CROSS JOIN period_days pd\n    WHERE cs.is_current AND cs.store_id < 900\n      AND (cs.open_date IS NULL OR cs.open_date <= pd.calendar_date)\n      AND (cs.close_date IS NULL OR cs.close_date >= pd.calendar_date)\n      AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                      WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n    GROUP BY 1\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nstore_sales AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY ss.net_sales / td.trading_days DESC) AS rank, cs.store_id, cs.store_name,\n       td.trading_days, ss.net_sales, ROUND(ss.net_sales / td.trading_days, 0) AS net_sales_per_trading_day,\n       cs.open_date, cs.close_date\nFROM store_sales ss\nJOIN trading_days td ON td.store_id = ss.store_id\nJOIN dim_store cs    ON cs.store_id = ss.store_id AND cs.is_current\nORDER BY rank\n",
+   "n": 3,
+   "ok": true,
+   "rows": 38,
+   "output_preview": "rank | store_id | store_name | trading_days | net_sales | net_sales_per_trading_day | open_date | close_date\n1 | 115 | Tampere Hervanta | 26 | 72687.05 | 2796.0 | NULL | NULL\n2 | 102 | Helsinki Pitäjänmäki | 26 | 55562.42 | 2137.0 | NULL | NULL\n3 | 108 | Lahti | 26 | 46899.91 | 1804.0 | NULL | NULL\n4 | 104 | Vantaa Tammisto | 26 | 46414.81 | 1785.0 | NULL | NULL\n5 | 131 | Oulu Kaakkuri | 26 | 46021.68 | 1770.0 | NULL | NULL\n6 | 116 | Tampere Lielahti | 26 | 45485.54 | 1749.0 | NULL | NULL\n7 | 125 | Kuopio | 14 | 23993.71 | 1714.0 | NULL | NULL\n8 | 110 | Turku Kupittaa | 26 | 44380.38 | 1707.0 | NULL | NULL\n9 | 117 | Tampere Kaleva | 26 | 40769.32 | 1568.0 | NULL | NULL\n10 | 118 | Nokia | 26 | 38036.56 | 1463.0 | NULL | NULL\n11 | 119 | Pori | 26 | 37060.06 | 1425.0 | NULL | NULL\n12 | 124 | Jyväskylä Palokka | 26 | 34403.16 | 1323.0 | NULL | NULL\n13 | 101 | Helsinki Vuosaari | 26 | 34229.86 | 1317.0 | NULL | NULL\n14 | 132 | Oulu Linnanmaa | 26 | 32347.31 | 1244.0 | NULL | NULL\n15 | 121 | Vaasa | 26 | 31852.44 | 1225.0 | NULL | NULL\n16 | 128 | Lappeenranta | 26 | 31703.61 | 1219.0 | NULL | NULL\n17 | 126 | Joensuu | 26 | 31643.91 | 1217.0 | NULL | NULL\n18 | 136 | Tampere Lamminpää | 26 | 30503.73 | 1173.0 | 2024-09-02 | NULL\n19 | 107 | Hyvinkää | 26 | 28716.89 | 1104.0 | NULL | NULL\n20 | 109 | Hämeenlinna | 26 | 28110.63 | 1081.0 | NULL | NULL\n21 | 114 | Kouvola | 26 | 26338.80 | 1013.0 | NULL | NULL\n22 | 122 | Seinäjoki | 26 | 26034.82 | 1001.0 | NULL | NULL\n23 | 127 | Mikkeli |"
+  }
+ ]
+}

@@ -1,0 +1,33 @@
+Based on my analysis, let me prepare the final JSON response with the SQL query and structured result table:
+
+```json
+{
+  "sql": "-- Return rate by store format, goods sold in P2 FY2025/26\n-- Sale-week cohort: return counts in the week the item was sold, whenever it came back\nWITH sold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n      AND d.fiscal_year = 'FY2025/26'\n      AND d.fiscal_period = 2\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net \n    FROM fact_return_line \n    GROUP BY 1\n)\nSELECT l.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.format",
+  "result": {
+    "columns": ["format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28],
+      ["Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate (sale-week cohort): refund_net divided by sold net, grouped by the fiscal week of the original sale",
+    "Net sales scope: excluding VAT, after returns, store 999 and category ZZ Test excluded",
+    "Store format: current format at the sale date (format is the same in every store version)"
+  ],
+  "assumptions": [
+    "Last year = FY2025/26 (fiscal year that ended 3 May 2026)",
+    "Period 2 = fiscal period 2 (fiscal weeks 5–8, 26 May–22 June 2025)",
+    "As-is reporting (current store format hierarchy)",
+    "Store format includes Web (store_id 900, pseudo-store for web orders and returns)"
+  ],
+  "caveats": [
+    "Cohort complete: all four formats show cohort_complete = true; all returns within the normal 30-day window have arrived as of 4 October 2026",
+    "Web returns are booked to store 900 regardless of their origin; web sales are on the order date in fact_sales_line",
+    "Store 999 (training store) excluded; no training-store sales in the period",
+    "Category ZZ Test excluded; no test-article sales affected the period totals"
+  ]
+}
+```

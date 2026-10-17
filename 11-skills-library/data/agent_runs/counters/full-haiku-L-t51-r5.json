@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t51-r5",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T51",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "ed78e447f0cc843330a8b7661427939439728ce05ebdf9d629a57e7947f07d40",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:19:30",
+   "statement": "SELECT campaign_id, campaign_name, start_date, end_date\nFROM dim_campaign\nWHERE LOWER(campaign_name) LIKE '%black week%' OR LOWER(campaign_name) LIKE '%2025%'\nORDER BY start_date DESC\n",
+   "n": 1,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date\n16 | Christmas Last Orders 2025 | 2025-12-08 | 2025-12-21\n15 | Black Week 2025 | 2025-11-24 | 2025-11-30\n14 | Lighting Season 2025 | 2025-10-27 | 2025-11-16\n13 | Autumn Refresh 2025 | 2025-09-15 | 2025-10-05\n12 | Garden Clearance 2025 | 2025-08-18 | 2025-09-07\n11 | Midsummer Terrace 2025 | 2025-06-09 | 2025-06-22\n10 | Welcome Back 2025 | 2025-06-02 | 2025-06-29\n9 | Spring Garden Launch 2025 | 2025-05-05 | 2025-05-25\n8 | Sauna and Winter Warmers 2025 | 2025-02-03 | 2025-02-23\n5 | Black Week 2024 | 2024-11-25 | 2024-12-01\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:19:39",
+   "statement": "WITH params AS (\n    SELECT 15 AS campaign_id\n),\ncampaign AS (\n    SELECT c.campaign_id, c.campaign_name, c.start_date, c.end_date + 7 AS window_end\n    FROM dim_campaign c JOIN params ON params.campaign_id = c.campaign_id\n),\ntargeted AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    JOIN params ON params.campaign_id = e.campaign_id\n),\nholdout AS (\n    SELECT DISTINCT h.member_id\n    FROM campaign_holdout h\n    JOIN params ON params.campaign_id = h.campaign_id\n),\nmembers AS (\n    SELECT member_id, 'targeted' AS member_group FROM targeted\n    UNION ALL\n    SELECT member_id, 'holdout' FROM holdout\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nmember_sales AS (\n    SELECT m.member_id, SUM(f.net_amount) AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_member m  ON m.member_key = f.member_key\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign.start_date AND campaign.window_end\n    GROUP BY 1\n),\nby_group AS (\n    SELECT mb.member_group, COUNT(*) AS members, AVG(COALESCE(ms.net_sales, 0)) AS mean_net_sales\n    FROM members mb\n    LEFT JOIN member_sales ms ON ms.member_id = mb.member_id\n    GROUP BY 1\n)\nSELECT member_group, members, ROUND(mean_net_sales, 2) AS mean_net_sales_per_member\nFROM by_group\nUNION ALL\nSELECT 'uplift (targeted - holdout)', NULL,\n       ROUND(MAX(CASE WHEN member_group = 'targeted' THEN mean_net_sales END)\n           - MAX(CASE WHEN member_group = 'holdout' THEN mean_net_sales END), 2)\nFROM by_group\nUNION ALL\nSELECT 'check: members in both groups', (SELECT COUNT(*) FROM targeted JOIN holdout USING (member_id)), NULL;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "member_group | members | mean_net_sales_per_member\nholdout | 2747 | 7.94\ntargeted | 23818 | 9.34\nuplift (targeted - holdout) | NULL | 1.41\ncheck: members in both groups | 0 | NULL\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:19:49",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.4 s.\n\n== Row count ==\n  [PASS] 2 rows, 3 columns: member_group, members, mean_net_sales_per_member\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 2 rows) ==\n  member_group | members | mean_net_sales_per_member\n  holdout | 2747 | 7.94\n  targeted | 23818 | 9.34\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:20:05",
+   "statement": "WITH campaign_window AS (\n    SELECT start_date, end_date + 7 AS window_end\n    FROM dim_campaign\n    WHERE campaign_id = 15\n),\ntargeted_members AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    WHERE e.campaign_id = 15\n),\nholdout_members AS (\n    SELECT DISTINCT member_id\n    FROM campaign_holdout\n    WHERE campaign_id = 15\n),\nweb_dispatch_dates AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\ntargeted_sales AS (\n    SELECT t.member_id, COALESCE(SUM(f.net_amount), 0) AS total_sales\n    FROM targeted_members t\n    LEFT JOIN fact_sales_line f ON f.member_key IN (\n        SELECT member_key FROM dim_member WHERE member_id = t.member_id\n    )\n    LEFT JOIN dim_store s ON s.store_key = f.store_key\n    LEFT JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch_dates w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign_window\n    WHERE f.sales_line_id IS NULL\n       OR (s.store_id <> 999 AND p.category <> 'ZZ Test'\n           AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign_window.start_date AND campaign_window.window_end)\n    GROUP BY t.member_id\n),\nholdout_sales AS (\n    SELECT h.member_id, COALESCE(SUM(f.net_amount), 0) AS total_sales\n    FROM holdout_members h\n    LEFT JOIN dim_member m ON m.member_id = h.member_id\n    LEFT JOIN fact_sales_line f ON f.member_key = m.member_key\n    LEFT JOIN dim_store s ON s.store_key = f.store_key\n    LEFT JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch_dates w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign_window\n    WHERE f.sales_line_id IS NULL\n       OR (s.store_id <> 999 AND p.category <> 'ZZ Test'\n           AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign_window.start_date AND campaign_window.window_end)\n    GROUP BY h.member_id\n),\nresults AS (\n    SELECT \n        'Targeted members' AS metric,\n        ROUND(AVG(total_sales), 2) AS value\n    FROM targeted_sales\n    UNION ALL\n    SELECT \n        'Held-out members' AS metric,\n        ROUND(AVG(total_sales), 2) AS value\n    FROM holdout_sales\n)\nSELECT metric, value FROM results\nUNION ALL\nSELECT \n    'Uplift (euros)' AS metric,\n    ROUND((SELECT AVG(total_sales) FROM targeted_sales) - (SELECT AVG(total_sales) FROM holdout_sales), 2) AS value\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Not implemented Error: Cannot perform non-inner join on subquery!"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:20:15",
+   "statement": "WITH params AS (\n    SELECT 15 AS campaign_id\n),\ncampaign AS (\n    SELECT c.campaign_id, c.campaign_name, c.start_date, c.end_date + 7 AS window_end\n    FROM dim_campaign c \n    WHERE c.campaign_id = (SELECT campaign_id FROM params)\n),\ntargeted AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    WHERE e.campaign_id = (SELECT campaign_id FROM params)\n),\nholdout AS (\n    SELECT DISTINCT h.member_id\n    FROM campaign_holdout h\n    WHERE h.campaign_id = (SELECT campaign_id FROM params)\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nmember_sales AS (\n    SELECT m.member_id, SUM(f.net_amount) AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign.start_date AND campaign.window_end\n    GROUP BY m.member_id\n),\ntargeted_group AS (\n    SELECT m.member_id, COALESCE(ms.net_sales, 0) AS net_sales\n    FROM targeted m\n    LEFT JOIN member_sales ms ON ms.member_id = m.member_id\n),\nholdout_group AS (\n    SELECT m.member_id, COALESCE(ms.net_sales, 0) AS net_sales\n    FROM holdout m\n    LEFT JOIN member_sales ms ON ms.member_id = m.member_id\n)\nSELECT \n    'Average spend per targeted member' AS metric,\n    ROUND(AVG(net_sales), 2) AS value_in_euros\nFROM targeted_group\nUNION ALL\nSELECT \n    'Average spend per held-out member' AS metric,\n    ROUND(AVG(net_sales), 2) AS value_in_euros\nFROM holdout_group\nUNION ALL\nSELECT \n    'Uplift' AS metric,\n    ROUND((SELECT AVG(net_sales) FROM targeted_group) - (SELECT AVG(net_sales) FROM holdout_group), 2) AS value_in_euros\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "metric | value_in_euros\nAverage spend per targeted member | 9.34\nAverage spend per held-out member | 7.94\nUplift | 1.41\n(3 rows)"
+  }
+ ]
+}

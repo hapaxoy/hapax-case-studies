@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH sales_summary AS (\n  SELECT\n    p.sku,\n    p.product_name,\n    SUM(f.net_amount) AS gross_sales,\n    SUM(f.standard_cost) AS total_cost\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  JOIN dim_product p ON f.product_key = p.product_key\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE s.region = 'South'\n    AND d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_quarter = 4\n    AND f.staff_purchase_flag = FALSE\n  GROUP BY p.sku, p.product_name\n),\nreturns_summary AS (\n  SELECT\n    p.sku,\n    SUM(r.refund_net) AS total_refunds,\n    SUM(r.standard_cost_returned) AS total_cost_returned\n  FROM fact_return_line r\n  JOIN dim_store s ON r.store_key = s.store_key\n  JOIN dim_product p ON r.product_key = p.product_key\n  JOIN dim_date d ON r.return_date = d.calendar_date\n  WHERE s.region = 'South'\n    AND d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_quarter = 4\n  GROUP BY p.sku\n),\nfinal_calc AS (\n  SELECT\n    s.sku,\n    s.product_name,\n    s.gross_sales - COALESCE(r.total_refunds, 0) - (s.total_cost - COALESCE(r.total_cost_returned, 0)) AS gross_margin_eur\n  FROM sales_summary s\n  LEFT JOIN returns_summary r ON s.sku = r.sku\n)\nSELECT\n  sku,\n  product_name,\n  ROUND(gross_margin_eur, 2) AS gross_margin\nFROM final_calc\nORDER BY gross_margin_eur DESC\nLIMIT 10",
+  "result": {
+    "columns": ["sku", "product_name", "gross_margin"],
+    "rows": [
+      [103075, "Cushions &amp; Throws Tuulikki 338", 3816.37],
+      [100955, "Interior Paint Norvik 298", 3637.87],
+      [101763, "Fixings &amp; Fasteners Nordhem 594", 3259.86],
+      [103390, "Bedroom Peltola 793", 2971.80],
+      [100953, "Interior Paint Tuulikki 224", 2583.78],
+      [103062, "Cushions &amp; Throws Kuusela 657", 2236.06],
+      [101398, "Power Tools Havu Pro 689", 2164.26],
+      [102538, "Cookware Nordhem 469", 1672.44],
+      [101369, "Power Tools Koivuranta 416", 1519.19],
+      [102468, "Plumbing Parts Ahvenisto 279", 1469.28]
+    ]
+  },
+  "definitions_applied": [
+    "Gross margin calculated as (net sales revenue minus standard cost of goods sold), in EUR",
+    "Net sales defined as sales net of VAT and inclusive of returns/refunds",
+    "South region identified from dim_store.region",
+    "Q4 defined as fiscal_quarter = 4 in fiscal_year FY2024/25",
+    "Staff purchases excluded (staff_purchase_flag = FALSE)"
+  ],
+  "assumptions": [
+    "Gross margin interpreted as absolute EUR amount, not as a percentage",
+    "Returns and refunds included in calculation, matched to original sales lines",
+    "Ranking by total gross margin in EUR (products contributing most absolute margin)",
+    "Standard cost from dim_product at the sale date used for cost of goods calculation"
+  ],
+  "caveats": [
+    "Returns processed in different fiscal periods would not be matched to Q4 sales; all returns checked are those dated in Q4 FY2024/25",
+    "Staff purchases excluded by design; total product contribution to business may be higher",
+    "Gross margin calculated on net amount (excluding VAT), standard accounting approach but VAT treatment should be confirmed with Finance",
+    "Products with zero sales in the period are excluded from results (no padding rows)"
+  ]
+}
+```

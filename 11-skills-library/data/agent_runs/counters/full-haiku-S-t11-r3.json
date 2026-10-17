@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t11-r3",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T11",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "8dc5191e47fb4b14a2dd5f82192d404ce13bd11cf49306506fb4bf99da5e04e0",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:30",
+   "statement": "SELECT DISTINCT category\nFROM dim_product\nWHERE category IN ('Garden', 'Electrical', 'garden', 'electrical')\nORDER BY category\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category\nElectrical\nGarden\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:33",
+   "statement": "SELECT DISTINCT fiscal_year\nFROM ref_fiscal_calendar\nORDER BY fiscal_year DESC\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:37",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_period = 8\nORDER BY fiscal_year DESC\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21\nFY2024/25 | 8 | FY2024/25 P08 | 2024-11-25 | 2024-12-22\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:16:41",
+   "statement": "SELECT \n  dp.category,\n  dd.fiscal_year,\n  dd.fiscal_period,\n  SUM(fsl.net_amount) AS net_sales\nFROM fact_sales_line fsl\nINNER JOIN dim_product dp ON fsl.product_key = dp.product_key\nINNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nWHERE dd.fiscal_period = 8\n  AND dd.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND dp.category IN ('Garden', 'Electrical')\nGROUP BY dp.category, dd.fiscal_year, dd.fiscal_period\nORDER BY dp.category, dd.fiscal_year DESC\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "category | fiscal_year | fiscal_period | net_sales\nElectrical | FY2025/26 | 8 | 182217.99\nElectrical | FY2024/25 | 8 | 150317.52\nGarden | FY2025/26 | 8 | 39146.83\nGarden | FY2024/25 | 8 | 59501.02\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:17:01",
+   "statement": "SELECT fiscal_year, fiscal_period, fully_loaded\nFROM ref_fiscal_calendar\nWHERE fiscal_period = 8\n  AND fiscal_year IN ('FY2025/26', 'FY2024/25')\nORDER BY fiscal_year DESC\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fully_loaded\nFY2025/26 | 8 | true\nFY2024/25 | 8 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:17:05",
+   "statement": "SELECT \n  dd.fiscal_year,\n  COUNT(DISTINCT fsl.receipt_id) AS receipt_count,\n  MIN(fsl.net_amount) AS min_line_amount,\n  MAX(fsl.net_amount) AS max_line_amount\nFROM fact_sales_line fsl\nINNER JOIN dim_product dp ON fsl.product_key = dp.product_key\nINNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nWHERE dd.fiscal_period = 8\n  AND dd.fiscal_year IN ('FY2025/26', 'FY2024/25')\n  AND dp.category IN ('Garden', 'Electrical')\nGROUP BY dd.fiscal_year\nORDER BY dd.fiscal_year DESC\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | receipt_count | min_line_amount | max_line_amount\nFY2025/26 | 8737 | 0.94 | 254.43\nFY2024/25 | 8221 | 0.94 | 303.44\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:17:12",
+   "statement": "WITH period_8_sales AS (\n  SELECT \n    dp.category,\n    dd.fiscal_year,\n    SUM(fsl.net_amount) AS net_sales\n  FROM fact_sales_line fsl\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  WHERE dd.fiscal_period = 8\n    AND dd.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND dp.category IN ('Garden', 'Electrical')\n  GROUP BY dp.category, dd.fiscal_year\n)\nSELECT \n  category,\n  (SELECT net_sales FROM period_8_sales p2 WHERE p2.category = p1.category AND p2.fiscal_year = 'FY2024/25') AS net_sales_fy2024_25,\n  (SELECT net_sales FROM period_8_sales p3 WHERE p3.category = p1.category AND p3.fiscal_year = 'FY2025/26') AS net_sales_fy2025_26,\n  ROUND(((SELECT net_sales FROM period_8_sales p4 WHERE p4.category = p1.category AND p4.fiscal_year = 'FY2025/26') - \n         (SELECT net_sales FROM period_8_sales p5 WHERE p5.category = p1.category AND p5.fiscal_year = 'FY2024/25')) / \n        (SELECT net_sales FROM period_8_sales p6 WHERE p6.category = p1.category AND p6.fiscal_year = 'FY2024/25') * 100, 2) AS growth_pct\nFROM period_8_sales p1\nWHERE fiscal_year = 'FY2025/26'\nORDER BY category\n",
+   "n": 7,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | net_sales_fy2024_25 | net_sales_fy2025_26 | growth_pct\nElectrical | 150317.52 | 182217.99 | 21.22\nGarden | 59501.02 | 39146.83 | -34.21\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:17:19",
+   "statement": "SELECT \n  (39146.83 - 59501.02) / 59501.02 * 100 AS garden_growth_raw,\n  ROUND((39146.83 - 59501.02) / 59501.02 * 100, 2) AS garden_growth_rounded\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "garden_growth_raw | garden_growth_rounded\n-34.20813626388253 | -34.21\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:17:26",
+   "statement": "SELECT \n  dp.category,\n  SUM(CASE WHEN dd.fiscal_year = 'FY2024/25' THEN fsl.net_amount ELSE 0 END) AS net_sales_fy2024_25,\n  SUM(CASE WHEN dd.fiscal_year = 'FY2025/26' THEN fsl.net_amount ELSE 0 END) AS net_sales_fy2025_26,\n  ROUND((SUM(CASE WHEN dd.fiscal_year = 'FY2025/26' THEN fsl.net_amount ELSE 0 END) - \n          SUM(CASE WHEN dd.fiscal_year = 'FY2024/25' THEN fsl.net_amount ELSE 0 END)) / \n         SUM(CASE WHEN dd.fiscal_year = 'FY2024/25' THEN fsl.net_amount ELSE 0 END) * 100, 2) AS growth_percent\nFROM fact_sales_line fsl\nINNER JOIN dim_product dp ON fsl.product_key = dp.product_key\nINNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nWHERE dd.fiscal_period = 8\n  AND dd.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  AND dp.category IN ('Garden', 'Electrical')\nGROUP BY dp.category\nORDER BY dp.category\n",
+   "n": 9,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | net_sales_fy2024_25 | net_sales_fy2025_26 | growth_percent\nElectrical | 150317.52 | 182217.99 | 21.22\nGarden | 59501.02 | 39146.83 | -34.21\n(2 rows)"
+  }
+ ]
+}

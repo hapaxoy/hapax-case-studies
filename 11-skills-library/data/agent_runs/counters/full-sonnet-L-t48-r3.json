@@ -1,0 +1,85 @@
+{
+ "run_id": "full-sonnet-L-t48-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T48",
+ "budget": 30,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "d1e24e86905ffb76542f4863aba17f24464ac2b111976fbd5ef7d7b723c56f18",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:42:22",
+   "statement": "fiscal-calendar/scripts/fiscal.py P3 FY2026/27 --as-of 2026-10-08",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P3 FY2026/27    as of: 2026-10-08    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P03\n  fiscal_weeks                       9-13\n  start_date                         2026-06-29\n  end_date                           2026-08-02\n  weeks                              5\n  days                               35\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-02\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 9 AND 13)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:42:26",
+   "statement": "SELECT category, COUNT(*) n_versions, COUNT(DISTINCT sku) skus, SUM(is_current::INT) cur FROM dim_product WHERE category ILIKE '%paint%' OR category ILIKE '%decor%' GROUP BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | n_versions | skus | cur\nHome Textiles & Decor | 375 | 370 | 370\nPaint & Decorating | 388 | 385 | 385\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:42:29",
+   "statement": "SELECT week_ending_date, COUNT(*) n, COUNT(DISTINCT (store_key, product_key)) dist_keys, COUNT(DISTINCT etl_loaded_at) loads, MIN(etl_loaded_at) mn, MAX(etl_loaded_at) mx, SUM(closing_value) v\nFROM fact_stock_week WHERE week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02' GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | n | dist_keys | loads | mn | mx | v\n2026-07-05 | 27324 | 27324 | 1 | 2026-07-06T01:00:00 | 2026-07-06T01:00:00 | 2948647.43\n2026-07-12 | 27263 | 27263 | 1 | 2026-07-13T01:00:00 | 2026-07-13T01:00:00 | 2945019.18\n2026-07-19 | 27263 | 27263 | 1 | 2026-07-20T01:00:00 | 2026-07-20T01:00:00 | 2934338.44\n2026-07-26 | 27263 | 27263 | 1 | 2026-07-27T01:00:00 | 2026-07-27T01:00:00 | 2958726.35\n2026-08-02 | 27263 | 27263 | 1 | 2026-08-03T01:00:00 | 2026-08-03T01:00:00 | 2942412.19\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:42:34",
+   "statement": "SELECT fs.week_ending_date, COUNT(*) n, COUNT(DISTINCT (s.store_id, p.sku)) nat_keys, COUNT(DISTINCT s.store_id) stores, COUNT(DISTINCT p.sku) skus,\n SUM(fs.closing_value) val, SUM(fs.closing_units * p.standard_unit_cost) val_recalc,\n SUM(CASE WHEN s.store_id>=900 THEN 1 ELSE 0 END) non_phys\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key=fs.store_key\nJOIN dim_product p ON p.product_key=fs.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE fs.week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02' AND cp.category='Paint & Decorating'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | n | nat_keys | stores | skus | val | val_recalc | non_phys\n2026-07-05 | 2699 | 2699 | 38 | 361 | 341138.89 | 341138.89 | 0\n2026-07-12 | 2674 | 2674 | 38 | 358 | 341742.53 | 341742.53 | 0\n2026-07-19 | 2674 | 2674 | 38 | 358 | 344245.91 | 344245.91 | 0\n2026-07-26 | 2674 | 2674 | 38 | 358 | 349160.39 | 349160.39 | 0\n2026-08-02 | 2674 | 2674 | 38 | 358 | 346046.42 | 346046.42 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:42:41",
+   "statement": "SELECT cp.category cur_cat, p.category was_cat, COUNT(*) n, COUNT(DISTINCT s.store_id) stores, MIN(fs.closing_units) min_units, SUM((fs.closing_units<0)::INT) neg, SUM(fs.closing_value) val,\n SUM((s.store_id=129)::INT) sav, SUM((s.store_id=125)::INT) kuopio, SUM((p.valid_from > DATE '2026-06-29')::INT) newver\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key=fs.store_key\nJOIN dim_product p ON p.product_key=fs.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE fs.week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02' AND (cp.category='Paint & Decorating' OR p.category='Paint & Decorating')\nGROUP BY 1,2\n",
+   "n": 5,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: INTERNAL Error: Failed to bind column reference \"cur_cat\" [3.2] (bindings: {#[10.0], #[10.1], #[10.2], #[10.3], #[10.4], #[10.5]})\nThis error signals an assertion failure within DuckDB. This usually occurs due to unexpected conditions or errors in the program's logic.\nFor more information, see https://duckdb.org/docs/stable/dev/internal_errors"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:42:45",
+   "statement": "SELECT cp.category AS cur_cat, p.category AS was_cat, COUNT(*) AS n, COUNT(DISTINCT s.store_id) AS stores, MIN(fs.closing_units) AS min_units, SUM(CASE WHEN fs.closing_units<0 THEN 1 ELSE 0 END) AS neg, SUM(fs.closing_value) AS val,\n SUM(CASE WHEN s.store_id=129 THEN 1 ELSE 0 END) AS sav, SUM(CASE WHEN s.store_id=125 THEN 1 ELSE 0 END) AS kuopio\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key=fs.store_key\nJOIN dim_product p ON p.product_key=fs.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE fs.week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02' AND (cp.category='Paint & Decorating' OR p.category='Paint & Decorating')\nGROUP BY cp.category, p.category\n",
+   "n": 6,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: INTERNAL Error: Failed to bind column reference \"category\" [3.2] (bindings: {#[10.0], #[10.1], #[10.2], #[10.3], #[10.4]})\nThis error signals an assertion failure within DuckDB. This usually occurs due to unexpected conditions or errors in the program's logic.\nFor more information, see https://duckdb.org/docs/stable/dev/internal_errors"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:42:50",
+   "statement": "WITH b AS (\n SELECT cp.category AS cur_cat, p.category AS was_cat, s.store_id, fs.closing_units, fs.closing_value\n FROM fact_stock_week fs\n JOIN dim_store s ON s.store_key=fs.store_key\n JOIN dim_product p ON p.product_key=fs.product_key\n JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\n WHERE fs.week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n)\nSELECT cur_cat, was_cat, COUNT(*) AS n, COUNT(DISTINCT store_id) AS stores, MIN(closing_units) AS min_units, SUM(closing_value) AS val,\n SUM(CASE WHEN store_id=129 THEN 1 ELSE 0 END) AS sav, SUM(CASE WHEN store_id=125 THEN 1 ELSE 0 END) AS kuopio\nFROM b WHERE cur_cat='Paint & Decorating' OR was_cat='Paint & Decorating'\nGROUP BY cur_cat, was_cat\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "cur_cat | was_cat | n | stores | min_units | val | sav | kuopio\nPaint & Decorating | Paint & Decorating | 13395 | 38 | 0 | 1722334.14 | 0 | 607\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:42:57",
+   "statement": "query-check/scripts/query_check.py --file q.sql --period FY2026/27 P03",
+   "n": 8,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 1 rows, 1 columns: avg_weekly_closing_stock_value_eur\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2026-06-29 to 2026-08-02 (35 days; fiscal: FY2026/27 P03).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 3 rows in the range only in Helsinki time, 9 only in UTC; fact_sales_line.sale_ts_utc: 6 rows in the range only in Helsinki time, 20 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  avg_weekly_closing_stock_value_eur\n  344466.83\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

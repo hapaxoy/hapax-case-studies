@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-S-t17-r3",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T17",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "9aab57a46a9f0c0e38f5764513393bffcaff243e92188ed6f56020a7311fdeaf",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:34",
+   "statement": "SELECT DISTINCT fiscal_year, MIN(calendar_date) as year_start, MAX(calendar_date) as year_end\nFROM dim_date\nGROUP BY fiscal_year\nORDER BY fiscal_year DESC\nLIMIT 3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | year_start | year_end\nFY2026/27 | 2026-05-04 | 2026-10-04\nFY2025/26 | 2025-04-28 | 2026-05-03\nFY2024/25 | 2024-04-29 | 2025-04-27\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:38",
+   "statement": "SELECT fiscal_year, fiscal_quarter, MIN(calendar_date) as q_start, MAX(calendar_date) as q_end\nFROM dim_date\nWHERE fiscal_year = 'FY2025/26'\nGROUP BY fiscal_year, fiscal_quarter\nORDER BY fiscal_quarter\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_quarter | q_start | q_end\nFY2025/26 | 1 | 2025-04-28 | 2025-07-27\nFY2025/26 | 2 | 2025-07-28 | 2025-10-26\nFY2025/26 | 3 | 2025-10-27 | 2026-01-25\nFY2025/26 | 4 | 2026-01-26 | 2026-05-03\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:42",
+   "statement": "SELECT DISTINCT category, subcategory\nFROM dim_product\nWHERE category = 'Garden' AND is_current = true\nORDER BY subcategory\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "category | subcategory\nGarden | Barbecue & Grills\nGarden | Edible Plants & Seeds\nGarden | Garden Furniture\nGarden | Garden Tools\nGarden | Outdoor Lighting\nGarden | Plants & Flowers\nGarden | Pots & Planters\nGarden | Soil & Fertiliser\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:50",
+   "statement": "WITH q1_fy2025_26 AS (\n  SELECT MIN(calendar_date) as q_start, MAX(calendar_date) as q_end\n  FROM dim_date\n  WHERE fiscal_year = 'FY2025/26' AND fiscal_quarter = 1\n),\ngarden_products AS (\n  SELECT product_key, sku, product_name, subcategory\n  FROM dim_product\n  WHERE category = 'Garden' AND is_current = true\n),\nsales_q1 AS (\n  SELECT \n    gp.subcategory,\n    fsl.product_key,\n    SUM(fsl.quantity) as units_sold\n  FROM fact_sales_line fsl\n  INNER JOIN garden_products gp ON fsl.product_key = gp.product_key\n  INNER JOIN q1_fy2025_26 q1 ON fsl.sale_date >= q1.q_start AND fsl.sale_date <= q1.q_end\n  GROUP BY gp.subcategory, fsl.product_key\n),\nreturns_for_q1_sales AS (\n  SELECT \n    gp.subcategory,\n    frl.product_key,\n    SUM(frl.quantity_returned) as units_returned\n  FROM fact_return_line frl\n  INNER JOIN garden_products gp ON frl.product_key = gp.product_key\n  INNER JOIN fact_sales_line fsl ON frl.sales_line_id = fsl.sales_line_id\n  INNER JOIN q1_fy2025_26 q1 ON fsl.sale_date >= q1.q_start AND fsl.sale_date <= q1.q_end\n  GROUP BY gp.subcategory, frl.product_key\n)\nSELECT \n  s.subcategory,\n  s.units_sold,\n  COALESCE(r.units_returned, 0) as units_returned,\n  ROUND(100.0 * COALESCE(r.units_returned, 0) / s.units_sold, 2) as return_rate_pct\nFROM sales_q1 s\nLEFT JOIN returns_for_q1_sales r ON s.subcategory = r.subcategory AND s.product_key = r.product_key\nORDER BY s.subcategory\n",
+   "n": 4,
+   "ok": true,
+   "rows": 200,
+   "output_preview": "subcategory | units_sold | units_returned | return_rate_pct\nBarbecue & Grills | 3 | 1 | 33.33\nBarbecue & Grills | 35 | 5 | 14.29\nBarbecue & Grills | 6 | 1 | 16.67\nBarbecue & Grills | 10 | 0 | 0.0\nBarbecue & Grills | 3 | 0 | 0.0\nBarbecue & Grills | 52 | 1 | 1.92\nBarbecue & Grills | 5 | 0 | 0.0\nBarbecue & Grills | 8 | 0 | 0.0\nBarbecue & Grills | 2 | 0 | 0.0\nBarbecue & Grills | 12 | 0 | 0.0\nBarbecue & Grills | 83 | 8 | 9.64\nBarbecue & Grills | 24 | 1 | 4.17\nBarbecue & Grills | 46 | 5 | 10.87\nBarbecue & Grills | 9 | 0 | 0.0\nBarbecue & Grills | 7 | 1 | 14.29\nBarbecue & Grills | 48 | 1 | 2.08\nBarbecue & Grills | 5 | 1 | 20.0\nBarbecue & Grills | 37 | 3 | 8.11\nBarbecue & Grills | 69 | 6 | 8.7\nBarbecue & Grills | 11 | 0 | 0.0\nBarbecue & Grills | 1 | 0 | 0.0\nBarbecue & Grills | 99 | 8 | 8.08\nBarbecue & Grills | 16 | 1 | 6.25\nBarbecue & Grills | 8 | 0 | 0.0\nBarbecue & Grills | 16 | 0 | 0.0\nBarbecue & Grills | 1 | 1 | 100.0\nBarbecue & Grills | 10 | 1 | 10.0\nBarbecue & Grills | 9 | 1 | 11.11\nBarbecue & Grills | 8 | 0 | 0.0\nBarbecue & Grills | 8 | 0 | 0.0\nBarbecue & Grills | 43 | 2 | 4.65\nBarbecue & Grills | 14 | 2 | 14.29\nBarbecue & Grills | 32 | 2 | 6.25\nBarbecue & Grills | 38 | 4 | 10.53\nBarbecue & Grills | 7 | 0 | 0.0\nBarbecue & Grills | 10 | 0 | 0.0\nBarbecue & Grills | 77 | 6 | 7.79\nBarbecue & Grills | 21 | 1 | 4.76\nBarbecue & Grills | 48 | 4 | 8.33\nBarbecue & Grills | 35 | 5 | 14.29\nBarbecue & Grills | 15 | 1 | 6.67\nBarbecue & Grills | 60 | 4 | 6.67\nBarbecue & Grills | 289 | 12 | 4.1"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:58",
+   "statement": "WITH q1_fy2025_26 AS (\n  SELECT MIN(calendar_date) as q_start, MAX(calendar_date) as q_end\n  FROM dim_date\n  WHERE fiscal_year = 'FY2025/26' AND fiscal_quarter = 1\n),\nsales_q1 AS (\n  SELECT \n    dp.subcategory,\n    fsl.sales_line_id,\n    fsl.quantity\n  FROM fact_sales_line fsl\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN q1_fy2025_26 q1 ON fsl.sale_date >= q1.q_start AND fsl.sale_date <= q1.q_end\n  WHERE dp.category = 'Garden' AND dp.is_current = true\n),\nreturns_for_q1_sales AS (\n  SELECT \n    sq.subcategory,\n    SUM(frl.quantity_returned) as total_units_returned\n  FROM sales_q1 sq\n  INNER JOIN fact_return_line frl ON sq.sales_line_id = frl.sales_line_id\n  GROUP BY sq.subcategory\n),\nsales_aggregated AS (\n  SELECT \n    subcategory,\n    SUM(quantity) as total_units_sold\n  FROM sales_q1\n  GROUP BY subcategory\n)\nSELECT \n  sa.subcategory,\n  sa.total_units_sold,\n  COALESCE(rfq.total_units_returned, 0) as total_units_returned,\n  ROUND(100.0 * COALESCE(rfq.total_units_returned, 0) / sa.total_units_sold, 2) as return_rate_pct\nFROM sales_aggregated sa\nLEFT JOIN returns_for_q1_sales rfq ON sa.subcategory = rfq.subcategory\nORDER BY sa.subcategory\n",
+   "n": 5,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "subcategory | total_units_sold | total_units_returned | return_rate_pct\nBarbecue & Grills | 2057 | 133 | 6.47\nEdible Plants & Seeds | 22419 | 221 | 0.99\nGarden Furniture | 2849 | 365 | 12.81\nGarden Tools | 10562 | 548 | 5.19\nOutdoor Lighting | 20 | 0 | 0.0\nPlants & Flowers | 52312 | 1425 | 2.72\nPots & Planters | 12246 | 477 | 3.9\nSoil & Fertiliser | 20017 | 343 | 1.71\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:46:04",
+   "statement": "-- Verify the Barbecue & Grills numbers\nWITH q1_fy2025_26 AS (\n  SELECT MIN(calendar_date) as q_start, MAX(calendar_date) as q_end\n  FROM dim_date\n  WHERE fiscal_year = 'FY2025/26' AND fiscal_quarter = 1\n),\nsales_q1 AS (\n  SELECT \n    fsl.sales_line_id,\n    fsl.quantity\n  FROM fact_sales_line fsl\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN q1_fy2025_26 q1 ON fsl.sale_date >= q1.q_start AND fsl.sale_date <= q1.q_end\n  WHERE dp.category = 'Garden' AND dp.subcategory = 'Barbecue & Grills' AND dp.is_current = true\n)\nSELECT \n  SUM(quantity) as units_sold,\n  COUNT(DISTINCT sales_line_id) as sales_lines\nFROM sales_q1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "units_sold | sales_lines\n2057 | 2057\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:46:08",
+   "statement": "-- Verify the Barbecue & Grills return numbers\nWITH q1_fy2025_26 AS (\n  SELECT MIN(calendar_date) as q_start, MAX(calendar_date) as q_end\n  FROM dim_date\n  WHERE fiscal_year = 'FY2025/26' AND fiscal_quarter = 1\n),\nsales_q1 AS (\n  SELECT \n    fsl.sales_line_id\n  FROM fact_sales_line fsl\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN q1_fy2025_26 q1 ON fsl.sale_date >= q1.q_start AND fsl.sale_date <= q1.q_end\n  WHERE dp.category = 'Garden' AND dp.subcategory = 'Barbecue & Grills' AND dp.is_current = true\n)\nSELECT \n  SUM(frl.quantity_returned) as units_returned,\n  COUNT(DISTINCT frl.return_line_id) as return_lines\nFROM sales_q1 sq\nINNER JOIN fact_return_line frl ON sq.sales_line_id = frl.sales_line_id\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "units_returned | return_lines\n133 | 133\n(1 row)"
+  }
+ ]
+}

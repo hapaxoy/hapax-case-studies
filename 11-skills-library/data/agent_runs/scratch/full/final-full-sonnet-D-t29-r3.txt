@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "SELECT f.vat_rate * 100 AS vat_rate_pct, SUM(f.gross_amount - f.net_amount) AS vat_charged FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_period = 5 AND s.store_id &lt; 900 AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' GROUP BY f.vat_rate ORDER BY f.vat_rate",
+  "result": {
+    "columns": ["vat_rate_pct", "vat_charged"],
+    "rows": [
+      [10.0, 150.67],
+      [14.0, 817.62],
+      [24.0, 54105.20],
+      [25.5, 180017.23]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2024/25 period 5 is Monday 26 August 2024 to Sunday 22 September 2024 (4 weeks), taken from dim_date",
+    "Stores only: store_id below 900, so the web shop (store 900) is out",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "VAT per line as gross_amount minus net_amount, grouped by the VAT rate stored on each line, never a flat rate applied to a net total",
+    "Sale date (Helsinki business date) used for store lines",
+    "Staff purchases included, as they are in net sales",
+    "Did not use channel_code, rpt.v_daily_sales or any stg_, bak_ or tmp_ table",
+    "Control total: net sales before returns from the lines agree with rpt_daily_store_sales.net_sales_before_returns store by store and day by day (1,056 store-days, 0 mismatches, EUR 938,729.24)"
+  ],
+  "assumptions": [
+    "'Period 5 of FY24/25' is read as FY2024/25 P5, 26 Aug to 22 Sep 2024.",
+    "'VAT charged' is read as VAT on sales lines. Refunds are not netted off, because the dictionary does not say how returns enter a VAT-inclusive figure.",
+    "'In the stores' is read as the physical stores only (store_id below 900). Web orders (store 900) are excluded and are not counted as store sales.",
+    "Rates are shown as percentages (10, 14, 24, 25.5). The standard rate was 24% up to 31 Aug 2024 and 25.5% from 1 Sep 2024, so period 5 contains both.",
+    "Staff purchases are included. Staff purchases are 621 of the 37,605 lines."
+  ],
+  "caveats": [
+    "The 24% and 25.5% rows are two separate standard-rate periods inside the same fiscal period. The 24% row is 26 to 31 Aug 2024 and the 25.5% row is 1 to 22 Sep 2024. The 10% and 14% reduced rates did not change.",
+    "No row-level corrections were needed. The 37,605 store lines are unique on sales_line_id and on receipt_id plus line_no, and every line's gross equals net times (1 + vat_rate) within 2 cents. No line before 1 Sep 2024 carries 25.5%, and none from 1 Sep 2024 carries 24%.",
+    "Filters that changed the totals: store 999 and ZZ Test removed EUR 685.77 of VAT (EUR 655.30 from store 999 non-test lines, EUR 29.70 from store 999 test-article lines and EUR 0.77 from a web test line). Web (store 900) VAT of EUR 30,845.39 is excluded because the request is about the stores.",
+    "These figures are VAT on sales before returns. Store refunds booked in the same period (return dates 26 Aug to 22 Sep 2024) carry VAT of EUR 1.20 at 10%, EUR 10.48 at 14%, EUR 5,094.72 at 24% and EUR 6,029.57 at 25.5%, EUR 11,135.97 in total. If FP&amp;A wants VAT net of refunds, subtract these.",
+    "The fact tables hold sales through 4 Oct 2026, so the period is fully loaded."
+  ]
+}
+```

@@ -1,0 +1,28 @@
+{"sql": "WITH campaign AS (SELECT campaign_id, campaign_name, start_date, end_date + 7 AS window_end FROM dim_campaign WHERE campaign_id = 15), targeted AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = 15), holdout AS (SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id = 15), members AS (SELECT member_id, 'targeted' AS grp FROM targeted UNION ALL SELECT member_id, 'holdout' FROM holdout), member_sales AS (SELECT m.member_id, SUM(f.net_amount) AS net_sales FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN fact_web_order w ON w.web_order_id = f.receipt_id CROSS JOIN campaign c WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND (s.store_id &lt;&gt; 900 OR w.status IN ('delivered','collected')) AND CASE WHEN s.store_id = 900 THEN CAST(timezone('Europe/Helsinki', w.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) ELSE f.sale_date END BETWEEN c.start_date AND c.window_end GROUP BY 1), by_group AS (SELECT mb.grp, AVG(COALESCE(ms.net_sales, 0)) AS mean_net FROM members mb LEFT JOIN member_sales ms USING (member_id) GROUP BY 1) SELECT c.campaign_id, c.campaign_name, ROUND(MAX(CASE WHEN grp='targeted' THEN mean_net END), 2) AS avg_spend_per_targeted_member, ROUND(MAX(CASE WHEN grp='holdout' THEN mean_net END), 2) AS avg_spend_per_held_out_member, ROUND(MAX(CASE WHEN grp='targeted' THEN mean_net END) - MAX(CASE WHEN grp='holdout' THEN mean_net END), 2) AS uplift_eur FROM by_group CROSS JOIN campaign c GROUP BY c.campaign_id, c.campaign_name",
+"result": {"columns": ["campaign_id", "campaign_name", "avg_spend_per_targeted_member", "avg_spend_per_held_out_member", "uplift_eur"], "rows": [[15, "Black Week 2025", 9.34, 7.94, 1.41]]},
+"definitions_applied": [
+"Campaign uplift = mean net sales per targeted member minus mean per holdout member",
+"Measurement window = campaign window plus seven days (24 Nov to 7 Dec 2025)",
+"Targeted member = at least one exposure row in the campaign, reduced to distinct member_id via dim_member",
+"Holdout from campaign_holdout joined on member_id, not member_key",
+"Net sales before returns, excluding VAT, on lines linked to the member; members with no sales count as zero",
+"Store 999 and category ZZ Test excluded",
+"Staff purchases included",
+"Web sales recognised on the Helsinki dispatch date; web lines identified by store_id 900, not channel_code",
+"Cancelled web orders excluded",
+"Members counted by distinct member_id across member versions"
+],
+"assumptions": [
+"The request names 'Black Week 2025', which is campaign_id 15 (24 to 30 Nov 2025). Black Week 2024 (campaign_id 5) is a different campaign and was not used.",
+"Spend is net sales before returns, excluding VAT, as the company uplift definition says. Returns are not deducted and VAT is not included.",
+"Spend is measured over the campaign window plus seven days, as the company definition says, not the campaign window alone.",
+"Averages are per member in each group, over everyone in the group including members who bought nothing. Only 3,279 of 23,818 targeted and 323 of 2,747 held-out members bought anything in the window.",
+"Uplift is the difference of the unrounded group means (1.4055), rounded to 1.41 euros per member."
+],
+"caveats": [
+"Corrections made: exposure has one row per contact (50,043 rows for 23,818 distinct members), so it was reduced to one row per member to avoid counting members several times. Web sales were dated on dispatch date rather than order date. Cancelled web orders were excluded. Web lines were identified by store 900 because channel_code is not populated after the November 2025 platform migration.",
+"Group sizes are 23,818 targeted and 2,747 held-out members. The two groups do not overlap. The holdout size matches dim_campaign.holdout_size (2,747). The targeted count is 8 below the mailing list size minus the holdout (26,573 - 2,747 = 23,826), so 8 listed members have no exposure row and are not counted as targeted.",
+"The uplift is small relative to the average spend (about 18 percent of the holdout mean). Only about 12 percent of targeted members and about 12 percent of holdout members made a purchase in the window, so the difference rests on a small number of buyers. No significance test was run, so the figure may not be distinguishable from chance.",
+"About 6,500 members who had marketing consent on 24 Nov 2025 are in neither the targeted group nor the holdout, even though the target group is described as all consenting members. They were left out of the comparison because they are neither contacted nor held out. This is not explained by the data and may be worth checking with CRM.",
+"Tier mix of the two groups is similar (Gold about 9 percent in each), which supports the holdout being a fair comparison group."
+]}

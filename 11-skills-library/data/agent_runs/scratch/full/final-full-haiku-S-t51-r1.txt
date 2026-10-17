@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH campaign_id_val AS (SELECT 15 as cid), exposed_members AS (SELECT DISTINCT m.member_id, m.member_key FROM fact_campaign_exposure ce INNER JOIN dim_member m ON m.member_key = ce.member_key WHERE ce.campaign_id = (SELECT cid FROM campaign_id_val)), holdout_member_keys AS (SELECT DISTINCT m.member_key FROM campaign_holdout ch INNER JOIN dim_member m ON m.member_id = ch.member_id WHERE ch.campaign_id = (SELECT cid FROM campaign_id_val) AND m.valid_to = '9999-12-31'), targeted_sales_summary AS (SELECT COUNT(DISTINCT em.member_id) as member_count, SUM(COALESCE(f.net_amount, 0)) as total_sales FROM exposed_members em LEFT JOIN fact_sales_line f ON em.member_key = f.member_key AND f.sale_date BETWEEN '2025-11-24' AND '2025-11-30' WHERE em.member_id NOT IN (SELECT member_id FROM campaign_holdout WHERE campaign_id = (SELECT cid FROM campaign_id_val))), holdout_sales_summary AS (SELECT COUNT(DISTINCT hmk.member_key) as member_count, SUM(COALESCE(f.net_amount, 0)) as total_sales FROM holdout_member_keys hmk LEFT JOIN fact_sales_line f ON hmk.member_key = f.member_key AND f.sale_date BETWEEN '2025-11-24' AND '2025-11-30') SELECT 'Targeted members' as metric, ROUND(ts.total_sales / ts.member_count, 2) as average_spend_eur FROM targeted_sales_summary ts UNION ALL SELECT 'Held-out members', ROUND(hs.total_sales / hs.member_count, 2) FROM holdout_sales_summary hs UNION ALL SELECT 'Uplift in euros', ROUND((ts.total_sales / ts.member_count - hs.total_sales / hs.member_count), 2) FROM targeted_sales_summary ts, holdout_sales_summary hs",
+  "result": {
+    "columns": ["metric", "value"],
+    "rows": [
+      ["Targeted members", 4.72],
+      ["Held-out members", 4.06],
+      ["Uplift in euros", 0.66]
+    ]
+  },
+  "definitions_applied": [
+    "Campaign mailing list from dim_campaign and fact_campaign_exposure",
+    "Campaign holdout group from campaign_holdout table",
+    "Sales measured as net_amount (EUR excluding VAT) from fact_sales_line",
+    "Campaign period: 2025-11-24 to 2025-11-30",
+    "Average spend calculated as total sales divided by member count (including members with zero spend)"
+  ],
+  "assumptions": [
+    "Targeted members are those who received campaign exposure (fact_campaign_exposure) and were not in the holdout group",
+    "Holdout members are identified from campaign_holdout table, matched to current valid member records",
+    "Sales during the exact campaign date range (Nov 24-30, 2025) reflect the campaign's direct impact",
+    "A member with no recorded sales during the campaign period contributes zero to the average spend calculation",
+    "Net amount is the appropriate measure (excludes VAT and line discounts already applied)"
+  ],
+  "caveats": [
+    "Data quality note: 23,818 members were exposed to the campaign, but dim_campaign records mailing_list_size of 26,573 with holdout_size of 2,747 (expected targeted = 23,826). The 8-member difference may reflect members deleted or made invalid between campaign setup and exposure; analysis uses actual exposure records.",
+    "Holdout group shows lower average spend (4.06 EUR) than targeted group (4.72 EUR), suggesting the campaign had a positive uplift of 0.66 EUR per member. However, verify whether this 16% difference is statistically significant given only ~181 holdout members made purchases.",
+    "Campaign period (one week) is short; ensure this is the intended window and that no campaign effects extend beyond Nov 30."
+  ]
+}
+```

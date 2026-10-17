@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t35-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T35",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "a0dde34b98707c5a809618a5abac880206af743d631120d58ba776d06377c597",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:50:03",
+   "statement": "-- Find Helsinki Pitäjänmäki store\nSELECT store_key, store_id, store_name, city\nFROM dim_store\nWHERE store_name LIKE '%Pitäjänmäki%' AND city LIKE '%Helsinki%'\nAND is_current = TRUE\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | city\n4 | 102 | Helsinki Pitäjänmäki | Helsinki\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:50:07",
+   "statement": "-- Find period 5 fiscal dates for the current year context\nSELECT DISTINCT fiscal_year, fiscal_period, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_period = 5\nORDER BY fiscal_year DESC\nLIMIT 5\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date\nFY2026/27 | 5 | 2026-08-31 | 2026-09-27\nFY2025/26 | 5 | 2025-08-25 | 2025-09-21\nFY2024/25 | 5 | 2024-08-26 | 2024-09-22\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:50:12",
+   "statement": "-- Top 3 products by units sold at Helsinki Pitäjänmäki in period 5 FY2026/27\nSELECT \n  p.product_key,\n  p.sku,\n  p.product_name,\n  SUM(f.quantity) as units_sold\nFROM fact_sales_line f\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN ref_fiscal_calendar rc ON f.sale_date BETWEEN rc.period_start_date AND rc.period_end_date\nWHERE f.store_key = 4  -- Helsinki Pitäjänmäki\n  AND rc.fiscal_year = 'FY2026/27'\n  AND rc.fiscal_period = 5\nGROUP BY p.product_key, p.sku, p.product_name\nORDER BY units_sold DESC\nLIMIT 3\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "product_key | sku | product_name | units_sold\n1702 | 101624 | Fixings & Fasteners Raudikko 251 | 52\n1859 | 101778 | Fixings & Fasteners Nordhem 349 | 44\n2328 | 102244 | Batteries & Bulbs Havu Pro 791 | 42\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:50:22",
+   "statement": "-- Verify store and period context\nSELECT \n  s.store_id,\n  s.store_name,\n  rc.fiscal_year,\n  rc.fiscal_period,\n  rc.period_start_date,\n  rc.period_end_date,\n  COUNT(DISTINCT f.sales_line_id) as sales_lines,\n  SUM(f.quantity) as total_units\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN ref_fiscal_calendar rc ON f.sale_date BETWEEN rc.period_start_date AND rc.period_end_date\nWHERE f.store_key = 4\n  AND rc.fiscal_year = 'FY2026/27'\n  AND rc.fiscal_period = 5\nGROUP BY s.store_id, s.store_name, rc.fiscal_year, rc.fiscal_period, rc.period_start_date, rc.period_end_date\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | fiscal_year | fiscal_period | period_start_date | period_end_date | sales_lines | total_units\n102 | Helsinki Pitäjänmäki | FY2026/27 | 5 | 2026-08-31 | 2026-09-27 | 2121 | 3740\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:50:33",
+   "statement": "-- Final query: Top 3 products by units sold at Helsinki Pitäjänmäki in period 5 FY2026/27\nSELECT \n  p.product_name,\n  SUM(f.quantity) as units_sold\nFROM fact_sales_line f\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN ref_fiscal_calendar rc ON f.sale_date BETWEEN rc.period_start_date AND rc.period_end_date\nWHERE f.store_key = 4\n  AND rc.fiscal_year = 'FY2026/27'\n  AND rc.fiscal_period = 5\nGROUP BY p.product_key, p.product_name\nORDER BY units_sold DESC\nLIMIT 3\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "product_name | units_sold\nFixings & Fasteners Raudikko 251 | 52\nFixings & Fasteners Nordhem 349 | 44\nBatteries & Bulbs Havu Pro 791 | 42\n(3 rows)"
+  }
+ ]
+}

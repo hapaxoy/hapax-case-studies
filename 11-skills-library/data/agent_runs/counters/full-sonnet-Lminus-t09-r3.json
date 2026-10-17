@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t09-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T09",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "b101e9ece665c0dbba8bfaf795bb3be939f4573da2e295275d9063d6a72836fa",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:08:03",
+   "statement": "SELECT 'store' AS kind, CAST(store_key AS VARCHAR) AS a, CAST(store_id AS VARCHAR) AS b, store_name AS c, city AS d, CAST(valid_from AS VARCHAR) AS e, CAST(valid_to AS VARCHAR) AS f FROM dim_store WHERE lower(city) LIKE '%lahti%' OR lower(store_name) LIKE '%lahti%'\nUNION ALL\nSELECT 'prod', category, subcategory, CAST(count(DISTINCT sku) AS VARCHAR), CAST(count(*) AS VARCHAR), '', '' FROM dim_product WHERE lower(subcategory) LIKE '%paint%' OR lower(category) LIKE '%paint%' OR lower(product_name) LIKE '%interior paint%' GROUP BY category, subcategory\nUNION ALL\nSELECT 'cal', fiscal_year, CAST(fiscal_period AS VARCHAR), CAST(period_start_date AS VARCHAR), CAST(period_end_date AS VARCHAR), CAST(fully_loaded AS VARCHAR), CAST(weeks_in_period AS VARCHAR) FROM ref_fiscal_calendar WHERE fiscal_period = 3 AND fiscal_year IN ('FY2026/27','FY2025/26')\n",
+   "n": 1,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "kind | a | b | c | d | e | f\nstore | 13 | 108 | Lahti | Lahti | 2000-01-01 | 9999-12-31\nstore | 22 | 116 | Tampere Lielahti | Tampere | 2000-01-01 | 9999-12-31\nprod | Paint & Decorating | Brushes & Rollers | 100 | 100 |  | \nprod | Paint & Decorating | Wallpaper & Decor Film | 77 | 78 |  | \nprod | Paint & Decorating | Interior Paint | 123 | 125 |  | \nprod | Paint & Decorating | Exterior Paint | 85 | 85 |  | \ncal | FY2025/26 | 3 | 2025-06-23 | 2025-07-27 | true | 5\ncal | FY2026/27 | 3 | 2026-06-29 | 2026-08-02 | true | 5\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:08:08",
+   "statement": "WITH ip AS (\n  SELECT DISTINCT sku FROM dim_product WHERE subcategory = 'Interior Paint'\n)\nSELECT p.sku, p.product_key, p.product_name, p.category, p.subcategory, p.is_current, CAST(p.valid_from AS VARCHAR) vf, CAST(p.valid_to AS VARCHAR) vt, CAST(p.delisted_on AS VARCHAR) dl\nFROM dim_product p JOIN ip USING (sku)\nWHERE p.sku IN (SELECT sku FROM dim_product GROUP BY sku HAVING count(*) > 1 OR count(DISTINCT subcategory) > 1)\nORDER BY p.sku, p.valid_from\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "sku | product_key | product_name | category | subcategory | is_current | vf | vt | dl\n100963 | 1037 | Interior Paint Tuulikki 594 | Paint & Decorating | Interior Paint | false | 2000-01-01 | 2025-07-06 | NULL\n100963 | 1038 | Interior Paint Tuulikki 594 | Paint & Decorating | Interior Paint | true | 2025-07-07 | 9999-12-31 | NULL\n101047 | 1122 | Interior Paint Peltola 502 | Paint & Decorating | Interior Paint | false | 2000-01-01 | 2024-09-08 | NULL\n101047 | 1123 | Interior Paint Peltola 502 | Paint & Decorating | Interior Paint | true | 2024-09-09 | 9999-12-31 | NULL\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:08:14",
+   "statement": "WITH base AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.sale_date, f.quantity, f.net_amount, f.staff_purchase_flag, f.channel_code, f.etl_loaded_at, s.store_id\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE s.store_id = 108 AND cp.subcategory = 'Interior Paint' AND cp.category <> 'ZZ Test'\n    AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3\n)\nSELECT count(*) AS line_rows, count(DISTINCT sales_line_id) AS distinct_line_ids, count(DISTINCT (receipt_id, line_no)) AS distinct_receipt_lines,\n  sum(quantity) AS units, sum(CASE WHEN staff_purchase_flag THEN quantity ELSE 0 END) AS staff_units,\n  min(quantity) AS minq, max(quantity) AS maxq, count(DISTINCT etl_loaded_at) AS loads,\n  min(sale_date) AS first_day, max(sale_date) AS last_day, count(DISTINCT sale_date) AS days, sum(net_amount) AS net\nFROM base\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "line_rows | distinct_line_ids | distinct_receipt_lines | units | staff_units | minq | maxq | loads | first_day | last_day | days | net\n142 | 142 | 142 | 194 | 4 | 1 | 4 | 35 | 2026-06-29 | 2026-08-02 | 35 | 6365.76\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:08:20",
+   "statement": "WITH fact AS (\n  SELECT sum(f.quantity) AS fact_units, sum(f.net_amount) AS fact_net, count(DISTINCT f.receipt_id) AS fact_receipts\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key\n  WHERE s.store_id = 108 AND f.sale_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n),\nrpt AS (\n  SELECT sum(units_sold) AS rpt_units, sum(net_sales_before_returns) AS rpt_net, sum(receipts) AS rpt_receipts, count(*) AS rpt_days\n  FROM rpt_daily_store_sales WHERE store_id = 108 AND business_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n),\nret AS (\n  SELECT sum(r.quantity_returned) AS ret_units_ip\n  FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE s.store_id = 108 AND cp.subcategory = 'Interior Paint' AND f.sale_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n)\nSELECT * FROM fact, rpt, ret\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fact_units | fact_net | fact_receipts | rpt_units | rpt_net | rpt_receipts | rpt_days | ret_units_ip\n3927 | 67202.85 | 1048 | 3927 | 67202.85 | 1048 | 35 | 6\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,39 @@
+Based on my analysis of the warehouse data, I can now provide the final answer. Let me compile the results:
+
+```json
+{
+  "sql": "WITH q3_sales AS (\n  SELECT \n    s.region,\n    CASE WHEN s.store_id = 900 THEN 'Online' ELSE s.region END as region_label,\n    d.fiscal_year,\n    SUM(f.net_amount) as net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  WHERE d.fiscal_year IN ('FY2025/26', 'FY2024/25')\n    AND d.fiscal_quarter = 3\n    AND (s.store_id = 900 OR (s.store_id < 900 AND s.region NOT IN ('Head office')))\n  GROUP BY s.region, region_label, d.fiscal_year\n)\nSELECT \n  region_label,\n  SUM(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales ELSE 0 END) as fy2025_26_net_sales,\n  SUM(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales ELSE 0 END) as fy2024_25_net_sales,\n  CASE \n    WHEN SUM(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales ELSE 0 END) > 0 THEN\n      ROUND(((SUM(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales ELSE 0 END) - SUM(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales ELSE 0 END)) / SUM(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales ELSE 0 END)) * 100, 2)\n    ELSE NULL\n  END as growth_percentage\nFROM q3_sales\nGROUP BY region_label\nORDER BY region_label",
+  "result": {
+    "columns": ["region", "fy2025_26_q3_net_sales", "fy2024_25_q3_net_sales", "growth_percentage"],
+    "rows": [
+      ["Capital Region", 552189.71, null, null],
+      ["East", 623413.38, 688085.27, -9.40],
+      ["North", 430390.67, 403062.74, 6.78],
+      ["Online", 626744.66, 487738.80, 28.49],
+      ["South", 765378.74, 1214939.94, -37.06],
+      ["West", 1044244.67, 994191.81, 5.03]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal year definition (FY2025/26 = last year, FY2024/25 = year before)",
+    "Fiscal quarter 3 for Q3",
+    "Net sales = net_amount excluding VAT, after line discounts",
+    "Web shop channel assignment based on store_id (900 = web, <900 = physical stores)"
+  ],
+  "assumptions": [
+    "Last year = FY2025/26 (fiscal year spanning April 2025 - March 2026)",
+    "Year before = FY2024/25 (fiscal year spanning April 2024 - March 2025)",
+    "Q3 refers to fiscal quarter 3 of each fiscal year",
+    "Web shop presented as 'Online' region, separate from physical regions",
+    "Training store (store 999, Head office region) excluded from regional analysis",
+    "NULL channel codes in FY2025/26 assigned based on store_id: store 900 = web, others = store channel",
+    "Growth percentage = ((FY2025/26 - FY2024/25) / FY2024/25) * 100"
+  ],
+  "caveats": [
+    "Data quality issue: 590,492 rows have NULL channel_code (corrected by inferring from store_id)",
+    "Capital Region only has FY2025/26 Q3 data because stores opened on 2025-04-28, start of FY2025/26; no FY2024/25 comparison available",
+    "Growth percentage for Capital Region is NULL (no prior year data)",
+    "South region shows significant decline (-37%) warranting investigation of specific drivers"
+  ]
+}
+```

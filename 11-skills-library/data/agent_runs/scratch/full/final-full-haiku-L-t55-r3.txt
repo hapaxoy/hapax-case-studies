@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "SELECT d.fiscal_period, d.fiscal_period_label, ROUND(100.0 * SUM(CASE WHEN f.member_key IS NOT NULL THEN f.net_amount ELSE 0 END) / NULLIF(SUM(f.net_amount), 0), 1) AS member_share_pct FROM fact_sales_line f JOIN fact_web_order o ON o.web_order_id = f.receipt_id JOIN dim_date d ON d.calendar_date = CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 35 AND 47 GROUP BY d.fiscal_period, d.fiscal_period_label ORDER BY d.fiscal_period",
+  "result": {
+    "columns": ["fiscal_period", "fiscal_period_label", "member_share_pct"],
+    "rows": [
+      [9, "FY2025/26 P09", 68.0],
+      [10, "FY2025/26 P10", 51.8],
+      [11, "FY2025/26 P11", 55.8]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales recognized on dispatch date in Helsinki time (from fact_web_order join)",
+    "Web identified by store_id 900 (pseudo-store for web shop)",
+    "Member share calculated as member_key IS NOT NULL lines divided by all web sales",
+    "Net sales before returns (sales booked on dispatch date, returns on return date)",
+    "Test articles (category ZZ Test) excluded"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (prior fiscal year to current FY2026/27 as of 15 October 2026)",
+    "Periods 9-11 interpreted as fiscal periods 9, 10, 11 (fiscal weeks 35-47)",
+    "Share calculated as percentage of web sales in each period",
+    "Loyalty member defined as having a non-null member_key on the sales line"
+  ],
+  "caveats": [
+    "Web sales are recognized on dispatch date, not order date; for home delivery this is the shipping date, for click-and-collect the ready-for-collection time",
+    "Return lines are booked on the return date and reduce sales in their week; a sale-week cohort is not complete until ~5 weeks later",
+    "A minimal amount of test articles (4 EUR across P9-P11) was excluded from the total",
+    "Guest web orders (checkout without logging in) are counted as non-member sales"
+  ]
+}
+```

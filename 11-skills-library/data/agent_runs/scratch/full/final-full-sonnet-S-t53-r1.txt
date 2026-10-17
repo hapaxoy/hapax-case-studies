@@ -1,0 +1,26 @@
+{"sql": "WITH p1 AS (SELECT d.fiscal_year, d.fiscal_week, d.day_of_week, r.store_id, r.net_sales FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date WHERE d.fiscal_period = 1 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND r.store_id < 900), lfl AS (SELECT store_id FROM p1 GROUP BY store_id HAVING count(DISTINCT fiscal_year) = 2), matched AS (SELECT fiscal_week, day_of_week FROM p1 GROUP BY 1,2 HAVING count(DISTINCT fiscal_year) = 2) SELECT 'FY2026/27' AS fiscal_year, 1 AS fiscal_period, round(100*(sum(CASE WHEN fiscal_year='FY2026/27' THEN net_sales END)/sum(CASE WHEN fiscal_year='FY2025/26' THEN net_sales END)-1),1) AS lfl_net_sales_growth_pct FROM p1 WHERE store_id IN (SELECT store_id FROM lfl) AND (fiscal_week, day_of_week) IN (SELECT * FROM matched)",
+"result": {"columns": ["fiscal_year", "fiscal_period", "lfl_net_sales_growth_pct"], "rows": [["FY2026/27", 1, 3.0]]},
+"definitions_applied": [
+"Fiscal calendar: period 1 of FY2026/27 (4 May to 31 May 2026) against period 1 of FY2025/26 (28 Apr to 25 May 2025), matched by fiscal week and weekday rather than by calendar date",
+"Net sales as defined in rpt_daily_store_sales: EUR excluding VAT, after returns booked on the day of return",
+"Like-for-like store set: physical stores that traded in both periods (38 stores)",
+"Trading-day matching: days the stores were shut by law or company rule (is_trading_day = false) are excluded from both years",
+"Store identity by store_id, not store_key, so store versions and region reassignments do not split a store"
+],
+"assumptions": [
+"'This year' means the current fiscal year FY2026/27, and 'period 1' means fiscal period 1. The comparison is with FY2025/26 period 1.",
+"Growth is in net sales (EUR ex VAT, after returns). The request did not name a measure. Growth on net sales before returns is 6.6% unadjusted for trading days.",
+"The like-for-like base is stores only. The web shop (store_id 900) is excluded, as is the training store (999).",
+"The company has no written like-for-like rule in the warehouse. I used the rule that a store counts if it traded throughout both comparison periods. Stores 136 Tampere Lamminpää and 137 Lohja (opened Sep and Nov 2024) are included because both were open before FY2025/26 began.",
+"Staff purchases are left in, as they are in rpt_daily_store_sales. The gap between the report and the fact table is the web shop, so the two tie.",
+"The refits in ref_store_closure (stores 104, 119, 125) fall outside both period-1 windows and affect no store in this comparison, so none was excluded for a refit."
+],
+"caveats": [
+"Correction for trading days: 1 May 2025 (May Day, a Thursday) was in FY2025/26 P1 and the stores were shut. 1 May 2026 fell before FY2026/27 began. P1 2026 therefore has 28 trading days against 27 in 2025. I removed the matching Thursday (7 May 2026) from the 2026 figure so both years have 27 comparable days. Without this correction growth reads 6.7% (EUR 1,177,926 against EUR 1,103,970). With it, it is 3.0% (EUR 1,137,160 against EUR 1,103,970).",
+"FY2025/26 was a 53-week year, so calendar dates in 2026 sit one week later than in 2025. I compared fiscal week to fiscal week (weeks 1 to 4), not the same calendar dates.",
+"Store 129 Savonlinna closed on 25 Jan 2026 and has no P1 2026 sales. It is excluded from both years. Its P1 2025 sales were EUR 12,014 net.",
+"Stores 136 and 137 grew far faster than the rest, probably because they were still ramping up. Excluding them, like-for-like growth is 2.4% (36 stores). Excluding them and store 119 Pori, which reopened in Oct 2025 after a refit, it is 2.7% (35 stores).",
+"The tmp_lfl_store_list_2024 and tmp_lfl_store_list_2025 tables are identical (37 stores, and they leave out 136 and 137). They are stale scratch tables, so I did not use them. I built the store set from the data.",
+"Holiday timing is not adjusted beyond the shut days. Ascension Day and Whit Sunday fall in P1 2026 but in P2 2025. Stores trade on both days, so both stay in the figure.",
+"The data passed the checks I ran. Period 1 is fully loaded, there are no duplicate sales lines, and the report's returns tie to fact_return_line exactly. The report's gross sales tie to the fact table store by store, but the fact table also contains the web shop and the training store, which are excluded here."
+]}

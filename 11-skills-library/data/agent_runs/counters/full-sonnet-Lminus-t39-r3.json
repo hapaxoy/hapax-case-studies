@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-Lminus-t39-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T39",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "358699e30d103b639e16edb960198f4ef75c1845eb8e8c53cdb55edacf25cf87",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:20:50",
+   "statement": "SELECT o.status, o.fulfilment_type,\n  COUNT(*) AS n_rows, COUNT(DISTINCT o.web_order_id) AS n_orders,\n  SUM(CASE WHEN EXISTS (SELECT 1 FROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key WHERE f.receipt_id=o.web_order_id AND p.category='ZZ Test') THEN 1 ELSE 0 END) AS test_orders,\n  SUM(CASE WHEN CAST(o.order_ts_utc AS DATE)=DATE '2025-12-01' THEN 1 ELSE 0 END) AS utc_date_count\nFROM fact_web_order o\nWHERE CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "status | fulfilment_type | n_rows | n_orders | test_orders | utc_date_count\ncancelled | click_and_collect | 6 | 6 | 0 | 6\ncancelled | home_delivery | 13 | 13 | 0 | 11\ncollected | click_and_collect | 87 | 87 | 0 | 77\ndelivered | home_delivery | 239 | 239 | 0 | 190\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:20:51",
+   "statement": "SELECT calendar_date, day_name, fiscal_year, fiscal_period, is_public_holiday, is_trading_day FROM dim_date WHERE calendar_date = DATE '2025-12-01'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "calendar_date | day_name | fiscal_year | fiscal_period | is_public_holiday | is_trading_day\n2025-12-01 | Monday | FY2025/26 | 8 | false | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:20:57",
+   "statement": "SELECT COUNT(*) AS orders, COUNT(DISTINCT o.web_order_id) AS distinct_orders,\n  SUM(CASE WHEN l.cnt IS NULL THEN 1 ELSE 0 END) AS no_lines,\n  SUM(CASE WHEN l.test_lines>0 THEN 1 ELSE 0 END) AS test_orders,\n  SUM(CASE WHEN l.cnt IS NOT NULL AND l.cnt<>o.line_count THEN 1 ELSE 0 END) AS linecount_mismatch\nFROM fact_web_order o\nLEFT JOIN (SELECT f.receipt_id, COUNT(*) cnt, SUM(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) test_lines\n           FROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key GROUP BY 1) l ON l.receipt_id=o.web_order_id\nWHERE o.status<>'cancelled'\n  AND CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | distinct_orders | no_lines | test_orders | linecount_mismatch\n326 | 326 | 0 | 0 | 0\n(1 row)"
+  }
+ ]
+}

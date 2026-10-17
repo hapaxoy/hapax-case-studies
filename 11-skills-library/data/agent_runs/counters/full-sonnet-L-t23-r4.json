@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t23-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T23",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "bd72651226b40dd18b4decada764c4a9eded5f6f29f91ca5c2699ea3619cf67d",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:44:24",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2025/26 --as-of 2026-10-06",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2025/26    as of: 2026-10-06    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P02\n  fiscal_weeks                       5-8\n  start_date                         2025-05-26\n  end_date                           2025-06-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-06-22\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:31",
+   "statement": "SELECT 'sales dup sales_line_id' AS chk, COUNT(*) - COUNT(DISTINCT sales_line_id) AS n FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\nUNION ALL SELECT 'sales dup receipt+line', COUNT(*) - (SELECT COUNT(*) FROM (SELECT DISTINCT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22')) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\nUNION ALL SELECT 'return dup return_line_id', COUNT(*) - COUNT(DISTINCT return_line_id) FROM fact_return_line\nUNION ALL SELECT 'return lines total', COUNT(*) FROM fact_return_line\nUNION ALL SELECT 'returns with no sales line', COUNT(*) FROM fact_return_line r WHERE NOT EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.sales_line_id = r.sales_line_id)\nUNION ALL SELECT 'max return date', CAST(MAX(return_date) AS BIGINT) FROM fact_return_line\n",
+   "n": 2,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Conversion Error: Unimplemented type for cast (DATE -> BIGINT) when casting from source column max(return_date)\n\nLINE 6: UNION ALL SELECT 'max return date', CAST(MAX(return_date) AS BIGINT) FROM fact_return_line\n                                            ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:36",
+   "statement": "SELECT 'sales dup sales_line_id' AS chk, COUNT(*) - COUNT(DISTINCT sales_line_id) AS n FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\nUNION ALL SELECT 'sales dup receipt+line', COUNT(*) - (SELECT COUNT(*) FROM (SELECT DISTINCT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22')) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\nUNION ALL SELECT 'return dup return_line_id', COUNT(*) - COUNT(DISTINCT return_line_id) FROM fact_return_line\nUNION ALL SELECT 'return lines total', COUNT(*) FROM fact_return_line\nUNION ALL SELECT 'returns with no sales line', COUNT(*) FROM fact_return_line r WHERE NOT EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.sales_line_id = r.sales_line_id)\nUNION ALL SELECT 'sales lines in range', COUNT(*) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-05-26' AND DATE '2025-06-22'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "chk | n\nsales dup sales_line_id | 0\nsales dup receipt+line | 0\nreturn dup return_line_id | 0\nreturn lines total | 57144\nreturns with no sales line | 0\nsales lines in range | 53094\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:44:42",
+   "statement": "WITH sold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.store_id, s.format, f.net_amount, f.receipt_id\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_date d ON d.calendar_date = f.sale_date\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\n),\nrefunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1)\nSELECT l.format, COALESCE(w.status,'(store)') AS web_status, COUNT(*) AS n, SUM(l.net_amount) AS sold_net, COALESCE(SUM(r.refund_net),0) AS returned_net,\n       ROUND(100.0*COALESCE(SUM(r.refund_net),0)/SUM(l.net_amount),2) AS rate\nFROM sold_lines l LEFT JOIN refunds r USING (sales_line_id)\nLEFT JOIN fact_web_order w ON w.web_order_id = l.receipt_id AND l.store_id = 900\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | web_status | n | sold_net | returned_net | rate\nLarge | (store) | 16624 | 400763.11 | 17707.57 | 4.42\nMedium | (store) | 22644 | 552936.25 | 25030.11 | 4.53\nSmall | (store) | 7349 | 147668.20 | 6319.09 | 4.28\nWeb | collected | 1669 | 49083.36 | 5113.83 | 10.42\nWeb | delivered | 4681 | 134015.13 | 17274.46 | 12.89\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:45:02",
+   "statement": "WITH sold_lines AS (\n    SELECT f.sales_line_id, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_date d ON d.calendar_date = f.sale_date\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\n),\nrefunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1)\nSELECT 'FY2025/26' AS fiscal_year, 2 AS fiscal_period, l.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l LEFT JOIN refunds r USING (sales_line_id)\nGROUP BY l.format ORDER BY l.format\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | format | return_rate_pct\nFY2025/26 | 2 | Large | 4.42\nFY2025/26 | 2 | Medium | 4.53\nFY2025/26 | 2 | Small | 4.28\nFY2025/26 | 2 | Web | 12.23\n(4 rows)"
+  }
+ ]
+}

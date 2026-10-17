@@ -1,0 +1,35 @@
+```json
+{
+  "sql": "WITH sales_with_dates AS (\n  -- Store sales with sale_date\n  SELECT \n    s.region,\n    f.sale_date as transaction_date,\n    f.gross_amount\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id &lt;&gt; 999\n    AND p.category &lt;&gt; 'ZZ Test'\n    AND f.channel_code = 'ST'\n    AND f.sale_date &gt;= '2024-08-01'\n    AND f.sale_date &lt;= '2024-09-30'\n  \n  UNION ALL\n  \n  -- Web sales with dispatch_date in Helsinki time\n  SELECT \n    s.region,\n    CAST(timezone('Europe/Helsinki', wo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) as transaction_date,\n    f.gross_amount\n  FROM fact_sales_line f\n  JOIN fact_web_order wo ON wo.web_order_id = f.receipt_id\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id &lt;&gt; 999\n    AND p.category &lt;&gt; 'ZZ Test'\n    AND f.channel_code = 'WB'\n    AND CAST(timezone('Europe/Helsinki', wo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) &gt;= '2024-08-01'\n    AND CAST(timezone('Europe/Helsinki', wo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) &lt;= '2024-09-30'\n)\nSELECT \n  region,\n  SUM(CASE WHEN EXTRACT(MONTH FROM transaction_date) = 8 THEN gross_amount ELSE 0 END) AS august_2024,\n  SUM(CASE WHEN EXTRACT(MONTH FROM transaction_date) = 9 THEN gross_amount ELSE 0 END) AS september_2024\nFROM sales_with_dates\nGROUP BY region\nORDER BY region",
+  "result": {
+    "columns": ["region", "august_2024", "september_2024"],
+    "rows": [
+      ["East", 296762.31, 249751.64],
+      ["North", 175960.85, 149625.27],
+      ["Online", 173563.99, 160307.64],
+      ["South", 489776.38, 445837.96],
+      ["West", 402582.35, 363697.29]
+    ]
+  },
+  "definitions_applied": [
+    "Gross sales: sum of gross_amount (including VAT) from fact_sales_line",
+    "Before returns: sales lines only, excluding return lines",
+    "Region: as-was (the region hierarchy as it stood at each transaction date)",
+    "Store sales: recognized on sale_date",
+    "Web sales: recognized on dispatch_ts_utc converted to Helsinki time (tax point at delivery)",
+    "Exclusions: store 999 (training store) and category ZZ Test filtered out"
+  ],
+  "assumptions": [
+    "Calendar months 'August and September 2024' interpreted as 1–31 August and 1–30 September",
+    "Web sales tax point is dispatch date in Helsinki time, not order date",
+    "Regions as specified in the as-was store dimension at each transaction date",
+    "Online region represents the web shop (store_id 900)"
+  ],
+  "caveats": [
+    "Net sales total verified against rpt_daily_store_sales control total (2,333,805.81 EUR net, before VAT)",
+    "In August–September 2024, the warehouse held four physical regions (North, South, East, West) plus Online; the Capital Region did not exist until 28 April 2025",
+    "VAT rate changed on 1 September 2024 from 24% to 25.5%; each line carries its own vat_rate (standard, reduced14, reduced10)",
+    "Web sales include only dispatched orders; cancelled and processing orders excluded"
+  ]
+}
+```

@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t48-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T48",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "7103e03776574f40a43e50608d94f073894ec5a9b474820f421ab49377caf777",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:51:17",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year IN ('FY2026/27') AND fiscal_period<=5 ORDER BY 2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2026/27 | 1 | 2026-05-04 | 2026-05-31 | 4 | 1 | 4 | true\nFY2026/27 | 2 | 2026-06-01 | 2026-06-28 | 4 | 5 | 8 | true\nFY2026/27 | 3 | 2026-06-29 | 2026-08-02 | 5 | 9 | 13 | true\nFY2026/27 | 4 | 2026-08-03 | 2026-08-30 | 4 | 14 | 17 | true\nFY2026/27 | 5 | 2026-08-31 | 2026-09-27 | 4 | 18 | 21 | true\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:51:18",
+   "statement": "SELECT category, subcategory, is_current, count(*) n, count(distinct sku) skus, min(valid_from), max(valid_to) FROM dim_product WHERE category ILIKE '%paint%' OR category ILIKE 'ZZ%' GROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 2,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "category | subcategory | is_current | n | skus | min(valid_from) | max(valid_to)\nPaint & Decorating | Brushes & Rollers | true | 100 | 100 | 2000-01-01 | 9999-12-31\nPaint & Decorating | Exterior Paint | true | 85 | 85 | 2000-01-01 | 9999-12-31\nPaint & Decorating | Interior Paint | false | 2 | 2 | 2000-01-01 | 2025-07-06\nPaint & Decorating | Interior Paint | true | 123 | 123 | 2000-01-01 | 9999-12-31\nPaint & Decorating | Wallpaper & Decor Film | false | 1 | 1 | 2000-01-01 | 2025-04-06\nPaint & Decorating | Wallpaper & Decor Film | true | 77 | 77 | 2000-01-01 | 9999-12-31\nZZ Test | Test Articles | true | 12 | 12 | 2000-01-01 | 9999-12-31\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:51:24",
+   "statement": "WITH r AS (\n  SELECT fs.*, s.store_id, p.sku\n  FROM fact_stock_week fs\n  JOIN dim_store s ON s.store_key=fs.store_key\n  JOIN dim_product p ON p.product_key=fs.product_key\n  JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\n  WHERE fs.week_ending_date BETWEEN DATE '2026-07-05' AND DATE '2026-08-02'\n    AND cp.category='Paint & Decorating'\n)\nSELECT week_ending_date, count(*) rows_n, count(distinct (store_id, sku)) distinct_store_sku, count(distinct (store_key, product_key)) distinct_keys,\n  count(distinct etl_loaded_at) loads, min(etl_loaded_at), max(etl_loaded_at), count(distinct store_id) stores, min(store_id), max(store_id), sum(closing_value) val\nFROM r GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | rows_n | distinct_store_sku | distinct_keys | loads | min(etl_loaded_at) | max(etl_loaded_at) | stores | min(store_id) | max(store_id) | val\n2026-07-05 | 2699 | 2699 | 2699 | 1 | 2026-07-06T01:00:00 | 2026-07-06T01:00:00 | 38 | 101 | 139 | 341138.89\n2026-07-12 | 2674 | 2674 | 2674 | 1 | 2026-07-13T01:00:00 | 2026-07-13T01:00:00 | 38 | 101 | 139 | 341742.53\n2026-07-19 | 2674 | 2674 | 2674 | 1 | 2026-07-20T01:00:00 | 2026-07-20T01:00:00 | 38 | 101 | 139 | 344245.91\n2026-07-26 | 2674 | 2674 | 2674 | 1 | 2026-07-27T01:00:00 | 2026-07-27T01:00:00 | 38 | 101 | 139 | 349160.39\n2026-08-02 | 2674 | 2674 | 2674 | 1 | 2026-08-03T01:00:00 | 2026-08-03T01:00:00 | 38 | 101 | 139 | 346046.42\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:51:30",
+   "statement": "WITH r AS (\n  SELECT fs.week_ending_date, s.store_id, p.sku, fs.closing_units, fs.closing_value, fs.receipts_units, fs.adjustment_units, p.standard_unit_cost, p.product_name\n  FROM fact_stock_week fs\n  JOIN dim_store s ON s.store_key=fs.store_key\n  JOIN dim_product p ON p.product_key=fs.product_key\n  JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\n  WHERE fs.week_ending_date BETWEEN DATE '2026-07-05' AND DATE '2026-08-02'\n    AND cp.category='Paint & Decorating'\n),\na AS (SELECT * FROM r WHERE week_ending_date=DATE '2026-07-05'),\nb AS (SELECT * FROM r WHERE week_ending_date=DATE '2026-07-12')\nSELECT a.store_id, a.sku, a.product_name, a.closing_units, a.closing_value, a.standard_unit_cost, a.receipts_units, a.adjustment_units\nFROM a LEFT JOIN b ON a.store_id=b.store_id AND a.sku=b.sku WHERE b.sku IS NULL ORDER BY 1,2\n",
+   "n": 4,
+   "ok": true,
+   "rows": 25,
+   "output_preview": "store_id | sku | product_name | closing_units | closing_value | standard_unit_cost | receipts_units | adjustment_units\n101 | 101166 | Brushes & Rollers Havu Pro 905 | 0 | 0.00 | 2.09 | 0 | -4\n102 | 101007 | Interior Paint Peltola 622 | 0 | 0.00 | 26.54 | 0 | -5\n102 | 101166 | Brushes & Rollers Havu Pro 905 | 0 | 0.00 | 2.09 | 0 | -8\n102 | 101187 | Brushes & Rollers Lumiko 882 | 0 | 0.00 | 1.36 | 0 | -23\n103 | 101187 | Brushes & Rollers Lumiko 882 | 0 | 0.00 | 1.36 | 0 | -8\n104 | 101007 | Interior Paint Peltola 622 | 0 | 0.00 | 26.54 | 0 | -8\n104 | 101187 | Brushes & Rollers Lumiko 882 | 0 | 0.00 | 1.36 | 0 | -6\n106 | 101166 | Brushes & Rollers Havu Pro 905 | 0 | 0.00 | 2.09 | 0 | -8\n106 | 101187 | Brushes & Rollers Lumiko 882 | 0 | 0.00 | 1.36 | 0 | -4\n109 | 101166 | Brushes & Rollers Havu Pro 905 | 0 | 0.00 | 2.09 | 0 | -8\n110 | 101007 | Interior Paint Peltola 622 | 0 | 0.00 | 26.54 | 0 | -5\n114 | 101187 | Brushes & Rollers Lumiko 882 | 0 | 0.00 | 1.36 | 0 | -18\n115 | 101007 | Interior Paint Peltola 622 | 0 | 0.00 | 26.54 | 0 | -4\n115 | 101187 | Brushes & Rollers Lumiko 882 | 0 | 0.00 | 1.36 | 0 | -13\n116 | 101166 | Brushes & Rollers Havu Pro 905 | 0 | 0.00 | 2.09 | 0 | -8\n116 | 101187 | Brushes & Rollers Lumiko 882 | 0 | 0.00 | 1.36 | 0 | -16\n119 | 101007 | Interior Paint Peltola 622 | 0 | 0.00 | 26.54 | 0 | -5\n121 | 101007 | Interior Paint Peltola 622 | 0 | 0.00 | 26.54 | 0 | -8\n121 | 101166 | Brushes & Rollers Havu Pro 905 | 0 | 0.00 | 2.09 | 0 | -3\n125 | 101166 | Brushes"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:51:36",
+   "statement": "SELECT fs.week_ending_date,\n  count(*) n,\n  sum(CASE WHEN abs(fs.closing_value - fs.closing_units*p.standard_unit_cost) > 0.01 THEN 1 ELSE 0 END) value_mismatch,\n  sum(CASE WHEN fs.closing_units<0 THEN 1 ELSE 0 END) neg_units,\n  sum(CASE WHEN fs.closing_value<0 THEN 1 ELSE 0 END) neg_value,\n  sum(CASE WHEN p.valid_from > fs.week_ending_date OR p.valid_to < fs.week_ending_date THEN 1 ELSE 0 END) version_out_of_range,\n  sum(CASE WHEN p.category<>'Paint & Decorating' THEN 1 ELSE 0 END) aswas_other_cat,\n  sum(CASE WHEN s.store_id>=900 THEN 1 ELSE 0 END) nonphysical,\n  max(fs.closing_value) maxv, max(fs.closing_units) maxu,\n  sum(fs.closing_value) val, sum(fs.closing_units) units\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key=fs.store_key\nJOIN dim_product p ON p.product_key=fs.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE fs.week_ending_date BETWEEN DATE '2026-07-05' AND DATE '2026-08-02' AND cp.category='Paint & Decorating'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | n | value_mismatch | neg_units | neg_value | version_out_of_range | aswas_other_cat | nonphysical | maxv | maxu | val | units\n2026-07-05 | 2699 | 0 | 0 | 0 | 0 | 0 | 0 | 1064.38 | 38 | 341138.89 | 18829\n2026-07-12 | 2674 | 0 | 0 | 0 | 0 | 0 | 0 | 1025.64 | 34 | 341742.53 | 18891\n2026-07-19 | 2674 | 0 | 0 | 0 | 0 | 0 | 0 | 1120.40 | 40 | 344245.91 | 18907\n2026-07-26 | 2674 | 0 | 0 | 0 | 0 | 0 | 0 | 1316.47 | 47 | 349160.39 | 19048\n2026-08-02 | 2674 | 0 | 0 | 0 | 0 | 0 | 0 | 868.31 | 31 | 346046.42 | 18910\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:51:37",
+   "statement": "SELECT d.fiscal_week, d.fiscal_period, d.fiscal_year, d.fiscal_week_end_date, count(*) days\nFROM dim_date d WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=3 GROUP BY ALL ORDER BY 1\n",
+   "n": 6,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"days\"\n\nLINE 1: ...al_period, d.fiscal_year, d.fiscal_week_end_date, count(*) days\n                                                                      ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:51:44",
+   "statement": "WITH params AS (\n    SELECT period_start_date AS start_date, period_end_date AS end_date\n    FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2026/27' AND fiscal_period = 3\n),\nweekly AS (\n    SELECT fs.week_ending_date, SUM(fs.closing_value) AS closing_value\n    FROM fact_stock_week fs\n    JOIN dim_store s ON s.store_key = fs.store_key\n    JOIN dim_product p ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date BETWEEN params.start_date AND params.end_date\n      AND s.store_id < 900 AND cp.category = 'Paint & Decorating'\n    GROUP BY 1\n)\nSELECT 'FY2026/27' AS fiscal_year, 3 AS fiscal_period, 'Paint & Decorating' AS category,\n       ROUND(AVG(closing_value), 2) AS avg_weekly_closing_stock_value_at_cost_eur, COUNT(*) AS weeks_averaged\nFROM weekly\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | category | avg_weekly_closing_stock_value_at_cost_eur | weeks_averaged\nFY2026/27 | 3 | Paint & Decorating | 344466.83 | 5\n(1 row)"
+  }
+ ]
+}

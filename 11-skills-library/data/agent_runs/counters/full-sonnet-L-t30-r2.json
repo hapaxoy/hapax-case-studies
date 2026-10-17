@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t30-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T30",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "c85cb3a38f4e612dc90c22bc39665b2efafd6d213d6981b1cff769ab84ff51ec",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:32:12",
+   "statement": "SELECT tier, is_current, (valid_to = DATE '9999-12-31') AS open_ended, COUNT(*) AS versions, COUNT(DISTINCT member_id) AS members, MIN(valid_from) AS min_from, MAX(valid_from) AS max_from\nFROM dim_member GROUP BY ALL ORDER BY ALL\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tier | is_current | open_ended | versions | members | min_from | max_from\nBasic | false | false | 19343 | 17903 | 2019-01-01 | 2026-10-01\nBasic | true | true | 31229 | 31229 | 2019-01-01 | 2026-10-04\nGold | false | false | 2412 | 2233 | 2019-01-01 | 2026-09-30\nGold | true | true | 5791 | 5791 | 2019-01-02 | 2026-10-04\nSilver | false | false | 7559 | 7068 | 2019-01-01 | 2026-10-02\nSilver | true | true | 22980 | 22980 | 2019-01-02 | 2026-10-04\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:32:19",
+   "statement": "SELECT\n (SELECT COUNT(*) FROM dim_member WHERE is_current) AS current_rows,\n (SELECT COUNT(DISTINCT member_id) FROM dim_member) AS all_members,\n (SELECT COUNT(DISTINCT member_id) FROM dim_member WHERE is_current) AS members_with_current,\n (SELECT COUNT(*) FROM dim_member WHERE is_current AND valid_to <> DATE '9999-12-31') AS current_but_closed,\n (SELECT COUNT(*) FROM dim_member WHERE NOT is_current AND valid_to = DATE '9999-12-31') AS open_not_current,\n (SELECT COUNT(DISTINCT member_id) FROM dim_member WHERE DATE '2026-10-07' BETWEEN valid_from AND valid_to AND tier='Gold') AS gold_on_req_date,\n (SELECT COUNT(DISTINCT member_id) FROM dim_member WHERE is_current AND tier='Gold' AND join_date > DATE '2026-10-07') AS future_join,\n (SELECT COUNT(*) FROM dim_member WHERE is_current AND tier='Gold' AND member_id IN (SELECT member_id FROM dim_member WHERE tier='Gold' AND NOT is_current)) AS gold_before_too,\n (SELECT MAX(sale_date) FROM fact_sales_line) AS last_sale,\n (SELECT COUNT(*) FROM (SELECT member_id FROM dim_member WHERE tier NOT IN ('Basic','Silver','Gold') OR tier IS NULL)) AS odd_tier\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "current_rows | all_members | members_with_current | current_but_closed | open_not_current | gold_on_req_date | future_join | gold_before_too | last_sale | odd_tier\n60000 | 60000 | 60000 | 0 | 0 | 5791 | 0 | 814 | 2026-10-04 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:32:23",
+   "statement": "WITH active AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04'\n)\nSELECT COUNT(*) AS active_gold\nFROM active a JOIN dim_member c ON c.member_id = a.member_id AND c.is_current AND c.tier = 'Gold'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "active_gold\n4827\n(1 row)"
+  }
+ ]
+}

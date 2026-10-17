@@ -1,0 +1,31 @@
+{
+ "run_id": "full-sonnet-L-t39-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T39",
+ "budget": 12,
+ "used": 2,
+ "refused": 0,
+ "packet_sha256": "220fcce6b0aa3ff4d5d0198614af3939999edf7269adb66aa7284b318f62bb1b",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:46",
+   "statement": "WITH o AS (\n  SELECT o.*, CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) AS hel_date\n  FROM fact_web_order o\n),\nt AS (\n  SELECT DISTINCT f.receipt_id FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key WHERE p.category = 'ZZ Test'\n)\nSELECT o.status, o.fulfilment_type,\n       COUNT(*) AS n, COUNT(DISTINCT o.web_order_id) AS n_distinct,\n       COUNT(*) FILTER (WHERE t.receipt_id IS NOT NULL) AS n_test,\n       COUNT(*) FILTER (WHERE CAST(o.order_ts_utc AS DATE) = DATE '2025-12-01') AS n_utc_date\nFROM o LEFT JOIN t ON t.receipt_id = o.web_order_id\nWHERE o.hel_date = DATE '2025-12-01'\nGROUP BY ALL ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "status | fulfilment_type | n | n_distinct | n_test | n_utc_date\ncancelled | click_and_collect | 6 | 6 | 0 | 6\ncancelled | home_delivery | 13 | 13 | 0 | 11\ncollected | click_and_collect | 87 | 87 | 0 | 77\ndelivered | home_delivery | 239 | 239 | 0 | 190\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:26:51",
+   "statement": "SELECT COUNT(*) AS web_orders\nFROM fact_web_order o\nWHERE CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n  AND o.status <> 'cancelled'\n  AND NOT EXISTS (SELECT 1 FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key\n                  WHERE f.receipt_id = o.web_order_id AND p.category = 'ZZ Test')\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "web_orders\n326\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,29 @@
+Perfect! The query is validated. Now let me prepare my final answer in the required JSON format:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS fiscal_period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id &lt;&gt; 999 \n      AND p.category &lt;&gt; 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.fiscal_period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net \n    FROM fact_return_line \n    GROUP BY 1\n)\nSELECT l.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.format;",
+  "result": {
+    "columns": ["format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28],
+      ["Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: refund net divided by sold net, sale-week cohort (return attributed to the fiscal week of original sale)",
+    "Net sales: excluding VAT, after returns, store 999 and ZZ Test category excluded, staff purchases included"
+  ],
+  "assumptions": [
+    "Period 2 last year interpreted as FY2025/26 P02 (22 May–22 June 2025)",
+    "Store format includes all physical store formats (Large, Medium, Small) plus Web",
+    "Return rate reported as percentage of sales in P2 (all returns, whenever received, attributed to the sale period)"
+  ],
+  "caveats": [
+    "Cohort complete: P2 FY2025/26 ended 22 June 2025, more than 30 days before warehouse load date (4 October 2026), so all returns have been received",
+    "Web returns sent by post are booked to store 900, the web shop"
+  ]
+}
+```

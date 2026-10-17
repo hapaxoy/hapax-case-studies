@@ -1,0 +1,40 @@
+Perfect. Now I have all the information I need. Let me prepare the final answer in the required JSON format.
+
+The request asks for "Weeks of cover by category at the end of last period." Based on the fiscal calendar, last period is FY2026/27 P05, ending on Sunday 2026-09-27 (fiscal week 21). The weeks of cover metric divides closing stock at that date by average weekly units sold over the prior four weeks (weeks 17-20).
+
+Here is my final answer:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2026-09-27' AS week_ending\n),\nclosing AS (\n    SELECT cp.category, SUM(fs.closing_units) AS closing_units\n    FROM fact_stock_week fs\n    JOIN dim_store s    ON s.store_key = fs.store_key\n    JOIN dim_product p  ON p.product_key = fs.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE fs.week_ending_date = params.week_ending\n      AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n    GROUP BY 1\n),\nsold AS (\n    SELECT cp.category, SUM(f.quantity) AS units_sold_4w\n    FROM fact_sales_line f\n    JOIN dim_store s    ON s.store_key = f.store_key\n    JOIN dim_product p  ON p.product_key = f.product_key\n    JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n    CROSS JOIN params\n    WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7\n      AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n    GROUP BY 1\n)\nSELECT c.category, \n       CASE WHEN COALESCE(s.units_sold_4w, 0) = 0 THEN NULL\n            ELSE ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) END AS weeks_of_cover\nFROM closing c\nLEFT JOIN sold s ON s.category = c.category\nORDER BY c.category;",
+  "result": {
+    "columns": ["category", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 11.6],
+      ["Cleaning &amp; Household", 7.6],
+      ["Electrical", 9.2],
+      ["Furniture", 29.5],
+      ["Garden", 16.4],
+      ["Home Textiles &amp; Decor", 12.2],
+      ["Kitchen &amp; Dining", 14.6],
+      ["Paint &amp; Decorating", 12.6],
+      ["Seasonal", 48.8],
+      ["Tools &amp; Hardware", 7.7]
+    ]
+  },
+  "definitions_applied": [
+    "Weeks of cover = closing stock units at end of fiscal week ÷ average weekly units sold over prior four fiscal weeks",
+    "Closing stock aggregated across all physical stores",
+    "Physical stores only (store_id &lt; 900); test articles (category ZZ Test) excluded",
+    "Current product category hierarchy (as-is)",
+    "Last period = FY2026/27 P05, ending Sunday 2026-09-27 (fiscal week 21)"
+  ],
+  "assumptions": [
+    "Last period interpreted as the last completed fiscal period in the warehouse (FY2026/27 P05)",
+    "Prior four weeks are fiscal weeks 17–20 (the four weeks before the snapshot week)",
+    "Results aggregated across all physical stores",
+    "Categories grouped at the current hierarchy level"
+  ],
+  "caveats": []
+}
+```

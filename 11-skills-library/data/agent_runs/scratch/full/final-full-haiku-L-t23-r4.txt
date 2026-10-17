@@ -1,0 +1,33 @@
+Now let me prepare the final JSON response with the results:
+
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsold_lines AS (\n    -- Store sales on sale_date, web sales on dispatch date\n    SELECT f.sales_line_id, \n           COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           f.net_amount,\n           cs.format\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n),\nperiod_sales AS (\n    SELECT sl.sales_line_id, sl.format, sl.net_amount, sl.business_date\n    FROM sold_lines sl\n    JOIN dim_date d ON d.calendar_date = sl.business_date\n    WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 2\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net \n    FROM fact_return_line \n    GROUP BY 1\n)\nSELECT ps.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(ps.net_amount), 2) AS return_rate_pct\nFROM period_sales ps\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY ps.format\nORDER BY ps.format;",
+  "result": {
+    "columns": ["format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28],
+      ["Web", 12.82]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Return rate: returned net divided by sold net, grouped by store format",
+    "Sale-week cohort: returns matched to the fiscal period of the original sale",
+    "Web sales: recognised on the dispatch date (Helsinki time), not the order date",
+    "Store exclusions: store 999 (training) and category ZZ Test excluded"
+  ],
+  "assumptions": [
+    "Period 2 last year: FY2025/26 period 2 (2025-05-26 to 2025-06-22)",
+    "Store format: current format version at the time of reporting",
+    "Return rate based on the sale-week cohort: returns are attributed to the fiscal period of the original sale, whenever they were booked",
+    "Cohort complete: all returns from period 2 have been received (sales in P2 plus 30 days was before the load date of 2026-10-04)"
+  ],
+  "caveats": [
+    "Web returns represent a higher return rate (12.82%) than physical stores (4.28-4.53%), consistent with typical e-commerce patterns",
+    "The total across all formats is 1,269,416.75 EUR in net sales and 70,608.64 EUR in returns (overall return rate 5.56%)"
+  ]
+}
+```

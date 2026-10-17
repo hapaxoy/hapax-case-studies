@@ -1,0 +1,31 @@
+{
+ "run_id": "full-sonnet-Lminus-t15-r4",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T15",
+ "budget": 12,
+ "used": 2,
+ "refused": 0,
+ "packet_sha256": "9999bf1d5378284c0d773e2ecd4c06866dc375970e929a516425fd3ae75904b1",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:34:57",
+   "statement": "SELECT o.status,\n       COUNT(*) AS n_rows,\n       COUNT(DISTINCT o.web_order_id) AS n_orders,\n       COUNT(DISTINCT CASE WHEN CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01' THEN o.web_order_id END) AS hel_dec1_orders,\n       COUNT(DISTINCT CASE WHEN CAST(o.order_ts_utc AS DATE) = DATE '2025-12-01' THEN o.web_order_id END) AS utc_dec1_orders\nFROM fact_web_order o\nWHERE CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n   OR CAST(o.order_ts_utc AS DATE) = DATE '2025-12-01'\nGROUP BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | n_rows | n_orders | hel_dec1_orders | utc_dec1_orders\ndelivered | 242 | 242 | 239 | 193\ncancelled | 19 | 19 | 19 | 17\ncollected | 91 | 91 | 87 | 81\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:02",
+   "statement": "WITH day_orders AS (\n    SELECT o.*\n    FROM fact_web_order o\n    WHERE CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n),\ntest_orders AS (\n    SELECT DISTINCT f.receipt_id\n    FROM fact_sales_line f\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    WHERE p.category = 'ZZ Test' OR s.store_id = 999\n)\nSELECT COUNT(*) AS all_orders,\n       COUNT(*) FILTER (WHERE status <> 'cancelled') AS not_cancelled,\n       COUNT(*) FILTER (WHERE status <> 'cancelled' AND web_order_id IN (SELECT receipt_id FROM test_orders)) AS test_not_cancelled,\n       COUNT(*) FILTER (WHERE status <> 'cancelled' AND web_order_id NOT IN (SELECT receipt_id FROM test_orders)) AS real_not_cancelled,\n       COUNT(*) FILTER (WHERE status = 'processing') AS processing,\n       COUNT(DISTINCT web_order_id) AS distinct_ids,\n       MIN(order_ts_utc) AS min_ts, MAX(order_ts_utc) AS max_ts\nFROM day_orders\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "all_orders | not_cancelled | test_not_cancelled | real_not_cancelled | processing | distinct_ids | min_ts | max_ts\n345 | 326 | 0 | 326 | 0 | 345 | 2025-11-30T22:03:10 | 2025-12-01T21:54:46\n(1 row)"
+  }
+ ]
+}

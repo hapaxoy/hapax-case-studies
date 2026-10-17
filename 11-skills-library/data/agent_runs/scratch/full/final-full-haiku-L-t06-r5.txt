@@ -1,0 +1,29 @@
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.format,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.format;",
+  "result": {
+    "columns": ["format", "return_rate_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28],
+      ["Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: returned net (refund_net) divided by sold net, on the sale-week cohort",
+    "Sale-week cohort: returns attributed to the fiscal week the item was sold, regardless of return date",
+    "Exclusions: store 999 (training store) and category ZZ Test per net sales scope"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (the complete fiscal year prior to the request date)",
+    "Period 2 refers to fiscal period 2 of FY2025/26 (fiscal weeks 5–8; 26 May–22 June 2025)",
+    "Store format includes physical store categories (Large, Medium, Small) and Web as a separate format"
+  ],
+  "caveats": [
+    "Return cohort is complete: all sales in the period are more than 30 days before the data cutoff (4 October 2026), so return data is not outstanding",
+    "Web return rate (12.23%) is substantially higher than physical stores (4.28–4.53%), consistent with higher online return expectations",
+    "Store 999 (training store) excluded; category ZZ Test excluded per company net sales definitions"
+  ]
+}
+```

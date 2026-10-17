@@ -1,0 +1,26 @@
+```json
+{
+  "sql": "SELECT tier, COUNT(DISTINCT member_id) AS gold_members FROM dim_member WHERE is_current AND tier = 'Gold' GROUP BY tier",
+  "result": {
+    "columns": ["tier", "gold_members"],
+    "rows": [["Gold", 5791]]
+  },
+  "definitions_applied": [
+    "Members counted by distinct member_id, not by member_key (dim_member keeps one row per version)",
+    "Current tier taken from the current member version (is_current, valid_to 9999-12-31)",
+    "Loyalty tiers are Basic, Silver and Gold",
+    "Company data is as of the warehouse load point, Sunday 4 October 2026"
+  ],
+  "assumptions": [
+    "'Gold-tier loyalty members' is read as all enrolled members whose current tier is Gold, whether or not they have bought recently. The metric dictionary defines only 'active member', not a plain member headcount, and I could not ask in the queue.",
+    "'At the moment' is read as the latest data in the warehouse. The last sales are dated 2026-10-04 and the latest member versions start on 2026-10-04, so this is the position at the end of Sunday 4 October 2026, three days before the request date.",
+    "Staff and test accounts are not excluded, because dim_member carries no flag for them."
+  ],
+  "caveats": [
+    "A plain count of dim_member rows with tier = 'Gold' gives 8,203. That is wrong, because it counts every historical version of a member. Of those rows, 2,412 are superseded versions, 2,233 distinct members once held Gold at some point, and 5,791 hold it now. I used the current version only.",
+    "Checks on dim_member: each member has exactly one current version, no version date ranges overlap or leave gaps, there are no duplicate member_keys and no unexpected tier values. Counting Gold on 4 October 2026 or on 7 October 2026 by validity dates also gives 5,791.",
+    "If the question is about active Gold members, meaning at least one purchase in the trailing 52 fiscal weeks to 4 October 2026 (the company definition of an active member), the figure is 4,827. The 5,791 includes members who have not bought in that window.",
+    "Members who changed tier after 4 October 2026 are not reflected, since the warehouse holds no later data."
+  ]
+}
+```

@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n),\nstore_weeks AS (\n    SELECT st.store_id, d.fiscal_year, d.fiscal_week,\n           (st.open_date IS NULL OR st.open_date &lt;= d.fiscal_week_start_date)\n           AND (st.close_date IS NULL OR st.close_date &gt;= d.fiscal_week_end_date)\n           AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                           WHERE c.store_id = st.store_id\n                             AND c.closure_start_date &lt;= d.fiscal_week_end_date\n                             AND c.closure_end_date &gt;= d.fiscal_week_start_date) AS trading\n    FROM dim_store st\n    CROSS JOIN (SELECT DISTINCT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date\n                FROM dim_date\n                WHERE fiscal_year IN ('FY2025/26', 'FY2026/27') AND fiscal_period = 4) d\n    WHERE st.is_current AND st.store_id &lt; 900\n),\nlfl_store_weeks AS (\n    SELECT ty.store_id, ty.fiscal_week\n    FROM store_weeks ty\n    JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = 'FY2025/26'\n    JOIN dim_store st   ON st.store_id = ty.store_id AND st.is_current\n    WHERE ty.fiscal_year = 'FY2026/27' AND ty.trading AND ly.trading\n      AND (st.open_date IS NULL OR st.open_date &lt;= DATE '2026-08-03' - 364)\n),\nlfl_sales AS (\n    SELECT d.fiscal_year, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d ON d.calendar_date = n.business_date\n    JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week\n    WHERE d.fiscal_year IN ('FY2026/27', 'FY2025/26') AND d.fiscal_period = 4\n    GROUP BY 1\n)\nSELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, ty.net_sales AS this_year_net_sales, ly.net_sales AS last_year_net_sales,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct\nFROM lfl_sales ty, lfl_sales ly\nWHERE ty.fiscal_year = 'FY2026/27' AND ly.fiscal_year = 'FY2025/26'",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "this_year_net_sales", "last_year_net_sales", "lfl_growth_pct"],
+    "rows": [["FY2026/27", 4, 1010478.52, 1010743.32, -0.03]]
+  },
+  "definitions_applied": [
+    "Like-for-like (LFL): same fiscal weeks last year, week by week, physical stores only, web shop excluded",
+    "LFL base rule: store open at least 364 days before the first day of the period (3 Aug 2026)",
+    "LFL store-week rule: a store-week counts only if the store traded in that week in both years (open and close dates, ref_store_closure)",
+    "Net sales: net amount excluding VAT, after returns; returns reduce net sales on their own return date",
+    "Store 999 and category ZZ Test filtered out",
+    "Staff purchases included in net sales",
+    "Fiscal calendar: P4 = fiscal weeks 14 to 17 (FY2026/27: 3 Aug to 30 Aug 2026; FY2025/26: 28 Jul to 24 Aug 2025)",
+    "Single LFL total, no breakdown",
+    "Control total check against rpt_daily_store_sales, store by store",
+    "Deprecated objects (rpt.v_daily_sales, channel_code, stg_/bak_/tmp_ tables) not used"
+  ],
+  "assumptions": [
+    "'Period 4 this year' read as FY2026/27 P4 (3 to 30 August 2026, weeks 14 to 17). P4 is a completed period, and the warehouse is loaded through 4 October 2026.",
+    "'Against last year' read as FY2025/26 P4 (28 July to 24 August 2025), same fiscal weeks 14 to 17. This follows the way past requests read 'last year' after the new fiscal year began.",
+    "One total (this year, last year, growth) because no breakdown was asked for.",
+    "LFL means the company LFL definition: physical stores only, web shop not included."
+  ],
+  "caveats": [
+    "LFL net sales are essentially flat: 1,010,478.52 EUR this year against 1,010,743.32 EUR last year, a change of -0.03% (about -265 EUR).",
+    "Savonlinna (store 129) closed on 25 January 2026. It traded in P4 last year (about 9,913 EUR net sales) but not this year, so it is excluded from both years. Including it would have understated growth.",
+    "38 of the 39 physical stores are in the LFL base, giving 152 store-weeks (38 stores x 4 weeks). Tampere Lamminpää (136) and Lohja (137) opened in 2024 and have been in the base since before this period.",
+    "No refit closures overlap P4 in either year. Kuopio's refit ended on 26 July 2026, the day before P4 started.",
+    "Store 999 and ZZ Test articles were filtered out. They sit only in store 999 and the web shop, so the physical-store total is unchanged by the filter.",
+    "Store-level net sales for P4, both years, matched rpt_daily_store_sales exactly for every store (no differences above 0.01 EUR).",
+    "Source rows were unique (no duplicate lines or returns) for the period in both years. I found no data problem that needed a correction.",
+    "Individual store-weeks vary widely year on year (for example store 105 weeks 16 and 17 are about 40% down, store 137 week 17 is about 87% up). These are real transactions that reconcile to the control table, so they were left in.",
+    "Returns arriving after P4 for goods sold in P4 are not relevant here, because LFL net sales put returns on their own return date."
+  ]
+}
+```

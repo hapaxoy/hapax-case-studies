@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t57-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T57",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "8ed9f8eccbcc94f13f7dc8b4f6237486aa447cc040a4fef2e1d759b7342e6642",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:43:41",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE city ILIKE '%nokia%' OR store_name ILIKE '%nokia%' ORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n24 | 118 | Nokia | Nokia | West | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:43:43",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, weeks_in_period, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period IN (4,5,6)\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | fully_loaded\nFY2026/27 | 4 | FY2026/27 P04 | 2026-08-03 | 2026-08-30 | 4 | true\nFY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | 4 | true\nFY2026/27 | 6 | FY2026/27 P06 | 2026-09-28 | 2026-11-01 | 5 | false\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:43:47",
+   "statement": "SELECT cp.subcategory, cp.category, SUM(f.quantity) AS units_sold, COUNT(*) AS line_cnt, COUNT(DISTINCT f.sales_line_id) AS dist_lines\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 118 AND p.category <> 'ZZ Test'\n  AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nGROUP BY 1, 2\nORDER BY units_sold DESC\nLIMIT 10\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "subcategory | category | units_sold | line_cnt | dist_lines\nFixings & Fasteners | Tools & Hardware | 570 | 189 | 189\nIndoor Lighting | Electrical | 152 | 99 | 99\nStorage Boxes | Cleaning & Household | 139 | 82 | 82\nCleaning Products | Cleaning & Household | 136 | 63 | 63\nPlants & Flowers | Garden | 136 | 82 | 82\nBatteries & Bulbs | Electrical | 125 | 56 | 56\nPlumbing Parts | Bathroom & Plumbing | 106 | 48 | 48\nInterior Paint | Paint & Decorating | 76 | 56 | 56\nCables & Plugs | Electrical | 75 | 55 | 55\nTableware | Kitchen & Dining | 74 | 35 | 35\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:43:49",
+   "statement": "SELECT COUNT(*) AS lines, COUNT(DISTINCT f.sales_line_id) AS dist_ids, COUNT(DISTINCT (f.receipt_id, f.line_no)) AS dist_rl, MIN(f.sale_date) AS mn, MAX(f.sale_date) AS mx, SUM(f.quantity) AS units, SUM(f.net_amount) AS net, MAX(f.etl_loaded_at) AS loaded, SUM(CASE WHEN f.quantity<=0 THEN 1 ELSE 0 END) AS nonpos\nFROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key\nWHERE s.store_id = 118 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | dist_ids | dist_rl | mn | mx | units | net | loaded | nonpos\n1250 | 1250 | 1250 | 2026-08-31 | 2026-09-27 | 2245 | 29540.71 | 2026-09-28T01:00:00 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:43:55",
+   "statement": "SELECT 'rpt' AS src, SUM(receipts) AS receipts, SUM(units_sold) AS units, SUM(net_sales_before_returns) AS gross_net, SUM(returns_net) AS ret, SUM(net_sales) AS net_sales, COUNT(*) AS days\nFROM rpt_daily_store_sales WHERE store_id=118 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nUNION ALL\nSELECT 'fact', COUNT(DISTINCT f.receipt_id), SUM(f.quantity), SUM(f.net_amount), NULL, NULL, COUNT(DISTINCT f.sale_date)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE s.store_id=118 AND p.category<>'ZZ Test' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "src | receipts | units | gross_net | ret | net_sales | days\nrpt | 564 | 2245 | 29540.71 | 1455.26 | 28085.45 | 28\nfact | 564 | 2245 | 29540.71 | NULL | NULL | 28\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:43:57",
+   "statement": "SELECT p.subcategory AS as_was_sub, SUM(f.quantity) AS units\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE s.store_id=118 AND p.category<>'ZZ Test' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nGROUP BY 1 ORDER BY 2 DESC LIMIT 5\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "as_was_sub | units\nFixings & Fasteners | 570\nIndoor Lighting | 152\nStorage Boxes | 139\nCleaning Products | 136\nPlants & Flowers | 136\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:01",
+   "statement": "SELECT cp.subcategory, SUM(r.quantity_returned) AS units_returned\nFROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE s.store_id=118 AND p.category<>'ZZ Test' AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nGROUP BY 1 ORDER BY 2 DESC LIMIT 6\n",
+   "n": 7,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "subcategory | units_returned\nStorage Boxes | 9\nPlants & Flowers | 7\nFixings & Fasteners | 7\nIndoor Lighting | 5\nGarden Tools | 4\nLaundry & Ironing | 3\n(6 rows)"
+  }
+ ]
+}

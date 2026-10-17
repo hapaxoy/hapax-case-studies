@@ -1,0 +1,30 @@
+Perfect! All checks pass. Now let me format the final answer as a JSON object according to the specifications.
+
+```json
+{
+  "sql": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  ROUND(100.0 * SUM(CASE WHEN f.member_key IS NOT NULL THEN f.net_amount ELSE 0 END) / SUM(f.net_amount), 1) AS member_share_pct\nFROM fact_sales_line f\nJOIN dim_store s ON f.store_key = s.store_key\nJOIN dim_product p ON f.product_key = p.product_key\nJOIN fact_web_order wo ON f.receipt_id = wo.web_order_id\nJOIN dim_date d ON d.calendar_date = CAST(timezone('Europe/Helsinki', wo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)\nWHERE s.store_id = 900\n  AND p.category &lt;&gt; 'ZZ Test'\n  AND d.fiscal_year = 'FY2025/26'\n  AND d.fiscal_week BETWEEN 35 AND 47\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "member_share_pct"],
+    "rows": [
+      ["FY2025/26", 9, 68.0],
+      ["FY2025/26", 10, 51.8],
+      ["FY2025/26", 11, 55.8]
+    ]
+  },
+  "definitions_applied": [
+    "Member share of sales: net sales before returns on lines linked to a member, divided by all net sales before returns",
+    "Web sales: recognised on dispatch date in Helsinki time, identified by store_id 900",
+    "Guest web orders (no member key) count as non-member",
+    "Test articles (category ZZ Test) excluded from net sales"
+  ],
+  "assumptions": [
+    "Interpreted 'last year' as FY2025/26, the fiscal year prior to the current FY2026/27",
+    "Web sales dated on dispatch_ts_utc converted to Helsinki business date",
+    "Member presence determined by member_key IS NOT NULL on the sales line"
+  ],
+  "caveats": [
+    "Web returns may arrive up to 30 days after sale, so the reported period may be incomplete for recent sales; however, periods 9-11 of FY2025/26 (ended 22 March 2026) are fully loaded in the warehouse",
+    "The member_key on a sales line reflects the member version at that sale date; this query uses that version without requiring any specific membership tier or history"
+  ]
+}
+```

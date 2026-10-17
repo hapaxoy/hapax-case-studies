@@ -1,0 +1,193 @@
+{
+ "run_id": "full-haiku-S-t03-r4",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T03",
+ "budget": 30,
+ "used": 20,
+ "refused": 0,
+ "packet_sha256": "15e020982152e191c1e49d1f16c583d517b9e879b4eba3936669565574ffdc55",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:23:29",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_period IN (1, 2, 3)\nORDER BY fiscal_year, fiscal_period\nLIMIT 20\n",
+   "n": 1,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2024/25 | 1 | FY2024/25 P01 | 2024-04-29 | 2024-05-26\nFY2024/25 | 2 | FY2024/25 P02 | 2024-05-27 | 2024-06-23\nFY2024/25 | 3 | FY2024/25 P03 | 2024-06-24 | 2024-07-28\nFY2025/26 | 1 | FY2025/26 P01 | 2025-04-28 | 2025-05-25\nFY2025/26 | 2 | FY2025/26 P02 | 2025-05-26 | 2025-06-22\nFY2025/26 | 3 | FY2025/26 P03 | 2025-06-23 | 2025-07-27\nFY2026/27 | 1 | FY2026/27 P01 | 2026-05-04 | 2026-05-31\nFY2026/27 | 2 | FY2026/27 P02 | 2026-06-01 | 2026-06-28\nFY2026/27 | 3 | FY2026/27 P03 | 2026-06-29 | 2026-08-02\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:23:37",
+   "statement": "SELECT \n  d.fiscal_year,\n  MIN(f.sale_date) as min_sale_date,\n  MAX(f.sale_date) as max_sale_date,\n  COUNT(*) as sales_lines\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nGROUP BY d.fiscal_year\nORDER BY d.fiscal_year DESC\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | min_sale_date | max_sale_date | sales_lines\nFY2026/27 | 2026-05-04 | 2026-10-04 | 288434\nFY2025/26 | 2025-04-28 | 2026-05-03 | 639289\nFY2024/25 | 2024-04-29 | 2025-04-27 | 582918\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:23:49",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  SUM(f.net_amount) as gross_sales,\n  SUM(COALESCE(r.refund_net, 0)) as total_refunds,\n  COUNT(DISTINCT f.receipt_id) as num_receipts\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | gross_sales | total_refunds | num_receipts\nFY2026/27 | 1 | 1460342.53 | 74180.41 | 27864\nFY2026/27 | 2 | 1372772.47 | 76975.85 | 24498\nFY2026/27 | 3 | 1713643.84 | 96024.07 | 28807\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:01",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0)) as net_sales,\n  COUNT(DISTINCT f.receipt_id) as num_receipts,\n  ROUND((SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0))) / COUNT(DISTINCT f.receipt_id), 2) as atv\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | net_sales | num_receipts | atv\nFY2026/27 | 1 | 1386162.12 | 27864 | 49.75\nFY2026/27 | 2 | 1295796.62 | 24498 | 52.89\nFY2026/27 | 3 | 1617619.77 | 28807 | 56.15\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:09",
+   "statement": "SELECT \n  d.fiscal_period,\n  f.channel_code,\n  COUNT(*) as num_lines,\n  COUNT(DISTINCT f.receipt_id) as num_receipts,\n  SUM(f.net_amount) as total_net\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_period, f.channel_code\nORDER BY d.fiscal_period, f.channel_code\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | channel_code | num_lines | num_receipts | total_net\n1 | NULL | 62758 | 27864 | 1460342.53\n2 | NULL | 55084 | 24498 | 1372772.47\n3 | NULL | 64665 | 28807 | 1713643.84\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:15",
+   "statement": "SELECT DISTINCT channel_code, channel_id\nFROM fact_sales_line\nLIMIT 10\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "channel_code | channel_id\nNULL | 3\nST | NULL\nNULL | 2\nNULL | 1\nWB | NULL\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:21",
+   "statement": "SELECT * FROM dim_channel\n",
+   "n": 7,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_id | channel_name | channel_group | legacy_channel_code\n1 | Store | store | ST\n2 | Web home delivery | web | WB\n3 | Click and collect | web | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:30",
+   "statement": "SELECT \n  COUNT(*) as total_lines,\n  SUM(CASE WHEN channel_code IS NOT NULL THEN 1 ELSE 0 END) as with_channel_code,\n  SUM(CASE WHEN channel_id IS NOT NULL THEN 1 ELSE 0 END) as with_channel_id,\n  SUM(CASE WHEN channel_code IS NULL AND channel_id IS NULL THEN 1 ELSE 0 END) as with_neither\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_lines | with_channel_code | with_channel_id | with_neither\n182507 | 0 | 182507 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:37",
+   "statement": "SELECT \n  d.fiscal_period,\n  c.channel_name,\n  COUNT(*) as num_lines,\n  COUNT(DISTINCT f.receipt_id) as num_receipts,\n  SUM(f.net_amount) as total_net\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN dim_channel c ON f.channel_id = c.channel_id\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_period, c.channel_name\nORDER BY d.fiscal_period, c.channel_name\n",
+   "n": 9,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "fiscal_period | channel_name | num_lines | num_receipts | total_net\n1 | Click and collect | 2611 | 1294 | 67811.41\n1 | Store | 54261 | 23616 | 1231016.52\n1 | Web home delivery | 5886 | 2954 | 161514.60\n2 | Click and collect | 2549 | 1254 | 77786.24\n2 | Store | 46728 | 20336 | 1119205.97\n2 | Web home delivery | 5807 | 2908 | 175780.26\n3 | Click and collect | 2780 | 1377 | 88202.03\n3 | Store | 55637 | 24255 | 1425505.04\n3 | Web home delivery | 6248 | 3175 | 199936.77\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:47",
+   "statement": "SELECT \n  COUNT(*) as sales_lines,\n  COUNT(DISTINCT sales_line_id) as unique_sales_lines,\n  SUM(CASE WHEN sales_line_id IS NOT NULL THEN 1 ELSE 0 END) as sales_lines_with_id\nFROM fact_sales_line\nWHERE sale_date BETWEEN '2026-05-04' AND '2026-07-27'\nLIMIT 1\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sales_lines | unique_sales_lines | sales_lines_with_id\n171324 | 171324 | 171324\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:52",
+   "statement": "SELECT \n  COUNT(*) as sales_lines,\n  COUNT(DISTINCT sales_line_id) as unique_sales_lines\nFROM fact_sales_line\nWHERE sale_date BETWEEN '2026-05-04' AND '2026-08-02'\n",
+   "n": 11,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sales_lines | unique_sales_lines\n182507 | 182507\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:24:56",
+   "statement": "SELECT \n  COUNT(*) as return_lines,\n  COUNT(DISTINCT sales_line_id) as unique_sales_line_returns,\n  SUM(refund_net) as total_refunds\nFROM fact_return_line\nWHERE return_date BETWEEN '2026-05-04' AND '2026-08-02'\n",
+   "n": 12,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "return_lines | unique_sales_line_returns | total_refunds\n7009 | 7009 | 243627.84\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:25:02",
+   "statement": "SELECT \n  d.fiscal_period,\n  SUM(f.net_amount) as gross_sales,\n  COALESCE(SUM(r.refund_net), 0) as refunds,\n  SUM(f.net_amount) - COALESCE(SUM(r.refund_net), 0) as net_sales\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id AND r.return_date BETWEEN '2026-05-04' AND '2026-08-02'\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 13,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | gross_sales | refunds | net_sales\n1 | 1460342.53 | 74180.41 | 1386162.12\n2 | 1372772.47 | 76975.85 | 1295796.62\n3 | 1713643.84 | 76701.13 | 1636942.71\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:25:11",
+   "statement": "SELECT \n  d.fiscal_period,\n  SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0)) as net_sales,\n  COUNT(DISTINCT f.receipt_id) as num_receipts,\n  ROUND((SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0))) / COUNT(DISTINCT f.receipt_id), 2) as atv\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id AND d.fiscal_period = (\n  SELECT fiscal_period FROM dim_date WHERE calendar_date = r.return_date AND fiscal_year = 'FY2026/27'\n)\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 14,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | net_sales | num_receipts | atv\n1 | 1405040.55 | 27864 | 50.42\n2 | 1317235.86 | 24498 | 53.77\n3 | 1636942.71 | 28807 | 56.82\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:25:21",
+   "statement": "SELECT \n  d.fiscal_period,\n  SUM(r.receipts) as num_receipts,\n  SUM(r.net_sales) as total_net_sales,\n  ROUND(SUM(r.net_sales) / SUM(r.receipts), 2) as atv\nFROM rpt_daily_store_sales r\nJOIN dim_date d ON r.business_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 15,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | num_receipts | total_net_sales | atv\n1 | 27802 | 1387633.06 | 49.91\n2 | 24451 | 1294647.64 | 52.95\n3 | 28772 | 1613543.48 | 56.08\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:25:34",
+   "statement": "-- Store sales from rpt_daily_store_sales\nSELECT \n  d.fiscal_period,\n  'Store' as channel_group,\n  SUM(r.receipts) as num_receipts,\n  SUM(r.net_sales) as total_net_sales,\n  ROUND(SUM(r.net_sales) / SUM(r.receipts), 2) as atv\nFROM rpt_daily_store_sales r\nJOIN dim_date d ON r.business_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 16,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | channel_group | num_receipts | total_net_sales | atv\n1 | Store | 27802 | 1387633.06 | 49.91\n2 | Store | 24451 | 1294647.64 | 52.95\n3 | Store | 28772 | 1613543.48 | 56.08\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:25:43",
+   "statement": "-- Web sales (Web home delivery + Click and collect)\nSELECT \n  d.fiscal_period,\n  COUNT(DISTINCT f.receipt_id) as num_receipts,\n  SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0)) as total_net_sales\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE d.fiscal_year = 'FY2026/27' \n  AND d.fiscal_period IN (1, 2, 3)\n  AND f.channel_id IN (2, 3)  -- Web home delivery and Click and collect\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 17,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | num_receipts | total_net_sales\n1 | 4248 | 203853.73\n2 | 4162 | 223670.65\n3 | 4552 | 254495.11\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:25:58",
+   "statement": "-- All sales (store + web) with returns adjustment\nSELECT \n  d.fiscal_period,\n  COUNT(DISTINCT f.receipt_id) as num_receipts,\n  SUM(f.net_amount) as gross_sales,\n  SUM(COALESCE(r.refund_net, 0)) as total_refunds,\n  SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0)) as net_sales,\n  ROUND((SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0))) / COUNT(DISTINCT f.receipt_id), 2) as atv\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 18,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | num_receipts | gross_sales | total_refunds | net_sales | atv\n1 | 27864 | 1460342.53 | 74180.41 | 1386162.12 | 49.75\n2 | 24498 | 1372772.47 | 76975.85 | 1295796.62 | 52.89\n3 | 28807 | 1713643.84 | 96024.07 | 1617619.77 | 56.15\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:26:09",
+   "statement": "-- Aggregate ATV across periods 1-3\nSELECT \n  COUNT(DISTINCT f.receipt_id) as num_receipts,\n  SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0)) as net_sales,\n  ROUND((SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0))) / COUNT(DISTINCT f.receipt_id), 2) as atv\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\n",
+   "n": 19,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "num_receipts | net_sales | atv\n81169 | 4299578.51 | 52.97\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:26:19",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  ROUND((SUM(f.net_amount) - SUM(COALESCE(r.refund_net, 0))) / COUNT(DISTINCT f.receipt_id), 2) as atv_eur\nFROM fact_sales_line f\nJOIN dim_date d ON f.sale_date = d.calendar_date\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period IN (1, 2, 3)\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 20,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | atv_eur\nFY2026/27 | 1 | 49.75\nFY2026/27 | 2 | 52.89\nFY2026/27 | 3 | 56.15\n(3 rows)"
+  }
+ ]
+}

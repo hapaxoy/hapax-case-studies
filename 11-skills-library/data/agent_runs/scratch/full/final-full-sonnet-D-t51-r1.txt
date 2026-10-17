@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), lines AS (SELECT m.member_id, f.net_amount, COALESCE(w.dispatch_date, f.sale_date) AS bdate FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN dim_member m ON m.member_key=f.member_key LEFT JOIN web_dispatch w ON w.web_order_id=f.receipt_id WHERE s.store_id<>999 AND p.category<>'ZZ Test'), spend AS (SELECT member_id, SUM(net_amount) AS amt FROM lines WHERE bdate BETWEEN DATE '2025-11-24' AND DATE '2025-12-07' GROUP BY 1), tg AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=15), ho AS (SELECT DISTINCT member_id FROM campaign_holdout WHERE campaign_id=15), t AS (SELECT AVG(COALESCE(s.amt,0)) AS v FROM tg LEFT JOIN spend s USING(member_id)), h AS (SELECT AVG(COALESCE(s.amt,0)) AS v FROM ho LEFT JOIN spend s USING(member_id)) SELECT 15 AS campaign_id, 'Black Week 2025' AS campaign_name, ROUND(t.v,2) AS avg_spend_targeted, ROUND(h.v,2) AS avg_spend_holdout, ROUND(t.v-h.v,2) AS uplift_eur FROM t, h",
+  "result": {
+    "columns": ["campaign_id", "campaign_name", "avg_spend_targeted", "avg_spend_holdout", "uplift_eur"],
+    "rows": [[15, "Black Week 2025", 9.34, 7.94, 1.41]]
+  },
+  "definitions_applied": [
+    "Campaign uplift: mean net sales per targeted member minus mean per holdout member, over the campaign window plus seven days",
+    "Targeted member: at least one fact_campaign_exposure row in the campaign, reduced to distinct member_id through dim_member",
+    "Holdout group: campaign_holdout, which holds member_id, matched on member_id",
+    "Net sales before returns, excluding VAT, on lines linked to the member (member_key mapped to member_id)",
+    "Members with no sales counted as zero in both groups",
+    "Web sales dated on the Helsinki dispatch date (delivered or collected orders only), not the order date; store sales on sale_date",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Overlap check between targeted and holdout groups (zero members in both)"
+  ],
+  "assumptions": [
+    "Black Week 2025 is campaign_id 15, window 24 to 30 November 2025. Adding seven days gives 24 November to 7 December 2025 (Helsinki dates).",
+    "Spend is across all channels (stores and web), because the request did not restrict it.",
+    "Returns are not netted off: the definition uses net sales before returns for campaign uplift.",
+    "Every member with any exposure row counts as targeted, including contacts that were not delivered or opened. The 1,893 members whose contacts all failed to deliver stay in the targeted group (intention-to-treat). This is the group the definition describes.",
+    "Spend is summed per member_id across all of a member's dim_member versions, so a tier or consent change during the window does not split a member in two.",
+    "Amounts are in EUR excluding VAT."
+  ],
+  "caveats": [
+    "Group sizes: 23,818 targeted members (3,279 with spend) and 2,747 holdout members (323 with spend). Total spend was EUR 222,547.52 for targeted and EUR 21,806.19 for holdout.",
+    "The uplift is EUR 1.41 per member (9.34 minus 7.94). Only 13.8% of targeted members and 11.8% of holdout members bought anything in the window, so the difference rests on a small number of buyers. No significance test was run, so treat it as an unquantified point estimate.",
+    "Correction: web lines were dated on the Helsinki dispatch date rather than the order date. 2,804 web lines in the window were dated this way and differ from their sale_date. The dispatch date is the company rule for web sales.",
+    "No problem was found in the campaign data. The holdout list matches dim_campaign.holdout_size (2,747). No member is in both groups. No duplicate exposure rows or holdout rows were found. All targeted contacts were to consenting members, and every holdout member had consent on 24 November 2025.",
+    "Targeted plus holdout is 26,565 members, against a stated mailing list of 26,573. The 8 listed members with no exposure row and no holdout row are in neither group and were not included.",
+    "The 23,844 member keys in the exposure table collapse to 23,818 distinct members, because some members changed version during the week. Distinct member_id was used to avoid double counting.",
+    "Staff purchases are included in spend (390 staff lines in the window across all members) because the company net sales definition includes them.",
+    "The figures are not checked against rpt_daily_store_sales, because that control total has no member dimension. The checks I ran instead were on grain: no duplicate sales lines, and every web line in the period matches a dispatched order.",
+    "The deprecated rpt.v_daily_sales view and the channel_code column were not used. The campaign window is after the 3 November 2025 web migration, so channel_code is empty."
+  ]
+}
+```

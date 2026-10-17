@@ -1,0 +1,49 @@
+{
+ "run_id": "full-haiku-L-t57-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T57",
+ "budget": 30,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "f22f5dbd2f2ba05e4b7af5750c37006a18449590110f34538ef0bf1e766f6a17",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:53:28",
+   "statement": "SELECT DISTINCT store_id, store_name, region FROM dim_store WHERE store_name LIKE '%Nokia%'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | region\n118 | Nokia | West\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:53:31",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, fully_loaded \nFROM ref_fiscal_calendar \nWHERE fiscal_year = 'FY2026/27' AND fiscal_period = 5\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | fully_loaded\nFY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:53:36",
+   "statement": "SELECT \n  p.subcategory,\n  SUM(f.quantity) AS units_sold\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_product p ON f.product_key = p.product_key\nWHERE s.store_id = 118  -- Nokia\n  AND f.sale_date BETWEEN '2026-08-31' AND '2026-09-27'  -- FY2026/27 P05\n  AND p.category != 'ZZ Test'\nGROUP BY p.subcategory\nORDER BY units_sold DESC\nLIMIT 3\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "subcategory | units_sold\nFixings & Fasteners | 570\nIndoor Lighting | 152\nStorage Boxes | 139\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:53:40",
+   "statement": "query-check/scripts/query_check.py --file q.sql --period FY2026/27 P05",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 2 columns: subcategory, units_sold\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2026-08-31 to 2026-09-27 (28 days; fiscal: FY2026/27 P05).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 8 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 14 rows in the range only in Helsinki time, 15 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  subcategory | units_sold\n  Fixings & Fasteners | 570\n  Indoor Lighting | 152\n  Storage Boxes | 139\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

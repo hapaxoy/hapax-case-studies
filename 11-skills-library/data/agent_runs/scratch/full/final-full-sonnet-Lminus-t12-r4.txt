@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2026-02-23' AS start_date, DATE '2026-03-22' AS end_date), stock AS (SELECT store_key, product_key, week_ending_date, closing_units, closing_value FROM fact_stock_week, params WHERE week_ending_date BETWEEN params.start_date AND params.end_date QUALIFY row_number() OVER (PARTITION BY store_key, product_key, week_ending_date ORDER BY etl_loaded_at DESC) = 1), weekly AS (SELECT fs.week_ending_date, cp.category, SUM(fs.closing_value) AS closing_value FROM stock fs JOIN dim_store s ON s.store_key = fs.store_key JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current JOIN dim_product p ON p.product_key = fs.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current WHERE cs.region = 'West' AND cs.store_id &lt; 900 AND cp.category &lt;&gt; 'ZZ Test' GROUP BY 1, 2) SELECT 'FY2025/26' AS fiscal_year, 11 AS fiscal_period, category, ROUND(AVG(closing_value), 2) AS avg_weekly_closing_value FROM weekly GROUP BY category ORDER BY category",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "avg_weekly_closing_value"],
+    "rows": [
+      ["FY2025/26", 11, "Bathroom &amp; Plumbing", 75701.53],
+      ["FY2025/26", 11, "Cleaning &amp; Household", 24179.52],
+      ["FY2025/26", 11, "Electrical", 68684.23],
+      ["FY2025/26", 11, "Furniture", 139710.73],
+      ["FY2025/26", 11, "Garden", 157755.23],
+      ["FY2025/26", 11, "Home Textiles &amp; Decor", 43663.29],
+      ["FY2025/26", 11, "Kitchen &amp; Dining", 56414.75],
+      ["FY2025/26", 11, "Paint &amp; Decorating", 80430.48],
+      ["FY2025/26", 11, "Seasonal", 64998.54],
+      ["FY2025/26", 11, "Tools &amp; Hardware", 101986.72]
+    ]
+  },
+  "definitions_applied": [
+    "Closing stock is a weekly snapshot: sum across stores and products within each week first, then average across the weeks of the period (never sum across weeks)",
+    "Stock value is closing_value, at standard cost in EUR",
+    "Fiscal calendar: FY2025/26 period 11 is 23 Feb 2026 to 22 Mar 2026, fiscal weeks 44 to 47, four week-ending Sundays (1, 8, 15 and 22 March 2026)",
+    "As-is reporting: West region and product category taken from the current dim_store and dim_product versions (is_current)",
+    "Store scope: physical stores only (store_id below 900); store 999 and the web shop excluded; category ZZ Test excluded",
+    "Fact stock rows were deduplicated at the grain store_key, product_key, week_ending_date"
+  ],
+  "assumptions": [
+    "'Last year' was read as FY2025/26. The request is dated 5 October 2026, in FY2026/27, and past requests in the new fiscal year read 'last year' as the previous fiscal year. FY2025/26 P11 is fully loaded.",
+    "'Average stock value' was read as the average of the four weekly closing stock values at standard cost (closing_value), summed across all West stores within each week. It is not the last week's closing, and not an average per store.",
+    "The request gave no as-is or as-was instruction, so the company default (as-is) was used. For this period the answer is the same either way: West did not change in the April 2025 reorganisation, and the outdoor lighting move to Electrical took effect on 27 October 2025, before the period.",
+    "The West region has 10 physical stores. Online (store 900) is its own region and is not part of West."
+  ],
+  "caveats": [
+    "Correction: the week ending 8 March 2026 was loaded twice for all 10 West stores in fact_stock_week. The 7,439 rows reloaded on 10 March 2026 duplicate the 9 March load exactly, with identical units and values. Summing them as they stand double-counts that week. I kept one row per store, article and week. This also made the 8 March figure about EUR 813,600 lower, which would have overstated the 4-week average by about EUR 203,400 across the West categories.",
+    "The set of ranged articles differs slightly between weeks: 102 store-article rows present in the week ending 1 March are absent from 8 March onward (articles dropped from the range). This is normal ranging change, so I left it as is.",
+    "No negative or null stock, and no test-article rows, were found for the West stores in this period. closing_value agrees with closing_units times the standard unit cost on every row.",
+    "Values are at standard cost, not retail. Standard costs were revalued in April 2026, which is before this period, so the period uses a single cost basis.",
+    "The control table rpt_daily_store_sales covers sales only, not stock, so no control total was available. The duplicate check was done against the grain of the stock snapshot."
+  ]
+}
+```

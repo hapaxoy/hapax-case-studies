@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-S-t39-r1",
+ "arm": "S",
+ "model": "sonnet",
+ "request_id": "REQ-T39",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "a97d5d0c5d1e830fec6d37930faa070f2924ab516f002dffa64b062d5e06ae0c",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:46",
+   "statement": "SELECT status, fulfilment_type, login_state, count(*) n, count(DISTINCT web_order_id) d, min(order_ts_utc) mn, max(order_ts_utc) mx\nFROM fact_web_order\nWHERE order_ts_utc >= TIMESTAMP '2025-11-30 20:00:00' AND order_ts_utc < TIMESTAMP '2025-12-02 04:00:00'\nGROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "status | fulfilment_type | login_state | n | d | mn | mx\ncancelled | click_and_collect | guest | 2 | 2 | 2025-12-01T12:09:59 | 2025-12-01T19:22:33\ncancelled | click_and_collect | logged_in | 4 | 4 | 2025-12-01T10:28:41 | 2025-12-01T18:42:33\ncancelled | home_delivery | guest | 3 | 3 | 2025-12-01T11:25:05 | 2025-12-01T21:27:52\ncancelled | home_delivery | logged_in | 10 | 10 | 2025-11-30T22:29:57 | 2025-12-01T21:25:30\ncollected | click_and_collect | guest | 29 | 29 | 2025-11-30T20:04:07 | 2025-12-01T22:02:06\ncollected | click_and_collect | logged_in | 66 | 66 | 2025-11-30T20:43:54 | 2025-12-01T23:33:52\ndelivered | home_delivery | guest | 85 | 85 | 2025-11-30T20:19:29 | 2025-12-01T22:59:06\ndelivered | home_delivery | logged_in | 173 | 173 | 2025-11-30T20:26:41 | 2025-12-01T22:19:26\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:48",
+   "statement": "SELECT * FROM dim_channel\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_id | channel_name | channel_group | legacy_channel_code\n1 | Store | store | ST\n2 | Web home delivery | web | WB\n3 | Click and collect | web | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:53",
+   "statement": "WITH o AS (\n SELECT *, CAST(timezone('Europe/Helsinki', timezone('UTC', order_ts_utc)) AS DATE) AS local_date\n FROM fact_web_order)\nSELECT local_date, status, count(*) n, count(DISTINCT web_order_id) d\nFROM o WHERE local_date BETWEEN DATE '2025-11-30' AND DATE '2025-12-02' GROUP BY ALL ORDER BY 1,2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "local_date | status | n | d\n2025-11-30 | cancelled | 4 | 4\n2025-11-30 | collected | 32 | 32\n2025-11-30 | delivered | 109 | 109\n2025-12-01 | cancelled | 19 | 19\n2025-12-01 | collected | 87 | 87\n2025-12-01 | delivered | 239 | 239\n2025-12-02 | cancelled | 6 | 6\n2025-12-02 | collected | 42 | 42\n2025-12-02 | delivered | 108 | 108\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:22:54",
+   "statement": "SELECT count(*) n, count(DISTINCT web_order_id) d, (SELECT count(*) FROM stg_web_order_load) stg, (SELECT count(DISTINCT web_order_id) FROM stg_web_order_load) stgd FROM fact_web_order\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | d | stg | stgd\n94876 | 94876 | 255 | 255\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:23:01",
+   "statement": "WITH o AS (\n SELECT *, CAST(timezone('Europe/Helsinki', timezone('UTC', order_ts_utc)) AS DATE) AS local_date\n FROM fact_web_order WHERE order_ts_utc >= TIMESTAMP '2025-11-30 22:00:00' AND order_ts_utc < TIMESTAMP '2025-12-01 22:00:00'),\nl AS (SELECT receipt_id, count(*) nl, count(DISTINCT line_no) dl, sum(gross_amount) g, min(channel_code) cc, min(sale_date) sd, max(sale_date) sd2 FROM fact_sales_line WHERE receipt_id IN (SELECT web_order_id FROM o) GROUP BY 1)\nSELECT o.status, count(*) orders, count(l.receipt_id) with_lines, sum(CASE WHEN l.nl<>o.line_count THEN 1 ELSE 0 END) linecount_mismatch, sum(CASE WHEN l.nl<>l.dl THEN 1 ELSE 0 END) dup_lines, sum(CASE WHEN l.sd<>o.local_date THEN 1 ELSE 0 END) saledate_diff, sum(CASE WHEN l.sd<>CAST(o.order_ts_utc AS DATE) THEN 1 ELSE 0 END) saledate_utc_diff\nFROM o LEFT JOIN l ON l.receipt_id=o.web_order_id GROUP BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "status | orders | with_lines | linecount_mismatch | dup_lines | saledate_diff | saledate_utc_diff\ndelivered | 239 | 239 | 0 | 0 | 0 | 49\ncollected | 87 | 87 | 0 | 0 | 0 | 10\ncancelled | 19 | 0 | 0 | 0 | 0 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:23:02",
+   "statement": "SELECT min(order_ts_utc), max(order_ts_utc), count(*), (SELECT count(*) FROM stg_web_order_load s JOIN fact_web_order f USING (web_order_id)) overlap FROM stg_web_order_load\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min(order_ts_utc) | max(order_ts_utc) | count_star() | overlap\n2026-10-03T01:43:52 | 2026-10-04T20:56:59 | 255 | 255\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:23:06",
+   "statement": "SELECT channel_code, channel_id, count(DISTINCT receipt_id) orders, count(*) lines, sum(CASE WHEN staff_purchase_flag THEN 1 ELSE 0 END) staff\nFROM fact_sales_line WHERE sale_date = DATE '2025-12-01' AND (channel_code='WB' OR channel_id IN (2,3)) GROUP BY ALL\n",
+   "n": 7,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "channel_code | channel_id | orders | lines | staff\nNULL | 3 | 87 | 166 | 0\nNULL | 2 | 239 | 467 | 0\n(2 rows)"
+  }
+ ]
+}

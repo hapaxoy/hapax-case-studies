@@ -1,0 +1,48 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), net_lines AS (SELECT p.sku, f.net_amount AS net FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category <> 'ZZ Test' AND w.dispatch_date >= DATE '2025-11-03' UNION ALL SELECT p.sku, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id = 900 AND p.category <> 'ZZ Test' AND r.return_date >= DATE '2025-11-03') SELECT n.sku, cp.product_name, ROUND(SUM(n.net), 2) AS web_net_sales FROM net_lines n JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current GROUP BY n.sku, cp.product_name ORDER BY web_net_sales DESC LIMIT 10",
+  "result": {
+    "columns": ["sku", "product_name", "web_net_sales"],
+    "rows": [
+      [100955, "Interior Paint Norvik 298", 14499.84],
+      [103774, "Christmas Decorations Poutaranta Home 601", 13300.74],
+      [103390, "Bedroom Peltola 793", 10907.95],
+      [100529, "Garden Furniture Raudikko 536", 10052.48],
+      [103747, "Christmas Decorations Mäntylä 402", 9326.33],
+      [103791, "Christmas Decorations Havu 430", 9209.38],
+      [100573, "Garden Furniture Ahvenisto 564", 7495.15],
+      [100528, "Garden Furniture Norvik 499", 7411.38],
+      [103928, "Sauna & Winter Havu 699", 7130.21],
+      [103415, "Home Office Peltola 918", 6889.6]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales recognised on the Helsinki dispatch date, not the order date",
+    "Net sales: net amount excluding VAT, after returns",
+    "Returns reduce net sales on their own return date",
+    "Web identified by store_id 900, not channel_code or channel_id",
+    "Cancelled and processing orders excluded (no dispatch, no sales lines)",
+    "Click-and-collect counted as web, dated on the ready-for-collection date",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Product identified by stable sku, named from the current product version (as-is)",
+    "Helsinki time conversion of UTC timestamps",
+    "Control total check against rpt_daily_store_sales (store 900)"
+  ],
+  "assumptions": [
+    "'Top 10 products by web sales' is ranked by web net sales in EUR excluding VAT, after returns, not by units or gross value including VAT.",
+    "'Since the platform migration on 3 November 2025' means dispatch dates from 3 November 2025 (inclusive) up to the end of the warehouse load, 4 October 2026.",
+    "A product is an article (sku), so all of its versions are combined. Name and category come from the current version.",
+    "Returns booked to the web shop from 3 November 2025 are deducted, including any for goods dispatched before the migration, because a return reduces net sales on its own return date.",
+    "Ranked on the company web-sales definition: dispatch date, not order date. The same definition is used for the web sales total, which reconciles to the control table."
+  ],
+  "caveats": [
+    "Did not use rpt.v_daily_sales or rpt.v_weekly_store_sales, and did not filter on channel_code or channel_id. From 3 November 2025 channel_code is no longer filled, so those would drop web sales. Web is identified by store_id 900 instead.",
+    "Excluded cancelled orders (3,828 over the whole history) and orders still processing as of 4 October 2026 (296). They have no sales lines and are not web sales.",
+    "Excluded ZZ Test articles and store 999, as the company rule requires. This left the control total unchanged.",
+    "Web net sales since 3 November 2025 come to 2,150,090.07 EUR. This matches rpt_daily_store_sales for store 900 over the same days exactly, so no lines are missing or duplicated. I found no duplicate sales lines.",
+    "Web sales are small per article (the top product has about 14.5k EUR), and the 10th (Home Office Peltola 918, 6,889.60) is only about 210 EUR ahead of the 11th (Christmas Decorations Kuusela 620, 6,679.65). The bottom of the list is sensitive to small changes in definition.",
+    "Orders dispatched after 4 October 2026 are not in the warehouse, so seasonal categories (Christmas, Garden) reflect only the period loaded."
+  ]
+}
+```

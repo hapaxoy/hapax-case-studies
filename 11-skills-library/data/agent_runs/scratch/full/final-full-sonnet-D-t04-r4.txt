@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "SELECT CAST(strftime(f.sale_date,'%Y') AS INTEGER) AS calendar_year, CAST(strftime(f.sale_date,'%m') AS INTEGER) AS calendar_month, SUM(f.gross_amount) AS store_sales_incl_vat FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND s.store_id<900 AND p.category<>'ZZ Test' GROUP BY 1,2 ORDER BY 1,2",
+  "result": {
+    "columns": ["calendar_year", "calendar_month", "store_sales_incl_vat"],
+    "rows": [
+      [2024, 8, 1365081.89],
+      [2024, 9, 1208912.16]
+    ]
+  },
+  "definitions_applied": [
+    "Sales including VAT: sum of gross_amount from the lines, using each line's own VAT rate (no flat rate applied to a net total)",
+    "Before returns: fact_return_line not used, no refunds deducted",
+    "Store scope: physical stores only (store_id below 900); web shop (store 900) not included",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Store sales dated on sale_date (Helsinki business date)",
+    "Control total: net amount before returns for the same lines checked against rpt_daily_store_sales.net_sales_before_returns, store by store and day by day",
+    "Fiscal calendar not used: the request names calendar months"
+  ],
+  "assumptions": [
+    "August 2024 and September 2024 are read as calendar months (1 to 31 August and 1 to 30 September 2024), because the request names months rather than fiscal periods",
+    "Store sales is read as physical stores only, so the web shop (store 900) is left out. Web sales for the two months, if wanted, would be a separate figure (not included here)",
+    "Figures are in EUR and include VAT",
+    "Staff purchases are included, as in the company net sales definition"
+  ],
+  "caveats": [
+    "The general VAT rate rose from 24% to 25.5% on 1 September 2024. August lines carry 24% and September lines 25.5% (reduced rates of 14% and 10% unchanged), so the month-on-month change includes this effect as well as trading. I checked that every line's gross_amount equals net times (1 + its own vat_rate) within rounding; no mismatches.",
+    "Store 999 and ZZ Test articles were excluded. They would have added 4,095.30 (store 999 stores-only lines, August) and 3,253.67 (September) of gross sales if left in, so the filter changes the total if it is not applied.",
+    "Returns are not deducted, as requested. Refunds including VAT are available from fact_return_line.refund_gross if a figure after returns is also needed.",
+    "Control check passed: net amounts before returns for these lines (August 1,101,807.91; September 964,016.09 excl. VAT) match rpt_daily_store_sales.net_sales_before_returns for all store-days with no differences, and receipt counts also agree. No duplicate lines, orphan store or product keys, or mismatches between sale_date and the Helsinki date of the UTC timestamp were found, so no corrections to the data were needed.",
+    "Store 999 as recorded in the warehouse also appears in the stores' internal totals under store_id 999, which is above 900, so the store_id below 900 filter already excludes it; the figures above exclude it."
+  ]
+}
+```

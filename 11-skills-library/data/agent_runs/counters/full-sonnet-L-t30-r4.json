@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t30-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T30",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "ba64e1a3f35b6af366b208111caa4ae8f856856868cd72de73c71d0338dfae67",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:47:08",
+   "statement": "SELECT tier, is_current, (valid_to = DATE '9999-12-31') AS open_ended, count(*) AS rows, count(DISTINCT member_id) AS members, min(valid_from) AS min_from, max(valid_from) AS max_from\nFROM dim_member GROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tier | is_current | open_ended | rows | members | min_from | max_from\nBasic | false | false | 19343 | 17903 | 2019-01-01 | 2026-10-01\nBasic | true | true | 31229 | 31229 | 2019-01-01 | 2026-10-04\nGold | false | false | 2412 | 2233 | 2019-01-01 | 2026-09-30\nGold | true | true | 5791 | 5791 | 2019-01-02 | 2026-10-04\nSilver | false | false | 7559 | 7068 | 2019-01-01 | 2026-10-02\nSilver | true | true | 22980 | 22980 | 2019-01-02 | 2026-10-04\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:47:10",
+   "statement": "SELECT count(*) AS current_rows, count(DISTINCT member_id) AS distinct_ids, count(*) FILTER (WHERE member_id IS NULL) AS null_ids,\n (SELECT count(*) FROM (SELECT member_id FROM dim_member WHERE is_current GROUP BY 1 HAVING count(*)>1)) AS dup_current_ids,\n (SELECT count(*) FROM (SELECT member_id FROM dim_member GROUP BY 1 HAVING count(*) FILTER (WHERE valid_to=DATE '9999-12-31')<>1)) AS ids_without_exactly_one_open,\n (SELECT max(sale_date) FROM fact_sales_line) AS last_sale\nFROM dim_member WHERE is_current\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "current_rows | distinct_ids | null_ids | dup_current_ids | ids_without_exactly_one_open | last_sale\n60000 | 60000 | 0 | 0 | 0 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:47:15",
+   "statement": "WITH gold AS (SELECT member_id FROM dim_member WHERE is_current AND tier='Gold'),\nact AS (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key=f.member_key\n  JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date > DATE '2026-10-04' - 364 AND f.sale_date <= DATE '2026-10-04' AND s.store_id<>999 AND p.category<>'ZZ Test')\nSELECT (SELECT count(*) FROM gold) AS gold_enrolled, (SELECT count(*) FROM gold WHERE member_id IN (SELECT member_id FROM act)) AS gold_active_52w\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "gold_enrolled | gold_active_52w\n5791 | 4827\n(1 row)"
+  }
+ ]
+}

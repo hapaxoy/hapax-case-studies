@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH as_of AS (SELECT DATE '2025-12-21' AS as_of_end), active AS (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key CROSS JOIN as_of WHERE f.sale_date &gt; as_of.as_of_end - 364 AND f.sale_date &lt;= as_of.as_of_end) SELECT 'FY2025/26' AS fiscal_year, 8 AS fiscal_period, cur.tier, COUNT(*) AS active_members FROM active a CROSS JOIN as_of JOIN dim_member cur ON cur.member_id = a.member_id AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to GROUP BY cur.tier ORDER BY CASE cur.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 WHEN 'Gold' THEN 3 END",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "tier", "active_members"],
+    "rows": [
+      ["FY2025/26", 8, "Basic", 14654],
+      ["FY2025/26", 8, "Silver", 10971],
+      ["FY2025/26", 8, "Gold", 3901]
+    ]
+  },
+  "definitions_applied": [
+    "Active member: at least one purchase in the trailing 52 fiscal weeks ending with the as-of week and including it, in any channel",
+    "Trailing window taken as sale_date &gt; as-of Sunday minus 364 days and &lt;= as-of Sunday (27 Dec 2024 would be wrong; window is 23 Dec 2024 to 21 Dec 2025)",
+    "Count distinct member_id, not member_key, so members with several versions are counted once",
+    "Tier read from the dim_member version valid on the as-of Sunday (21 Dec 2025)",
+    "End of period 8 = period_end_date in ref_fiscal_calendar (Sunday 21 December 2025)",
+    "Store 999 and category ZZ Test excluded from sales work (no member in the window bought only from them, so the filter changed nothing)"
+  ],
+  "assumptions": [
+    "'Last year' asked on 7 October 2026 (FY2026/27) is read as the last completed fiscal year, FY2025/26, following how earlier requests in FY2026/27 were accepted. So 'period 8 last year' is FY2025/26 P08, 24 Nov to 21 Dec 2025, and the as-of date is Sunday 21 December 2025.",
+    "'As of the end of period 8' is treated as the as-of week being the last week of P8 (week 34).",
+    "A purchase means any sales line linked to a member in fact_sales_line, store or web, dated on sale_date (the Helsinki order date for web lines).",
+    "Tier is shown as it stood at the end of P8 (as-was on that date), not the current tier.",
+    "No total row given because the request asks for a breakdown by tier only."
+  ],
+  "caveats": [
+    "If 'last year' was meant as FY2024/25 (P8 ended 22 December 2024), the figures would be different; the answer uses FY2025/26 P8.",
+    "Checks run: the window is fully loaded (FY2025/26 P8 fully_loaded = true); no duplicate sales_line_ids in the window; every member key on sales lines in the window exists in dim_member; every active member had exactly one dim_member version valid on 21 December 2025 (tiers sum to 29,526, equal to the distinct active members); no active member's purchases were in store 999 or ZZ Test articles, no non-positive lines, and no cancelled web orders among them.",
+    "Staff purchases are included (1,761 active members have at least one staff-purchase line in the window), as the company definition counts any purchase.",
+    "No corrections to the data were needed. I did not run the query-check or fiscal scripts, as no script runner was available."
+  ]
+}
+```

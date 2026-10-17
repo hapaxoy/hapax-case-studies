@@ -1,0 +1,31 @@
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period\n)\nSELECT s.format,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id &lt; 900\n  AND NOT f.staff_purchase_flag\n  AND p.category &lt;&gt; 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY 1\nORDER BY atv DESC;",
+  "result": {
+    "columns": ["format", "atv"],
+    "rows": [
+      ["Large", 60.67],
+      ["Medium", 60.27],
+      ["Small", 50.75]
+    ]
+  },
+  "definitions_applied": [
+    "ATV (average transaction value) = net sales before returns / number of sales receipts",
+    "Physical store scope: store_id &lt; 900, excluding web shop and training store",
+    "Staff purchases excluded from ATV numerator and denominator",
+    "Test articles (category = ZZ Test) excluded",
+    "Fiscal period: FY2026/27 P4 (3-30 August 2026)"
+  ],
+  "assumptions": [
+    "Period 4 this year = FY2026/27 P4 (the current fiscal year, which began 4 May 2026)",
+    "Store format on the sale date represents the store's classification (stable across store versions)",
+    "Reported as-is (current store format version, not historical)"
+  ],
+  "caveats": [
+    "Control total gap of 207,538.45 EUR explained: rpt_daily_store_sales includes web shop (store 900) which is excluded from ATV by company definition",
+    "Schema comment states store format values as 'Hyper, Standard or Express' but actual warehouse values are 'Large', 'Medium', 'Small' (with 'Web' for store 900 and 'Training' for store 999)",
+    "Staff purchases (flag-marked receipts) excluded entirely from ATV calculation per company definition",
+    "Period is complete as of data load date (2026-10-04)"
+  ]
+}
+```

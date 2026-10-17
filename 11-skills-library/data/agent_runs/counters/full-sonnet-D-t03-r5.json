@@ -1,0 +1,94 @@
+{
+ "run_id": "full-sonnet-D-t03-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T03",
+ "budget": 30,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "1b336faab4c25f84fb6ad387bd963565804e1b1f815f060e7a59940f35f33b25",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:21",
+   "statement": "SELECT fiscal_year, fiscal_period, MIN(calendar_date) s, MAX(calendar_date) e, COUNT(*) FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period<=3 GROUP BY 1,2 ORDER BY 2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | s | e | count_star()\nFY2026/27 | 1 | 2026-05-04 | 2026-05-31 | 28\nFY2026/27 | 2 | 2026-06-01 | 2026-06-28 | 28\nFY2026/27 | 3 | 2026-06-29 | 2026-08-02 | 35\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:22",
+   "statement": "SELECT COUNT(*) n, COUNT(DISTINCT (receipt_id, line_no)) dist_lines, COUNT(DISTINCT sales_line_id) dist_id, MIN(sale_date), MAX(sale_date), MIN(etl_loaded_at), MAX(etl_loaded_at) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-16'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | dist_lines | dist_id | min(sale_date) | max(sale_date) | min(etl_loaded_at) | max(etl_loaded_at)\n206581 | 206581 | 206581 | 2026-05-04 | 2026-08-16 | 2026-05-05T01:00:00 | 2026-08-17T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:28",
+   "statement": "WITH f AS (\n SELECT f.sale_date, s.store_id, f.receipt_id, f.net_amount, f.staff_purchase_flag, p.category\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND s.store_id<900),\na AS (SELECT sale_date, store_id, COUNT(DISTINCT receipt_id) r, SUM(net_amount) n FROM f WHERE store_id<>999 AND category<>'ZZ Test' GROUP BY 1,2),\nb AS (SELECT business_date, store_id, receipts, net_sales_before_returns FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND store_id<900)\nSELECT COUNT(*) rows_cmp, SUM(CASE WHEN a.r IS DISTINCT FROM b.receipts THEN 1 ELSE 0 END) rec_diff, SUM(CASE WHEN abs(coalesce(a.n,0)-coalesce(b.net_sales_before_returns,0))>0.01 THEN 1 ELSE 0 END) net_diff, SUM(a.n) mine, SUM(b.net_sales_before_returns) rpt, SUM(a.r) myr, SUM(b.receipts) rptr\nFROM a FULL JOIN b ON a.sale_date=b.business_date AND a.store_id=b.store_id\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_cmp | rec_diff | net_diff | mine | rpt | myr | rptr\n3342 | 0 | 0 | 3767921.27 | 3767921.27 | 68021 | 68021\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:33",
+   "statement": "WITH w AS (\n SELECT o.web_order_id, o.status, o.fulfilment_type, CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) disp, CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) ord\n FROM fact_web_order o)\nSELECT status, COUNT(*) orders, SUM(CASE WHEN disp BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' THEN 1 ELSE 0 END) disp_in, SUM(CASE WHEN ord BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' THEN 1 ELSE 0 END) ord_in, MIN(disp), MAX(disp)\nFROM w GROUP BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "status | orders | disp_in | ord_in | min(disp) | max(disp)\ncancelled | 3828 | 0 | 519 | NULL | NULL\ndelivered | 66238 | 9064 | 9037 | 2024-04-29 | 2026-10-04\nprocessing | 296 | 0 | 0 | NULL | NULL\ncollected | 24514 | 3943 | 3925 | 2024-04-30 | 2026-10-04\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:35",
+   "statement": "SELECT s.store_id, s.store_name, s.region, s.format, f.channel_code, f.channel_id, f.staff_purchase_flag, COUNT(*) lines, COUNT(DISTINCT f.receipt_id) rc, SUM(f.net_amount) net, MIN(f.sale_date), MAX(f.sale_date)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE f.sale_date BETWEEN DATE '2026-04-25' AND DATE '2026-08-10' AND (s.store_id>=900 OR f.channel_code IS NOT NULL AND f.channel_code<>'ST' OR f.channel_id IS NOT NULL)\nGROUP BY ALL ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 80,
+   "output_preview": "store_id | store_name | region | format | channel_code | channel_id | staff_purchase_flag | lines | rc | net | min(f.sale_date) | max(f.sale_date)\n101 | Helsinki Vuosaari | Capital Region | Medium | NULL | 1 | false | 5627 | 2478 | 135022.15 | 2026-04-25 | 2026-08-10\n101 | Helsinki Vuosaari | Capital Region | Medium | NULL | 1 | true | 74 | 38 | 1472.81 | 2026-04-29 | 2026-08-07\n102 | Helsinki Pitäjänmäki | Capital Region | Large | NULL | 1 | true | 146 | 68 | 3193.85 | 2026-04-26 | 2026-08-09\n102 | Helsinki Pitäjänmäki | Capital Region | Large | NULL | 1 | false | 9920 | 4264 | 250579.08 | 2026-04-25 | 2026-08-10\n103 | Espoo Lommila | Capital Region | Medium | NULL | 1 | true | 58 | 24 | 1218.63 | 2026-04-26 | 2026-07-29\n103 | Espoo Lommila | Capital Region | Medium | NULL | 1 | false | 4426 | 1933 | 101210.66 | 2026-04-25 | 2026-08-10\n104 | Vantaa Tammisto | Capital Region | Large | NULL | 1 | false | 7582 | 3258 | 188414.89 | 2026-04-25 | 2026-08-10\n104 | Vantaa Tammisto | Capital Region | Large | NULL | 1 | true | 136 | 66 | 2939.17 | 2026-04-25 | 2026-08-10\n105 | Kerava | Capital Region | Small | NULL | 1 | false | 1854 | 815 | 38943.17 | 2026-04-25 | 2026-08-10\n105 | Kerava | Capital Region | Small | NULL | 1 | true | 44 | 17 | 696.66 | 2026-04-25 | 2026-08-08\n106 | Porvoo | South | Small | NULL | 1 | false | 2112 | 938 | 43333.30 | 2026-04-25 | 2026-08-10\n106 | Porvoo | South | Small | NULL | 1 | true | 24 | 12 | 339.81 | 2026-04-25 | 2026-08-02\n107 | Hyvinkää | South "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:42",
+   "statement": "WITH wl AS (\n SELECT f.receipt_id, f.line_no, f.net_amount, f.sale_date, p.category, o.status, o.line_count,\n  CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) disp\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n LEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id\n WHERE s.store_id=900 AND f.sale_date BETWEEN DATE '2026-04-01' AND DATE '2026-08-31')\nSELECT status, category='ZZ Test' test, disp BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' in_rng, COUNT(*) lines, COUNT(DISTINCT receipt_id) orders, SUM(net_amount) net,\n SUM(CASE WHEN sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' THEN 1 ELSE 0 END) saledate_in\nFROM wl GROUP BY ALL ORDER BY 1,2,3\n",
+   "n": 6,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "status | test | in_rng | lines | orders | net | saledate_in\ncollected | false | false | 4218 | 2122 | 124424.43 | 154\ncollected | false | true | 7972 | 3943 | 233732.39 | 7786\ndelivered | false | false | 10183 | 5105 | 303535.20 | 408\ndelivered | false | true | 18014 | 9061 | 537798.36 | 17530\ndelivered | true | false | 3 | 3 | 8.00 | 0\ndelivered | true | true | 3 | 3 | 6.00 | 3\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:45",
+   "statement": "SELECT 'web order ids also in store receipts' k, COUNT(*) v FROM (SELECT DISTINCT f.receipt_id FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=900) w JOIN (SELECT DISTINCT f.receipt_id FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id<900) t ON t.receipt_id=w.receipt_id\nUNION ALL\nSELECT 'receipts spanning >1 store', COUNT(*) FROM (SELECT receipt_id FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key GROUP BY 1 HAVING COUNT(DISTINCT s.store_id)>1)\nUNION ALL\nSELECT 'web orders w/o status-dispatch lines', COUNT(*) FROM fact_web_order o WHERE status IN ('delivered','collected') AND CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND NOT EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.receipt_id=o.web_order_id)\n",
+   "n": 7,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "k | v\nweb order ids also in store receipts | 0\nreceipts spanning >1 store | 0\nweb orders w/o status-dispatch lines | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:53",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.receipt_id, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id AND s.store_id = 900\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND NOT f.staff_purchase_flag\n)\nSELECT d.fiscal_year,\n       ROUND(SUM(l.net_amount) / COUNT(DISTINCT l.receipt_id), 2) AS atv_company,\n       ROUND(SUM(CASE WHEN l.store_id<900 THEN l.net_amount END) / COUNT(DISTINCT CASE WHEN l.store_id<900 THEN l.receipt_id END), 2) AS atv_stores,\n       ROUND(SUM(CASE WHEN l.store_id=900 THEN l.net_amount END) / COUNT(DISTINCT CASE WHEN l.store_id=900 THEN l.receipt_id END), 2) AS atv_web,\n       SUM(l.net_amount) net, COUNT(DISTINCT l.receipt_id) receipts\nFROM lines l JOIN dim_date d ON d.calendar_date = l.business_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period BETWEEN 1 AND 3\nGROUP BY 1\n",
+   "n": 8,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: INTERRUPT Error: Interrupted!"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:08:01",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nlines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.receipt_id, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id AND s.store_id = 900\n    WHERE f.sale_date BETWEEN DATE '2026-04-01' AND DATE '2026-08-31'\n      AND s.store_id <> 999 AND p.category <> 'ZZ Test' AND NOT f.staff_purchase_flag\n)\nSELECT ROUND(SUM(net_amount) / COUNT(DISTINCT receipt_id), 2) AS atv_company,\n       ROUND(SUM(CASE WHEN store_id<900 THEN net_amount END) / COUNT(DISTINCT CASE WHEN store_id<900 THEN receipt_id END), 2) AS atv_stores,\n       ROUND(SUM(CASE WHEN store_id=900 THEN net_amount END) / COUNT(DISTINCT CASE WHEN store_id=900 THEN receipt_id END), 2) AS atv_web,\n       SUM(net_amount) net, COUNT(DISTINCT receipt_id) receipts,\n       COUNT(DISTINCT CASE WHEN store_id=900 THEN receipt_id END) web_receipts\nFROM lines\nWHERE business_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'\n",
+   "n": 9,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "atv_company | atv_stores | atv_web | net | receipts | web_receipts\n56.14 | 55.52 | 59.33 | 4490717.08 | 79988 | 13004\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-L-t23-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T23",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "12980849361bf5a8f5aff149cb8ffce2c1aed41cd37032d0373fbc1121de7729",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:31:08",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P02\n  fiscal_weeks                       5-8\n  start_date                         2025-05-26\n  end_date                           2025-06-22\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-06-22\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:31:38",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.format,\n       SUM(l.net_amount) AS sold_net,\n       COALESCE(SUM(r.refund_net), 0) AS returned_net,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY l.format;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | sold_net | returned_net | return_rate_pct\nLarge | 400763.11 | 17707.57 | 4.42\nMedium | 552936.25 | 25030.11 | 4.53\nSmall | 147668.20 | 6319.09 | 4.28\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:31:42",
+   "statement": "SELECT DISTINCT format FROM dim_store WHERE is_current AND store_id < 900 ORDER BY format;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format\nLarge\nMedium\nSmall\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:31:56",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain format --period FY2025/26 P2",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n[stderr]\n--period 'FY2025/26 P2' not found in ref_fiscal_calendar (format: 'FY2026/27 P05').\n\n[exit code 1]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:32:03",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date \nFROM ref_fiscal_calendar \nORDER BY fiscal_year, fiscal_period;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 30,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date\nFY2024/25 | 1 | 2024-04-29 | 2024-05-26\nFY2024/25 | 2 | 2024-05-27 | 2024-06-23\nFY2024/25 | 3 | 2024-06-24 | 2024-07-28\nFY2024/25 | 4 | 2024-07-29 | 2024-08-25\nFY2024/25 | 5 | 2024-08-26 | 2024-09-22\nFY2024/25 | 6 | 2024-09-23 | 2024-10-27\nFY2024/25 | 7 | 2024-10-28 | 2024-11-24\nFY2024/25 | 8 | 2024-11-25 | 2024-12-22\nFY2024/25 | 9 | 2024-12-23 | 2025-01-26\nFY2024/25 | 10 | 2025-01-27 | 2025-02-23\nFY2024/25 | 11 | 2025-02-24 | 2025-03-23\nFY2024/25 | 12 | 2025-03-24 | 2025-04-27\nFY2025/26 | 1 | 2025-04-28 | 2025-05-25\nFY2025/26 | 2 | 2025-05-26 | 2025-06-22\nFY2025/26 | 3 | 2025-06-23 | 2025-07-27\nFY2025/26 | 4 | 2025-07-28 | 2025-08-24\nFY2025/26 | 5 | 2025-08-25 | 2025-09-21\nFY2025/26 | 6 | 2025-09-22 | 2025-10-26\nFY2025/26 | 7 | 2025-10-27 | 2025-11-23\nFY2025/26 | 8 | 2025-11-24 | 2025-12-21\nFY2025/26 | 9 | 2025-12-22 | 2026-01-25\nFY2025/26 | 10 | 2026-01-26 | 2026-02-22\nFY2025/26 | 11 | 2026-02-23 | 2026-03-22\nFY2025/26 | 12 | 2026-03-23 | 2026-05-03\nFY2026/27 | 1 | 2026-05-04 | 2026-05-31\nFY2026/27 | 2 | 2026-06-01 | 2026-06-28\nFY2026/27 | 3 | 2026-06-29 | 2026-08-02\nFY2026/27 | 4 | 2026-08-03 | 2026-08-30\nFY2026/27 | 5 | 2026-08-31 | 2026-09-27\nFY2026/27 | 6 | 2026-09-28 | 2026-11-01\n(30 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:32:11",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain format --start 2025-05-26 --end 2025-06-22",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 3 rows, 4 columns: format, sold_net, returned_net, return_rate_pct\n\n== Duplicate keys ==\n  [PASS] Unique at grain (format): 3 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-05-26 to 2025-06-22 (28 days; fiscal: FY2025/26 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 7 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 13 rows in the range only in Helsinki time, 13 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  format | sold_net | returned_net | return_rate_pct\n  Large | 400763.11 | 17707.57 | 4.42\n  Medium | 552936.25 | 25030.11 | 4.53\n  Small | 147668.20 | 6319.09 | 4.28\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

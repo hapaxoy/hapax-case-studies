@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-Lminus-t22-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T22",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "5590468149e81b7a2ac3d29e1ef5d9d18958cde3220c8f07331bc615c574e78a",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:37:57",
+   "statement": "SELECT * FROM dim_campaign WHERE campaign_name ILIKE '%garden%' OR campaign_name ILIKE '%spring%' ORDER BY start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | channels | target_group | holdout_pct | mailing_list_size | holdout_size\n1 | Spring Garden Launch 2024 | 2024-05-06 | 2024-05-26 | email+sms | All members with marketing consent at the campaign start | 0.100 | 7918 | 841\n9 | Spring Garden Launch 2025 | 2025-05-05 | 2025-05-25 | email+sms | All members with marketing consent at the campaign start | 0.100 | 12203 | 1204\n12 | Garden Clearance 2025 | 2025-08-18 | 2025-09-07 | email+push | All members with marketing consent at the campaign start | 0.100 | 13813 | 1369\n19 | Spring Garden Launch 2026 | 2026-05-04 | 2026-05-24 | email+sms | All members with marketing consent at the campaign start | 0.100 | 16624 | 1597\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:03",
+   "statement": "SELECT count(*) AS rows_, count(DISTINCT e.exposure_id) AS dist_exp, count(DISTINCT e.member_key) AS dist_keys, count(DISTINCT m.member_id) AS dist_members,\n count(DISTINCT CASE WHEN e.delivered THEN m.member_id END) AS delivered_members,\n count(DISTINCT CASE WHEN h.member_id IS NOT NULL THEN m.member_id END) AS holdout_overlap,\n count(DISTINCT CASE WHEN m.marketing_consent THEN NULL ELSE m.member_id END) AS noconsent_members,\n min(e.contact_ts_utc) AS mn, max(e.contact_ts_utc) AS mx,\n string_agg(DISTINCT e.contact_channel, ',') AS chans,\n (SELECT count(*) FROM campaign_holdout WHERE campaign_id=19) AS holdout_rows,\n (SELECT count(DISTINCT member_id) FROM campaign_holdout WHERE campaign_id=19) AS holdout_members\nFROM fact_campaign_exposure e\nLEFT JOIN dim_member m ON m.member_key = e.member_key\nLEFT JOIN campaign_holdout h ON h.campaign_id = e.campaign_id AND h.member_id = m.member_id\nWHERE e.campaign_id = 19\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_ | dist_exp | dist_keys | dist_members | delivered_members | holdout_overlap | noconsent_members | mn | mx | chans | holdout_rows | holdout_members\n31685 | 31685 | 15063 | 15001 | 14814 | 0 | 0 | 2026-05-04T05:00:00 | 2026-05-24T16:59:02 | sms,email | 1597 | 1597\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:12",
+   "statement": "WITH targeted AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    WHERE e.campaign_id = 19\n),\nweb_dispatch AS (\n    SELECT web_order_id, status,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n),\nlines AS (\n    SELECT m.member_id, f.sales_line_id, f.net_amount, f.gross_amount, f.channel_code, s.store_id,\n           COALESCE(CASE WHEN w.status IN ('delivered','collected') THEN w.dispatch_date END, CASE WHEN s.store_id=900 THEN NULL ELSE f.sale_date END) AS eff_date\n    FROM fact_sales_line f\n    JOIN dim_member m  ON m.member_key = f.member_key\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT (SELECT count(*) FROM targeted) AS contacted_members,\n       count(DISTINCT l.member_id) AS buying_members,\n       count(*) AS line_cnt, count(DISTINCT l.sales_line_id) AS dist_lines,\n       sum(l.net_amount) AS net_before_returns,\n       sum(CASE WHEN l.store_id=900 THEN l.net_amount END) AS web_part,\n       sum(l.gross_amount) AS gross\nFROM lines l JOIN targeted t USING (member_id)\nWHERE l.eff_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "contacted_members | buying_members | line_cnt | dist_lines | net_before_returns | web_part | gross\n15001 | 2605 | 8080 | 8080 | 190687.59 | 35168.92 | 238805.59\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:20",
+   "statement": "SELECT\n (SELECT count(*) FROM (SELECT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-04-25' AND DATE '2026-06-05' GROUP BY 1,2 HAVING count(*)>1)) AS dup_lines,\n (SELECT count(*) FROM (SELECT sales_line_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-04-25' AND DATE '2026-06-05' GROUP BY 1 HAVING count(*)>1)) AS dup_ids,\n (SELECT count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key LEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id WHERE s.store_id=900 AND w.web_order_id IS NULL AND f.sale_date BETWEEN DATE '2026-04-25' AND DATE '2026-06-05') AS web_lines_no_order,\n (SELECT count(*) FROM fact_sales_line f LEFT JOIN dim_member m ON m.member_key=f.member_key WHERE f.member_key IS NOT NULL AND m.member_key IS NULL) AS orphan_member_keys,\n (SELECT count(*) FROM fact_campaign_exposure e LEFT JOIN dim_member m ON m.member_key=e.member_key WHERE e.campaign_id=19 AND m.member_key IS NULL) AS orphan_exposure,\n (SELECT max(sale_date) FROM fact_sales_line) AS max_sale,\n (SELECT count(*) FROM fact_web_order WHERE status='processing' AND order_ts_utc < TIMESTAMP '2026-05-25') AS processing_old,\n (SELECT count(*) FROM fact_web_order w WHERE status IN ('delivered','collected') AND dispatch_ts_utc IS NULL) AS no_dispatch\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_lines | dup_ids | web_lines_no_order | orphan_member_keys | orphan_exposure | max_sale | processing_old | no_dispatch\n0 | 0 | 0 | 0 | 0 | 2026-10-04 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:26",
+   "statement": "WITH targeted AS (\n    SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = 19\n)\nSELECT count(DISTINCT m.member_id) AS returning_members, sum(r.refund_net) AS refunds_net\nFROM fact_return_line r\nJOIN dim_member m ON m.member_key = r.member_key\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key\nJOIN targeted t ON t.member_id = m.member_id\nWHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n  AND r.return_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "returning_members | refunds_net\n280 | 8231.32\n(1 row)"
+  }
+ ]
+}

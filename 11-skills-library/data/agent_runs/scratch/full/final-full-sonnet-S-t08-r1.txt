@@ -1,0 +1,42 @@
+```json
+{
+  "sql": "WITH cur_store AS (SELECT store_id, region, open_date FROM dim_store WHERE is_current AND store_id &lt; 900), lfl_store AS (SELECT store_id, region FROM cur_store WHERE open_date IS NULL OR open_date &lt;= DATE '2023-10-28'), per AS (SELECT fiscal_year, fiscal_quarter, min(calendar_date) AS start_date, max(calendar_date) AS end_date FROM dim_date WHERE fiscal_quarter = 3 AND fiscal_year IN ('FY2024/25','FY2025/26') GROUP BY 1,2), sales AS (SELECT p.fiscal_year, l.region, sum(f.net_amount) AS gross_net FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN lfl_store l ON l.store_id=s.store_id JOIN per p ON f.sale_date BETWEEN p.start_date AND p.end_date GROUP BY 1,2), rets AS (SELECT p.fiscal_year, l.region, sum(r.refund_net) AS refunds FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN lfl_store l ON l.store_id=s.store_id JOIN per p ON r.return_date BETWEEN p.start_date AND p.end_date GROUP BY 1,2), net AS (SELECT s.fiscal_year, s.region, s.gross_net - coalesce(r.refunds,0) AS net_sales FROM sales s LEFT JOIN rets r ON r.fiscal_year=s.fiscal_year AND r.region=s.region) SELECT 'FY2025/26' AS fiscal_year, 3 AS fiscal_quarter, c.region, round(100.0*(c.net_sales/p.net_sales - 1), 2) AS lfl_growth_pct FROM net c JOIN net p ON p.region=c.region AND p.fiscal_year='FY2024/25' WHERE c.fiscal_year='FY2025/26' ORDER BY c.region",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_quarter", "region", "lfl_growth_pct"],
+    "rows": [
+      ["FY2025/26", 3, "Capital Region", 0.36],
+      ["FY2025/26", 3, "East", 1.62],
+      ["FY2025/26", 3, "North", 6.73],
+      ["FY2025/26", 3, "South", 0.02],
+      ["FY2025/26", 3, "West", 2.04]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: Q3 = fiscal periods 7 to 9, fiscal weeks 27 to 39 (13 weeks)",
+    "Current period FY2025/26 Q3 (2025-10-27 to 2026-01-25) against prior year FY2024/25 Q3 (2024-10-28 to 2025-01-26), same fiscal weeks",
+    "Net sales = line net_amount (EUR excluding VAT) minus refund_net booked in the same period, as in rpt_daily_store_sales (which reconciles exactly to the fact tables for these periods)",
+    "Like-for-like store set = physical stores (store_id below 900) open for at least 12 months before the start of the prior-year comparison period, so neither period is a new-store ramp-up",
+    "Region taken from the current store version (the post 2025-04-28 structure) for both years, so each region has the same stores in both periods",
+    "Growth % = (FY2025/26 Q3 net sales / FY2024/25 Q3 net sales - 1) x 100",
+    "Slowly changing dimensions joined through store_key, then grouped by store_id"
+  ],
+  "assumptions": [
+    "'Q3 last year' is read as fiscal Q3 of the last completed fiscal year, FY2025/26 (the request is dated 2026-10-05, and the company reports on a fiscal calendar). Calendar Q3 2025 (Jul to Sep) was not used.",
+    "Like-for-like covers physical stores only. The web shop (store 900) has no region and is excluded, as is the Training store (999).",
+    "Staff purchases are kept in net sales, as in the warehouse's own daily store sales report. Returns are deducted on the day and in the store where the refund was booked.",
+    "No written company like-for-like definition was available. I used the 12-month rule above. It agrees with the 37-store tmp_lfl_store_list tables (stores 101 to 135, 138 and 139), but I did not rely on those tables.",
+    "Stores that were closed for a refit outside the two Q3 windows (104 Vantaa Tammisto, July to August 2024; 119 Pori, September to October 2025) and Savonlinna (129, closed on 2026-01-25, the last day of the quarter) are kept in, because all three traded every trading day of both Q3 periods."
+  ],
+  "caveats": [
+    "Region restatement: on 2025-04-28 stores 101 to 105 moved from South to the new Capital Region, and Kouvola (114) moved from East to South. Prior-year sales were restated to the current regions. Grouping each year by its own region would compare different store sets and give wrong regional growth. The dim_store column comment still lists only North, South, East and West.",
+    "Stores excluded as not comparable: 136 Tampere Lamminpää (opened 2024-09-02, so the prior-year Q3 was months 2 to 4 of its ramp-up; it grew 40.8% before returns) and 137 Lohja (opened 2024-11-04, so it missed the first week of the prior-year Q3). Including 136 would lift West from 2.04% to about 5.0%, and the effect is similar on a before-returns basis.",
+    "Sensitivity (before returns, so approximate): excluding the refit and closing stores 104, 119 and 129 as well as 136 raises Capital Region to about 3.0% and lowers West to about 1.3%. Capital Region is held down by Vantaa Tammisto (104), which fell 4.6%. The other regions barely move.",
+    "Savonlinna (129) closed on 2026-01-25. It traded the whole quarter, so it is in the figures. Its sales will not continue, and East growth would move slightly if the company excludes closing stores.",
+    "Raahe (139, North) had no sales on 2025-01-02, a normal trading day, in the prior-year quarter. Only a small refund was booked that day. This is probably a one-day outage or a data gap, and it slightly flatters North's growth. I did not adjust for it.",
+    "Both quarters contain 6 non-trading days (Independence Day, Christmas Eve, Christmas Day, Boxing Day, New Year's Day, Epiphany), so trading days match. Weekday mix differs by a day, as it always does with a 364-day offset.",
+    "Duplicate sales lines exist in the warehouse (418 receipt and line pairs, reloaded 2025-09-23), but all fall in FY2025/26 Q2 (September 2025). They do not touch this answer, but they will inflate any Q2 figure built straight from fact_sales_line.",
+    "The web channel changed identifiers in November 2025 (channel_code is null from 2025-11-03 onward). This does not affect store-based figures, which use store_id, but any web comparison would need channel_id.",
+    "Regional growth uses roughly 7 to 10 stores per region, so a single store (a refit, for example) can move a region by a point or more."
+  ]
+}
+```

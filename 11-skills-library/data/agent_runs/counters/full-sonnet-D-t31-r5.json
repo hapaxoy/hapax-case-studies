@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-D-t31-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "7b631c11455a315c238f00f90e6e4fa264f3e5d764f400d20829a6848ebe99d0",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:23:14",
+   "statement": "SELECT * FROM ref_fiscal_calendar WHERE fiscal_year='FY2025/26' AND fiscal_period IN (7,8,9) ORDER BY 2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_quarter | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2025/26 | 7 | 3 | FY2025/26 P07 | 2025-10-27 | 2025-11-23 | 4 | 27 | 30 | true\nFY2025/26 | 8 | 3 | FY2025/26 P08 | 2025-11-24 | 2025-12-21 | 4 | 31 | 34 | true\nFY2025/26 | 9 | 3 | FY2025/26 P09 | 2025-12-22 | 2026-01-25 | 5 | 35 | 39 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:23:15",
+   "statement": "SELECT tier, count(*) n, count(distinct member_id) m, min(valid_from), max(valid_to) FROM dim_member GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | n | m | min(valid_from) | max(valid_to)\nBasic | 50572 | 43649 | 2019-01-01 | 9999-12-31\nGold | 8203 | 7210 | 2019-01-01 | 9999-12-31\nSilver | 30539 | 27039 | 2019-01-01 | 9999-12-31\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:23:23",
+   "statement": "SELECT 'overlap_on_asof' k, count(*) v FROM (SELECT member_id, count(*) c FROM dim_member WHERE valid_from <= DATE '2025-12-21' AND valid_to >= DATE '2025-12-21' GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'members_valid_asof', count(distinct member_id) FROM dim_member WHERE valid_from <= DATE '2025-12-21' AND valid_to >= DATE '2025-12-21'\nUNION ALL SELECT 'dup_member_key', count(*) FROM (SELECT member_key FROM dim_member GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'null_tier', count(*) FROM dim_member WHERE tier IS NULL\nUNION ALL SELECT 'lines_in_window', count(*) FROM fact_sales_line WHERE sale_date > DATE '2024-12-21' + 1 AND sale_date <= DATE '2025-12-21'\nUNION ALL SELECT 'lines_w_member', count(*) FROM fact_sales_line WHERE sale_date > DATE '2024-12-22' AND sale_date <= DATE '2025-12-21' AND member_key IS NOT NULL\nUNION ALL SELECT 'lines_member_key_unmatched', count(*) FROM fact_sales_line f WHERE sale_date > DATE '2024-12-22' AND sale_date <= DATE '2025-12-21' AND member_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dim_member m WHERE m.member_key=f.member_key)\nUNION ALL SELECT 'dup_sales_line_id', count(*) FROM (SELECT sales_line_id FROM fact_sales_line WHERE sale_date > DATE '2024-12-22' AND sale_date <= DATE '2025-12-21' GROUP BY 1 HAVING count(*)>1)\nUNION ALL SELECT 'dup_receipt_line', count(*) FROM (SELECT receipt_id,line_no FROM fact_sales_line WHERE sale_date > DATE '2024-12-22' AND sale_date <= DATE '2025-12-21' GROUP BY 1,2 HAVING count(*)>1)\n",
+   "n": 3,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "k | v\noverlap_on_asof | 0\nmembers_valid_asof | 48675\ndup_member_key | 0\nnull_tier | 0\nlines_in_window | 617345\nlines_w_member | 328182\nlines_member_key_unmatched | 0\ndup_sales_line_id | 0\ndup_receipt_line | 418\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:23:29",
+   "statement": "WITH w AS (SELECT * FROM fact_sales_line WHERE sale_date > DATE '2024-12-22' AND sale_date <= DATE '2025-12-21'),\nd AS (SELECT receipt_id, line_no FROM w GROUP BY 1,2 HAVING count(*)>1)\nSELECT w.sales_line_id, w.receipt_id, w.line_no, w.sale_date, w.store_key, w.product_key, w.member_key, w.channel_code, w.quantity, w.net_amount, w.etl_loaded_at\nFROM w JOIN d USING (receipt_id, line_no) ORDER BY receipt_id, line_no, sales_line_id LIMIT 12\n",
+   "n": 4,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "sales_line_id | receipt_id | line_no | sale_date | store_key | product_key | member_key | channel_code | quantity | net_amount | etl_loaded_at\n841511 | 10326117 | 1 | 2025-09-15 | 22 | 2323 | NULL | ST | 1 | 9.68 | 2025-09-16T01:00:00\n1510224 | 10326117 | 1 | 2025-09-15 | 22 | 2323 | NULL | ST | 1 | 9.68 | 2025-09-23T03:12:00\n841512 | 10326117 | 2 | 2025-09-15 | 22 | 2017 | NULL | ST | 3 | 42.12 | 2025-09-16T01:00:00\n1510225 | 10326117 | 2 | 2025-09-15 | 22 | 2017 | NULL | ST | 3 | 42.12 | 2025-09-23T03:12:00\n841513 | 10326118 | 1 | 2025-09-15 | 22 | 395 | NULL | ST | 1 | 12.37 | 2025-09-16T01:00:00\n1510226 | 10326118 | 1 | 2025-09-15 | 22 | 395 | NULL | ST | 1 | 12.37 | 2025-09-23T03:12:00\n841514 | 10326118 | 2 | 2025-09-15 | 22 | 3763 | NULL | ST | 1 | 20.10 | 2025-09-16T01:00:00\n1510227 | 10326118 | 2 | 2025-09-15 | 22 | 3763 | NULL | ST | 1 | 20.10 | 2025-09-23T03:12:00\n841519 | 10326121 | 1 | 2025-09-15 | 22 | 3014 | 85091 | ST | 1 | 22.55 | 2025-09-16T01:00:00\n1510228 | 10326121 | 1 | 2025-09-15 | 22 | 3014 | 85091 | ST | 1 | 22.55 | 2025-09-23T03:12:00\n841520 | 10326121 | 2 | 2025-09-15 | 22 | 1446 | 85091 | ST | 1 | 81.30 | 2025-09-16T01:00:00\n1510229 | 10326121 | 2 | 2025-09-15 | 22 | 1446 | 85091 | ST | 1 | 81.30 | 2025-09-23T03:12:00\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:23:31",
+   "statement": "WITH w AS (SELECT f.*, s.store_id, p.category FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE sale_date > DATE '2024-12-22' AND sale_date <= DATE '2025-12-21' AND member_key IS NOT NULL)\nSELECT (store_id=999) is999, (category='ZZ Test') iszz, count(*) lines, count(distinct member_key) mk FROM w GROUP BY 1,2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "is999 | iszz | lines | mk\nfalse | false | 328182 | 32210\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:23:37",
+   "statement": "WITH active AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n      AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT m.tier, count(DISTINCT a.member_id) AS active_members\nFROM active a\nLEFT JOIN dim_member m ON m.member_id = a.member_id AND m.valid_from <= DATE '2025-12-21' AND m.valid_to >= DATE '2025-12-21'\nGROUP BY 1 ORDER BY CASE m.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 WHEN 'Gold' THEN 3 ELSE 4 END\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members\nBasic | 14654\nSilver | 10971\nGold | 3901\n(3 rows)"
+  }
+ ]
+}

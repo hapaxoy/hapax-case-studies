@@ -1,0 +1,32 @@
+Perfect! All checks pass. Now let me prepare the final JSON response. Based on the query results and requirements:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2025-12-21' AS as_of_date\n),\nas_of AS (\n    SELECT d.fiscal_week_end_date AS as_of_end\n    FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date = params.as_of_date\n),\nactive AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    CROSS JOIN as_of\n    WHERE f.sale_date &gt; as_of.as_of_end - 364\n      AND f.sale_date &lt;= as_of.as_of_end\n      AND s.store_id != 999\n      AND p.category != 'ZZ Test'\n)\nSELECT cur.tier, COUNT(*) AS active_members\nFROM active a\nCROSS JOIN as_of\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nWHERE cur.tier IS NOT NULL\nGROUP BY cur.tier\nORDER BY cur.tier",
+  "result": {
+    "columns": ["tier", "active_members"],
+    "rows": [
+      ["Basic", 14654],
+      ["Gold", 3901],
+      ["Silver", 10971]
+    ]
+  },
+  "definitions_applied": [
+    "Active member: at least one purchase in the trailing 52 fiscal weeks ending with the as-of week, in any channel",
+    "Loyalty tier from the member version valid on the as-of date",
+    "Exclusions: store 999 (training store) and category ZZ Test per house rules"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (the prior fiscal year, consistent with precedent from fiscal-calendar skill for requests in October of FY2026/27)",
+    "End of period 8 means the last day of FY2025/26 P08, which is 2025-12-21 (Sunday, end of fiscal week 34)",
+    "Active members include purchases from both physical stores and web channel",
+    "Null tier members (if any existed) excluded from the breakdown"
+  ],
+  "caveats": [
+    "The trailing 52-week window captures sales from 2024-12-23 to 2025-12-21",
+    "Store 999 (training/test store) excluded per house rules for member definitions",
+    "ZZ Test category purchases excluded per house rules",
+    "No material difference observed between including and excluding these categories for member counts, suggesting minimal training/test activity in period"
+  ]
+}
+```

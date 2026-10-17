@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-L-t04-r2",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T04",
+ "budget": 30,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "1ca55d0a4cf878fb5b4f1c72b3197a10b8376400fd194819ef14c6916dff5941",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:32",
+   "statement": "SELECT date_trunc('month', f.sale_date) AS m,\n       count(*) AS n_lines,\n       count(DISTINCT (f.receipt_id, f.line_no)) AS n_distinct_lines,\n       count(DISTINCT f.sales_line_id) AS n_ids,\n       sum(f.gross_amount) AS gross,\n       sum(f.net_amount) AS net,\n       sum(round(f.net_amount*(1+f.vat_rate),2)) AS recomputed_gross,\n       sum(CASE WHEN abs(f.gross_amount - f.net_amount*(1+f.vat_rate))>0.02 THEN 1 ELSE 0 END) AS inconsistent_lines,\n       min(f.sale_date), max(f.sale_date)\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\n  AND s.store_id < 900 AND p.category <> 'ZZ Test'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "m | n_lines | n_distinct_lines | n_ids | gross | net | recomputed_gross | inconsistent_lines | min(f.sale_date) | max(f.sale_date)\n2024-08-01T00:00:00 | 42757 | 42757 | 42757 | 1365081.89 | 1101807.91 | 1365081.89 | 0 | 2024-08-01 | 2024-08-31\n2024-09-01T00:00:00 | 39234 | 39234 | 39234 | 1208912.16 | 964016.09 | 1208912.16 | 0 | 2024-09-01 | 2024-09-30\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:38",
+   "statement": "SELECT date_trunc('month', f.sale_date) AS m, p.vat_class, f.vat_rate,\n       CASE WHEN f.sale_date < DATE '2024-09-01' THEN 'pre' ELSE 'post' END AS vs_change,\n       count(*) n, sum(f.gross_amount) gross, sum(f.net_amount) net,\n       sum(CASE WHEN f.sale_date <> CAST(timezone('Europe/Helsinki', f.sale_ts_utc AT TIME ZONE 'UTC') AS DATE) THEN 1 ELSE 0 END) AS date_mismatch\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\n  AND s.store_id < 900 AND p.category <> 'ZZ Test'\nGROUP BY 1,2,3,4 ORDER BY 1,2,3\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "m | vat_class | vat_rate | vs_change | n | gross | net | date_mismatch\n2024-08-01T00:00:00 | reduced10 | 0.1000 | pre | 54 | 1701.57 | 1546.85 | 0\n2024-08-01T00:00:00 | reduced14 | 0.1400 | pre | 1885 | 10724.62 | 9406.75 | 0\n2024-08-01T00:00:00 | standard | 0.2400 | pre | 40818 | 1352655.70 | 1090854.31 | 0\n2024-09-01T00:00:00 | reduced10 | 0.1000 | post | 57 | 2055.10 | 1868.21 | 0\n2024-09-01T00:00:00 | reduced14 | 0.1400 | post | 1128 | 6351.26 | 5570.91 | 0\n2024-09-01T00:00:00 | standard | 0.2550 | post | 38049 | 1200505.80 | 956576.97 | 0\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:40",
+   "statement": "WITH c AS (\n  SELECT date_trunc('month', business_date) m, sum(net_sales_before_returns) ctrl_net_before_returns, sum(returns_net) ret, sum(net_sales) ns\n  FROM rpt_daily_store_sales\n  WHERE business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND store_id < 900\n  GROUP BY 1),\nf AS (\n  SELECT date_trunc('month', f.sale_date) m, sum(f.net_amount) net\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND s.store_id < 900 AND p.category <> 'ZZ Test'\n  GROUP BY 1)\nSELECT c.m, c.ctrl_net_before_returns, f.net, f.net - c.ctrl_net_before_returns AS gap, c.ret, c.ns\nFROM c JOIN f USING (m) ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "m | ctrl_net_before_returns | net | gap | ret | ns\n2024-08-01T00:00:00 | 1101807.91 | 1101807.91 | 0.00 | 51492.65 | 1050315.26\n2024-09-01T00:00:00 | 964016.09 | 964016.09 | 0.00 | 45299.75 | 918716.34\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:46",
+   "statement": "SELECT date_trunc('month', f.sale_date) AS m,\n       CASE WHEN s.store_id=999 THEN '999 training' WHEN s.store_id=900 THEN '900 web'\n            WHEN p.category='ZZ Test' THEN 'physical ZZ Test' ELSE 'physical' END AS grp,\n       count(*) n, sum(f.gross_amount) gross, sum(CASE WHEN f.staff_purchase_flag THEN f.gross_amount ELSE 0 END) staff_gross,\n       min(f.gross_amount) min_gross, sum(CASE WHEN f.quantity<=0 OR f.gross_amount<=0 THEN 1 ELSE 0 END) nonpos\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 4,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "m | grp | n | gross | staff_gross | min_gross | nonpos\n2024-08-01T00:00:00 | 900 web | 4354 | 174410.47 | 0.00 | 1.15 | 0\n2024-08-01T00:00:00 | 999 training | 158 | 4282.23 | 4095.30 | 1.24 | 0\n2024-08-01T00:00:00 | physical | 42757 | 1365081.89 | 16949.92 | 0.86 | 0\n2024-09-01T00:00:00 | 900 web | 4325 | 160395.63 | 0.00 | 1.43 | 0\n2024-09-01T00:00:00 | 999 training | 125 | 3351.71 | 3253.67 | 1.26 | 0\n2024-09-01T00:00:00 | physical | 39234 | 1208912.16 | 16438.40 | 0.80 | 0\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:52",
+   "statement": "WITH fin AS (\n  SELECT date_trunc('month', f.sale_date) AS month_start, f.sale_date\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND s.store_id < 900 AND p.category <> 'ZZ Test')\nSELECT month_start, count(DISTINCT sale_date) days_with_sales,\n  (SELECT count(*) FROM dim_date d WHERE d.calendar_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND date_trunc('month', d.calendar_date)=fin.month_start AND d.is_trading_day) AS trading_days\nFROM fin GROUP BY 1 ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "month_start | days_with_sales | trading_days\n2024-08-01T00:00:00 | 31 | 31\n2024-09-01T00:00:00 | 30 | 30\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:38:56",
+   "statement": "SELECT strftime(date_trunc('month', f.sale_date), '%Y-%m') AS calendar_month,\n       SUM(f.gross_amount) AS store_sales_incl_vat_before_returns\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30'\n  AND s.store_id < 900 AND s.store_id <> 999\n  AND p.category <> 'ZZ Test'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "calendar_month | store_sales_incl_vat_before_returns\n2024-08 | 1365081.89\n2024-09 | 1208912.16\n(2 rows)"
+  }
+ ]
+}

@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t56-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T56",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "cd7ee080d07a02c4bb50ddb1cf8a7d1b29b0920fd37ee8da1cfe53fceeb37bf0",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:26",
+   "statement": "WITH params AS (\n    SELECT DATE '2025-12-15' AS start_date, DATE '2025-12-23' AS end_date\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT n.business_date, n.store_id, SUM(n.net_sales) AS web_net_sales,\n       (SELECT c.net_sales FROM rpt_daily_store_sales c WHERE c.business_date = n.business_date AND c.store_id = 900) AS control\nFROM net_lines n CROSS JOIN params\nWHERE n.store_id = 900\n  AND n.business_date BETWEEN params.start_date AND params.end_date\nGROUP BY 1, 2\nORDER BY 1;\n",
+   "n": 1,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "business_date | store_id | web_net_sales | control\n2025-12-15 | 900 | 11375.48 | 11375.48\n2025-12-16 | 900 | 10604.74 | 10604.74\n2025-12-17 | 900 | 14227.56 | 14227.56\n2025-12-18 | 900 | 11359.73 | 11359.73\n2025-12-19 | 900 | 9197.31 | 9197.31\n2025-12-20 | 900 | 10274.69 | 10274.69\n2025-12-21 | 900 | 611.75 | 611.75\n2025-12-22 | 900 | 14820.19 | 14820.19\n2025-12-23 | 900 | 11248.95 | 11248.95\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:31",
+   "statement": "SELECT CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date,\n       dayname(CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)) AS dow,\n       status, fulfilment_type, COUNT(*) AS orders, COUNT(DISTINCT web_order_id) AS distinct_orders, SUM(line_count) AS lines\nFROM fact_web_order\nWHERE dispatch_ts_utc >= TIMESTAMP '2025-12-10' AND dispatch_ts_utc < TIMESTAMP '2025-12-28'\nGROUP BY ALL ORDER BY 1,3,4;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 34,
+   "output_preview": "dispatch_date | dow | status | fulfilment_type | orders | distinct_orders | lines\n2025-12-10 | Wednesday | collected | click_and_collect | 43 | 43 | 74\n2025-12-10 | Wednesday | delivered | home_delivery | 101 | 101 | 214\n2025-12-11 | Thursday | collected | click_and_collect | 27 | 27 | 52\n2025-12-11 | Thursday | delivered | home_delivery | 99 | 99 | 198\n2025-12-12 | Friday | collected | click_and_collect | 42 | 42 | 91\n2025-12-12 | Friday | delivered | home_delivery | 111 | 111 | 227\n2025-12-13 | Saturday | collected | click_and_collect | 56 | 56 | 118\n2025-12-13 | Saturday | delivered | home_delivery | 92 | 92 | 177\n2025-12-14 | Sunday | collected | click_and_collect | 1 | 1 | 5\n2025-12-14 | Sunday | delivered | home_delivery | 8 | 8 | 15\n2025-12-15 | Monday | collected | click_and_collect | 61 | 61 | 115\n2025-12-15 | Monday | delivered | home_delivery | 187 | 187 | 355\n2025-12-16 | Tuesday | collected | click_and_collect | 67 | 67 | 122\n2025-12-16 | Tuesday | delivered | home_delivery | 144 | 144 | 290\n2025-12-17 | Wednesday | collected | click_and_collect | 76 | 76 | 153\n2025-12-17 | Wednesday | delivered | home_delivery | 195 | 195 | 400\n2025-12-18 | Thursday | collected | click_and_collect | 67 | 67 | 123\n2025-12-18 | Thursday | delivered | home_delivery | 179 | 179 | 362\n2025-12-19 | Friday | collected | click_and_collect | 62 | 62 | 124\n2025-12-19 | Friday | delivered | home_delivery | 153 | 153 | 279\n2025-12-20 | Saturday | collected | click_and_collect | 46 | 46 | 88"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:38",
+   "statement": "WITH o AS (\n  SELECT web_order_id, line_count, status, order_ts_utc, dispatch_ts_utc\n  FROM fact_web_order\n  WHERE status IN ('delivered','collected')\n    AND CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\n),\nl AS (\n  SELECT receipt_id, COUNT(*) AS n_lines, COUNT(DISTINCT line_no) AS n_distinct_lines, COUNT(DISTINCT sales_line_id) AS n_ids,\n         SUM(net_amount) AS net, SUM(CASE WHEN staff_purchase_flag THEN 1 ELSE 0 END) AS staff\n  FROM fact_sales_line WHERE receipt_id IN (SELECT web_order_id FROM o) GROUP BY 1\n)\nSELECT COUNT(*) AS orders,\n       SUM(CASE WHEN l.receipt_id IS NULL THEN 1 ELSE 0 END) AS no_lines,\n       SUM(CASE WHEN l.n_lines <> o.line_count THEN 1 ELSE 0 END) AS linecount_mismatch,\n       SUM(CASE WHEN l.n_lines <> l.n_distinct_lines OR l.n_lines <> l.n_ids THEN 1 ELSE 0 END) AS dup_lines,\n       SUM(l.n_lines) AS total_lines, SUM(l.net) AS total_net,\n       (SELECT COUNT(*) FROM (SELECT sales_line_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-12-10' AND DATE '2025-12-23' GROUP BY 1 HAVING COUNT(*)>1)) AS dup_sales_line_ids,\n       (SELECT COUNT(*) FROM (SELECT return_line_id FROM fact_return_line WHERE return_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23' GROUP BY 1 HAVING COUNT(*)>1)) AS dup_return_ids\nFROM o LEFT JOIN l ON l.receipt_id = o.web_order_id;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | no_lines | linecount_mismatch | dup_lines | total_lines | total_net | dup_sales_line_ids | dup_return_ids\n1909 | 0 | 0 | 0 | 3813 | 100563.87 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:44",
+   "statement": "WITH wd AS (\n  SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dd\n  FROM fact_web_order WHERE status IN ('delivered','collected')\n)\nSELECT 'sales' AS kind, s.store_id, p.category = 'ZZ Test' AS is_test, COUNT(*) AS n, SUM(f.net_amount) AS amt\nFROM fact_sales_line f JOIN wd ON wd.web_order_id = f.receipt_id\nJOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key\nWHERE wd.dd BETWEEN DATE '2025-12-15' AND DATE '2025-12-23' GROUP BY ALL\nUNION ALL\nSELECT 'return_on_web_sales_line_in_window', s.store_id, p.category = 'ZZ Test', COUNT(*), SUM(r.refund_net)\nFROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key\nWHERE r.return_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23' AND (s.store_id = 900 OR r.sales_line_id IN (SELECT sales_line_id FROM fact_sales_line WHERE channel_code='WB' OR channel_id IS NOT NULL))\nGROUP BY ALL\nORDER BY 1,2;\n",
+   "n": 4,
+   "ok": true,
+   "rows": 41,
+   "output_preview": "kind | store_id | is_test | n | amt\nreturn_on_web_sales_line_in_window | 101 | false | 15 | 576.58\nreturn_on_web_sales_line_in_window | 102 | false | 39 | 1198.33\nreturn_on_web_sales_line_in_window | 103 | false | 10 | 195.50\nreturn_on_web_sales_line_in_window | 104 | false | 27 | 776.17\nreturn_on_web_sales_line_in_window | 105 | false | 5 | 132.19\nreturn_on_web_sales_line_in_window | 106 | false | 14 | 271.01\nreturn_on_web_sales_line_in_window | 107 | false | 18 | 858.14\nreturn_on_web_sales_line_in_window | 108 | false | 32 | 822.10\nreturn_on_web_sales_line_in_window | 109 | false | 12 | 353.26\nreturn_on_web_sales_line_in_window | 110 | false | 26 | 623.28\nreturn_on_web_sales_line_in_window | 111 | false | 7 | 134.52\nreturn_on_web_sales_line_in_window | 112 | false | 6 | 107.57\nreturn_on_web_sales_line_in_window | 113 | false | 2 | 29.87\nreturn_on_web_sales_line_in_window | 114 | false | 15 | 387.52\nreturn_on_web_sales_line_in_window | 115 | false | 40 | 1005.77\nreturn_on_web_sales_line_in_window | 116 | false | 26 | 724.41\nreturn_on_web_sales_line_in_window | 117 | false | 22 | 825.09\nreturn_on_web_sales_line_in_window | 118 | false | 22 | 982.12\nreturn_on_web_sales_line_in_window | 119 | false | 17 | 483.88\nreturn_on_web_sales_line_in_window | 120 | false | 11 | 271.08\nreturn_on_web_sales_line_in_window | 121 | false | 17 | 581.89\nreturn_on_web_sales_line_in_window | 122 | false | 9 | 251.26\nreturn_on_web_sales_line_in_window | 123 | false | 8 | 108.05\nreturn_on_web_sales_"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:50",
+   "statement": "SELECT r.return_date, (s.store_id = 900) AS booked_to_web, (f.receipt_id IN (SELECT web_order_id FROM fact_web_order)) AS orig_is_web_order, COUNT(*) AS n, SUM(r.refund_net) AS refund_net\nFROM fact_return_line r\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\nWHERE r.return_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\nGROUP BY ALL HAVING booked_to_web OR orig_is_web_order ORDER BY 1,2,3;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 200,
+   "output_preview": "return_date | booked_to_web | orig_is_web_order | n | refund_net\n2025-12-15 | false | true | 1 | 34.85\n2025-12-15 | false | true | 1 | 11.85\n2025-12-15 | false | true | 1 | 5.70\n2025-12-15 | false | true | 1 | 88.20\n2025-12-15 | false | true | 1 | 27.83\n2025-12-15 | false | true | 1 | 98.33\n2025-12-15 | false | true | 1 | 10.12\n2025-12-15 | false | true | 1 | 4.87\n2025-12-15 | true | true | 1 | 28.56\n2025-12-15 | true | true | 1 | 12.92\n2025-12-15 | true | true | 1 | 11.85\n2025-12-15 | true | true | 1 | 17.09\n2025-12-15 | true | true | 1 | 22.48\n2025-12-15 | true | true | 1 | 6.66\n2025-12-15 | true | true | 1 | 4.81\n2025-12-15 | true | true | 1 | 84.19\n2025-12-15 | true | true | 1 | 10.34\n2025-12-15 | true | true | 1 | 9.36\n2025-12-15 | true | true | 1 | 16.49\n2025-12-15 | true | true | 1 | 36.09\n2025-12-15 | true | true | 1 | 15.52\n2025-12-15 | true | true | 1 | 21.35\n2025-12-15 | true | true | 1 | 23.84\n2025-12-15 | true | true | 1 | 17.49\n2025-12-16 | false | true | 1 | 12.61\n2025-12-16 | false | true | 1 | 10.96\n2025-12-16 | false | true | 1 | 68.06\n2025-12-16 | false | true | 1 | 41.31\n2025-12-16 | false | true | 1 | 55.96\n2025-12-16 | false | true | 1 | 6.00\n2025-12-16 | false | true | 1 | 10.95\n2025-12-16 | false | true | 1 | 7.37\n2025-12-16 | false | true | 1 | 71.98\n2025-12-16 | true | true | 1 | 6.44\n2025-12-16 | true | true | 1 | 19.14\n2025-12-16 | true | true | 1 | 13.08\n2025-12-16 | true | true | 1 | 81.61\n2025-12-16 | true | true | 1 | 13.10\n2025-12-16 | true | "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:56:58",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT w.dispatch_date AS business_date, f.net_amount AS sold, 0 AS refunded\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, 0, r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT business_date, SUM(sold) AS sold, SUM(refunded) AS refunded, SUM(sold) - SUM(refunded) AS web_net_sales\nFROM net_lines\nWHERE business_date BETWEEN DATE '2025-12-15' AND DATE '2025-12-23'\nGROUP BY 1 ORDER BY 1;\n",
+   "n": 6,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "business_date | sold | refunded | web_net_sales\n2025-12-15 | 11714.52 | 339.04 | 11375.48\n2025-12-16 | 10967.03 | 362.29 | 10604.74\n2025-12-17 | 15214.54 | 986.98 | 14227.56\n2025-12-18 | 12189.13 | 829.40 | 11359.73\n2025-12-19 | 10258.50 | 1061.19 | 9197.31\n2025-12-20 | 11379.59 | 1104.90 | 10274.69\n2025-12-21 | 1445.65 | 833.90 | 611.75\n2025-12-22 | 15720.91 | 900.72 | 14820.19\n2025-12-23 | 11674.00 | 425.05 | 11248.95\n(9 rows)"
+  }
+ ]
+}

@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH periods AS (SELECT fiscal_year, period_start_date, period_end_date FROM ref_fiscal_calendar WHERE fiscal_period = 4 AND fiscal_year IN ('FY2025/26','FY2026/27')), sales AS (SELECT s.store_id, p.fiscal_year, sum(f.net_amount) AS gross_net, count(DISTINCT f.sale_date) AS trading_days FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN periods p ON f.sale_date BETWEEN p.period_start_date AND p.period_end_date WHERE s.store_id &lt; 900 GROUP BY 1, 2), refunds AS (SELECT s.store_id, p.fiscal_year, sum(r.refund_net) AS refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN periods p ON r.return_date BETWEEN p.period_start_date AND p.period_end_date WHERE s.store_id &lt; 900 GROUP BY 1, 2), store_net AS (SELECT a.store_id, a.fiscal_year, a.trading_days, a.gross_net - coalesce(r.refund_net, 0) AS net_sales FROM sales a LEFT JOIN refunds r ON r.store_id = a.store_id AND r.fiscal_year = a.fiscal_year), lfl_stores AS (SELECT store_id FROM store_net GROUP BY 1 HAVING count(*) = 2 AND min(trading_days) = 28) SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period, round(100 * (sum(CASE WHEN fiscal_year = 'FY2026/27' THEN net_sales END) / sum(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) - 1), 2) AS lfl_net_sales_growth_pct FROM store_net WHERE store_id IN (SELECT store_id FROM lfl_stores)",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "lfl_net_sales_growth_pct"],
+    "rows": [["FY2026/27", 4, -0.03]]
+  },
+  "definitions_applied": [
+    "Fiscal period 4 per ref_fiscal_calendar: FY2026/27 P04 (2026-08-03 to 2026-08-30) against FY2025/26 P04 (2025-07-28 to 2025-08-24), both 4 weeks and 28 days, Monday to Sunday, so weekdays line up",
+    "Net sales = net_amount (EUR excluding VAT, after line discounts) minus refund_net booked in the period, matching rpt_daily_store_sales.net_sales",
+    "Like-for-like store = a physical store (store_id below 900) that traded on all 28 days in both periods",
+    "Stores identified by stable store_id, not store_key, because store versions changed on 2025-04-28 (region and format reshuffle)",
+    "Web shop (900), including click-and-collect, and the training store (999) excluded",
+    "Channel taken from the store, not channel_code, which is null for FY2026/27 rows after the web-platform migration",
+    "Growth % = (this year net sales / last year net sales - 1) x 100, on the pooled like-for-like store set"
+  ],
+  "assumptions": [
+    "'Period 4 this year' means FY2026/27 P04, the most recent fully loaded P4 (the request is dated 2026-10-05 and the FY2026/27 year began 2026-05-04). 'Last year' means FY2025/26 P04",
+    "Like for like is read as one aggregate growth figure for all comparable stores, not a per-store or per-region breakdown, because the request asks how 'the stores' did",
+    "Net sales are net of returns and exclude VAT, which is the Data &amp; Analytics reporting measure",
+    "The warehouse has no written like-for-like rule, so I used traded in full in both windows. Tampere Lamminpää (136, opened 2024-09-02) and Lohja (137, opened 2024-11-04) are included because both traded every day of both periods and were open more than 12 months before the current period began",
+    "Kuopio (125), which reopened on 2026-07-27 after a refit, is included because its refit finished before P4 started and it traded all 28 days in both windows",
+    "Staff purchases are kept in, as in the standard daily sales report",
+    "Returns are netted in the store and period where they were booked, as in rpt_daily_store_sales, even when the sale was at another store or in an earlier period"
+  ],
+  "caveats": [
+    "Corrections made: Savonlinna (129, closed 2026-01-25) traded last year (EUR 9,549 net) but has no sales this year, so it is excluded. Including it would pull the growth figure down by about 0.9 points. The web shop (900) and training store (999) are excluded. Click-and-collect is booked to the web shop, so it is not in store sales. channel_code is null in FY2026/27, so I used the store, not the channel code, to select store sales",
+    "The like-for-like set is 38 stores: all 39 stores that traded in the last-year window except Savonlinna",
+    "The result is essentially flat: net sales were EUR 1,010,478.52 this year against EUR 1,010,743.32 last year (-0.03%). The sign depends on which stores count as comparable. Excluding the two stores opened in late 2024 (136, 137) gives -0.23%. Excluding Kuopio (125) as well gives -0.41%. Excluding Kuopio alone gives -0.19%. Excluding staff purchases gives +0.14%. Before returns, growth is +0.01%. All are within about half a percentage point of zero",
+    "Store results vary widely beneath the flat total: from -26.2% (Mikkeli, 127) to +25.4% (Lohja, 137). Hämeenlinna (-17.6%) and Kerava (-16.0%) are also down sharply. Weekly figures for the weakest stores (127, 109, 105) are lower in most weeks, so the declines are not caused by missing days, but I did not look at causes",
+    "Lohja (137) was in its first year of trading in the comparison period, so some of its +25% is probably ramp-up rather than underlying growth",
+    "Duplicate receipt lines exist in FY2025/26 P05 (418 receipt and line pairs loaded twice, 836 rows). They do not touch either P4 window, so no adjustment was needed here, but they would inflate last-year P5 comparisons",
+    "The tmp_lfl_store_list_2024 and tmp_lfl_store_list_2025 tables, the bak_ tables and the *_old tables were not used. They are unmaintained working copies, and the two like-for-like lists still contain the closed Savonlinna store",
+    "Net sales are ex-VAT and so avoid the Finnish VAT rate change effect. The comparison is nominal and not adjusted for price inflation or for store size"
+  ]
+}
+```

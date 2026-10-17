@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH period_sales AS (\n  SELECT \n    f.receipt_id,\n    f.store_key,\n    s.format,\n    SUM(f.net_amount) as receipt_total\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  WHERE f.sale_date &gt;= '2026-08-03' \n    AND f.sale_date &lt;= '2026-08-30'\n    AND s.format != 'Training'\n  GROUP BY f.receipt_id, f.store_key, s.format\n)\nSELECT \n  format,\n  ROUND(AVG(receipt_total), 2) as avg_basket_value\nFROM period_sales\nGROUP BY format\nORDER BY format",
+  "result": {
+    "columns": ["format", "avg_basket_value"],
+    "rows": [
+      ["Large", 60.60],
+      ["Medium", 60.15],
+      ["Small", 50.67],
+      ["Web", 64.76]
+    ]
+  },
+  "definitions_applied": [
+    "Basket value defined as total net amount per receipt (sum of all line items, excluding VAT)",
+    "Period 4 of FY2026/27 mapped to fiscal calendar dates 2026-08-03 through 2026-08-30",
+    "Average calculated per store format across all receipts with sales in the period",
+    "Store format sourced from dim_store.format at time of sale"
+  ],
+  "assumptions": [
+    "Basket value uses net_amount (excluding VAT) from fact_sales_line for consistency",
+    "Web format represents online channel sales processed through the Tuomimetsä web shop store location (store_id 900)",
+    "Training store excluded from results as a non-operational test location",
+    "Each receipt_id represents one distinct transaction regardless of channel (store or web)"
+  ],
+  "caveats": [
+    "Schema documentation comments indicate store formats should be 'Hyper, Standard or Express', but actual warehouse data contains 'Large, Medium, Small, Training, Web'. The results reflect actual data format values.",
+    "Web channel sales have NULL channel_code in fact_sales_line (not coded as 'WB'), but are correctly identified through store_key 46 (Tuomimetsä web shop) in dim_store.",
+    "Training store (store_id 999) is excluded from results; if training sales should be included, Large format value would be 60.66.",
+    "Data is current as of query execution; no validation issues detected in the sales data for this period."
+  ]
+}
+```

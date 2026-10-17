@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t10-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T10",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "dc5c8c6c612c56b1713daad8b0071a8eb0781b99be5d683ebc3e021fdf47b6d8",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:45:23",
+   "statement": "fiscal-calendar/scripts/fiscal.py P5 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P5 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:25",
+   "statement": "SELECT 'store' AS k, CAST(store_key AS VARCHAR) a, CAST(store_id AS VARCHAR) b, store_name c, city d, CAST(valid_from AS VARCHAR) e, CAST(valid_to AS VARCHAR) f FROM dim_store WHERE lower(store_name) LIKE '%hyvink%' OR lower(city) LIKE '%hyvink%'\nUNION ALL\nSELECT 'cat', category, subcategory, CAST(count(*) AS VARCHAR), CAST(count(DISTINCT sku) AS VARCHAR), CAST(min(valid_from) AS VARCHAR), CAST(max(is_current) AS VARCHAR) FROM dim_product WHERE lower(category) LIKE '%clean%' OR lower(subcategory) LIKE '%clean%' GROUP BY 2,3\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "k | a | b | c | d | e | f\nstore | 12 | 107 | Hyvinkää | Hyvinkää | 2000-01-01 | 9999-12-31\ncat | Cleaning & Household | Cleaning Products | 131 | 131 | 2000-01-01 | true\ncat | Cleaning & Household | Storage Boxes | 94 | 92 | 2000-01-01 | true\ncat | Cleaning & Household | Laundry & Ironing | 63 | 62 | 2000-01-01 | true\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:31",
+   "statement": "SELECT cp.category AS cur_cat, cp.subcategory AS cur_sub, p.subcategory AS was_sub,\n       sum(f.quantity) AS units, count(*) AS line_rows, count(DISTINCT f.sales_line_id) AS distinct_lines,\n       sum(CASE WHEN f.staff_purchase_flag THEN f.quantity ELSE 0 END) AS staff_units,\n       min(f.sale_date) AS d0, max(f.sale_date) AS d1, min(f.quantity) AS minq, count(DISTINCT s.store_id) AS stores\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 107\n  AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n  AND (cp.subcategory = 'Cleaning Products' OR p.subcategory = 'Cleaning Products')\nGROUP BY ALL\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "cur_cat | cur_sub | was_sub | units | line_rows | distinct_lines | staff_units | d0 | d1 | minq | stores\nCleaning & Household | Cleaning Products | Cleaning Products | 136 | 63 | 63 | 4 | 2026-08-31 | 2026-09-27 | 1 | 1\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:41",
+   "statement": "WITH f AS (\n  SELECT f.*, p.category AS cat, p.subcategory AS sub\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 107 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n), ctl AS (\n  SELECT sum(units_sold) AS ctl_units, sum(net_sales_before_returns) AS ctl_net, count(*) AS ctl_days\n  FROM rpt_daily_store_sales WHERE store_id = 107 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT (SELECT sum(quantity) FROM f WHERE cat <> 'ZZ Test') AS all_units_noZZ,\n       (SELECT sum(quantity) FROM f) AS all_units,\n       (SELECT sum(net_amount) FROM f WHERE cat <> 'ZZ Test') AS all_net_noZZ,\n       (SELECT count(*) - count(DISTINCT (receipt_id, line_no)) FROM f) AS dup_rows,\n       (SELECT count(DISTINCT sale_date) FROM f) AS days_with_sales,\n       (SELECT sum(quantity) FROM f WHERE sub = 'Cleaning Products') AS cp_units,\n       (SELECT sum(quantity) FROM f WHERE cat = 'Cleaning & Household') AS cat_units,\n       (SELECT sum(quantity) FROM f WHERE sub = 'Cleaning Products' AND channel_code = 'WB') AS cp_web_units,\n       ctl.ctl_units, ctl.ctl_net, ctl.ctl_days\nFROM ctl\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "all_units_noZZ | all_units | all_net_noZZ | dup_rows | days_with_sales | cp_units | cat_units | cp_web_units | ctl_units | ctl_net | ctl_days\n1626 | 1626 | 27297.68 | 0 | 28 | 136 | 221 | NULL | 1626 | 27297.68 | 28\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:45:46",
+   "statement": "SELECT sum(r.quantity_returned) AS returned_units, count(*) AS return_lines\nFROM fact_return_line r\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key\nWHERE s.store_id = 107 AND p.subcategory = 'Cleaning Products'\n  AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "returned_units | return_lines\nNULL | 0\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,103 @@
+{
+ "run_id": "full-sonnet-L-t44-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T44",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "7099c6c4aa32cb4ab5ad7486b59dae779933431e2b4d898d418ed4c47c58e9fc",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:41:03",
+   "statement": "fiscal-calendar/scripts/fiscal.py P6 FY2025/26 --as-of 2026-10-08",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P6 FY2025/26    as of: 2026-10-08    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P06\n  fiscal_weeks                       22-26\n  start_date                         2025-09-22\n  end_date                           2025-10-26\n  weeks                              5\n  days                               35\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-10-26\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 22 AND 26)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:12",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.category, COUNT(*) AS n_rows, SUM(n.net_sales) AS net_sales, SUM(n.net_sales - n.cost) AS gross_margin,\n       ROUND(100.0 * SUM(n.net_sales - n.cost) / SUM(n.net_sales), 1) AS gross_margin_pct\nFROM net_lines n\nJOIN dim_date d     ON d.calendar_date = n.business_date\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 6\nGROUP BY 1\nORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | n_rows | net_sales | gross_margin | gross_margin_pct\nBathroom & Plumbing | 3021 | 79132.84 | 32446.58 | 41.0\nCleaning & Household | 6308 | 79132.06 | 38022.95 | 48.0\nElectrical | 10436 | 219493.00 | 89928.53 | 41.0\nFurniture | 965 | 91757.41 | 29937.65 | 32.6\nGarden | 6269 | 114805.94 | 46119.32 | 40.2\nHome Textiles & Decor | 6731 | 126638.93 | 63222.41 | 49.9\nKitchen & Dining | 4053 | 99846.94 | 39317.45 | 39.4\nPaint & Decorating | 4767 | 152225.78 | 55419.46 | 36.4\nSeasonal | 6015 | 155601.35 | 82712.09 | 53.2\nTools & Hardware | 9005 | 174585.44 | 74695.19 | 42.8\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:22",
+   "statement": "SELECT 'sales_dup_receipt_line' AS chk, COUNT(*) AS n, SUM(c - 1) AS extra\nFROM (SELECT receipt_id, line_no, COUNT(*) c FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-09-01' AND DATE '2025-11-30' GROUP BY 1,2 HAVING COUNT(*) > 1)\nUNION ALL\nSELECT 'sales_dup_line_id', COUNT(*), SUM(c - 1)\nFROM (SELECT sales_line_id, COUNT(*) c FROM fact_sales_line WHERE sale_date BETWEEN DATE '2025-09-01' AND DATE '2025-11-30' GROUP BY 1 HAVING COUNT(*) > 1)\nUNION ALL\nSELECT 'return_dup_id', COUNT(*), SUM(c - 1)\nFROM (SELECT return_line_id, COUNT(*) c FROM fact_return_line WHERE return_date BETWEEN DATE '2025-09-01' AND DATE '2025-11-30' GROUP BY 1 HAVING COUNT(*) > 1)\nUNION ALL\nSELECT 'return_dup_sales_line', COUNT(*), SUM(c - 1)\nFROM (SELECT sales_line_id, COUNT(*) c FROM fact_return_line WHERE return_date BETWEEN DATE '2025-09-01' AND DATE '2025-11-30' GROUP BY 1 HAVING COUNT(*) > 1)\nUNION ALL\nSELECT 'web_dup_order', COUNT(*), SUM(c - 1)\nFROM (SELECT web_order_id, COUNT(*) c FROM fact_web_order GROUP BY 1 HAVING COUNT(*) > 1)\nUNION ALL\nSELECT 'prod_dup_current', COUNT(*), SUM(c - 1)\nFROM (SELECT sku, COUNT(*) c FROM dim_product WHERE is_current GROUP BY 1 HAVING COUNT(*) > 1)\n",
+   "n": 3,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "chk | n | extra\nsales_dup_receipt_line | 418 | 418\nsales_dup_line_id | 0 | NULL\nreturn_dup_id | 0 | NULL\nreturn_dup_sales_line | 0 | NULL\nweb_dup_order | 0 | NULL\nprod_dup_current | 0 | NULL\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:27",
+   "statement": "WITH d AS (\n  SELECT receipt_id, line_no FROM fact_sales_line\n  WHERE sale_date BETWEEN DATE '2025-09-01' AND DATE '2025-11-30'\n  GROUP BY 1,2 HAVING COUNT(*) > 1\n)\nSELECT f.sales_line_id, f.receipt_id, f.line_no, f.sale_date, f.sale_ts_utc, f.store_key, f.product_key, f.member_key, f.channel_code, f.channel_id, f.quantity, f.net_amount, f.standard_cost, f.etl_loaded_at\nFROM fact_sales_line f JOIN d USING (receipt_id, line_no)\nORDER BY f.receipt_id, f.line_no, f.sales_line_id\nLIMIT 24\n",
+   "n": 4,
+   "ok": true,
+   "rows": 24,
+   "output_preview": "sales_line_id | receipt_id | line_no | sale_date | sale_ts_utc | store_key | product_key | member_key | channel_code | channel_id | quantity | net_amount | standard_cost | etl_loaded_at\n841511 | 10326117 | 1 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2323 | NULL | ST | NULL | 1 | 9.68 | 5.33 | 2025-09-16T01:00:00\n1510224 | 10326117 | 1 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2323 | NULL | ST | NULL | 1 | 9.68 | 5.33 | 2025-09-23T03:12:00\n841512 | 10326117 | 2 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2017 | NULL | ST | NULL | 3 | 42.12 | 25.17 | 2025-09-16T01:00:00\n1510225 | 10326117 | 2 | 2025-09-15 | 2025-09-15T06:36:43 | 22 | 2017 | NULL | ST | NULL | 3 | 42.12 | 25.17 | 2025-09-23T03:12:00\n841513 | 10326118 | 1 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 395 | NULL | ST | NULL | 1 | 12.37 | 7.26 | 2025-09-16T01:00:00\n1510226 | 10326118 | 1 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 395 | NULL | ST | NULL | 1 | 12.37 | 7.26 | 2025-09-23T03:12:00\n841514 | 10326118 | 2 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 3763 | NULL | ST | NULL | 1 | 20.10 | 11.64 | 2025-09-16T01:00:00\n1510227 | 10326118 | 2 | 2025-09-15 | 2025-09-15T06:41:21 | 22 | 3763 | NULL | ST | NULL | 1 | 20.10 | 11.64 | 2025-09-23T03:12:00\n841519 | 10326121 | 1 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 3014 | 85091 | ST | NULL | 1 | 22.55 | 11.13 | 2025-09-16T01:00:00\n1510228 | 10326121 | 1 | 2025-09-15 | 2025-09-15T06:43:29 | 22 | 3014 | 85091 | ST | NULL | 1 | 22.55 | 11.13 | 2025-09-23T03:12:00\n841520 | 103261"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:33",
+   "statement": "WITH d AS (\n  SELECT receipt_id, line_no, COUNT(*) c, MIN(sales_line_id) keep_id, MIN(sale_date) sd, MIN(store_key) sk,\n         COUNT(DISTINCT sale_date||'|'||store_key||'|'||product_key||'|'||quantity||'|'||net_amount||'|'||standard_cost) AS distinct_content\n  FROM fact_sales_line GROUP BY 1,2 HAVING COUNT(*) > 1\n)\nSELECT MIN(sd) min_date, MAX(sd) max_date, COUNT(*) dup_keys, SUM(c-1) extra_rows, MAX(c) max_c, MAX(distinct_content) max_distinct_content,\n       COUNT(DISTINCT sk) n_store_keys\nFROM d\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min_date | max_date | dup_keys | extra_rows | max_c | max_distinct_content | n_store_keys\n2025-09-15 | 2025-09-21 | 418 | 418 | 2 | 1 | 1\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:43",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nmine AS (\n  SELECT n.business_date, n.store_id, SUM(n.net_sales) v FROM net_lines n\n  WHERE n.business_date BETWEEN DATE '2025-09-22' AND DATE '2025-10-26' GROUP BY 1,2\n),\nctl AS (\n  SELECT business_date, store_id, net_sales v FROM rpt_daily_store_sales\n  WHERE business_date BETWEEN DATE '2025-09-22' AND DATE '2025-10-26'\n)\nSELECT (SELECT SUM(v) FROM mine) AS mine_total, (SELECT SUM(v) FROM ctl) AS ctl_total,\n  (SELECT COUNT(*) FROM mine m FULL JOIN ctl c USING (business_date, store_id) WHERE ABS(COALESCE(m.v,0)-COALESCE(c.v,0)) > 0.05) AS mismatching_store_days,\n  (SELECT COUNT(*) FROM ctl) AS ctl_rows, (SELECT COUNT(*) FROM mine) AS mine_rows\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mine_total | ctl_total | mismatching_store_days | ctl_rows | mine_rows\n1293219.69 | 1293219.69 | 0 | 1379 | 1379\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:41:54",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, p.sku, p.category AS cat_asof, p.subcategory AS sub_asof,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, p.sku, p.category, p.subcategory, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT cp.category AS as_is_cat, n.cat_asof AS as_was_cat, cp.subcategory AS as_is_sub, n.sub_asof AS as_was_sub,\n       COUNT(*) AS n, ROUND(SUM(n.net_sales),2) AS net_sales, ROUND(SUM(n.net_sales-n.cost),2) AS gm\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 6\n  AND (cp.category IN ('Garden','Electrical') OR n.cat_asof IN ('Garden','Electrical'))\nGROUP BY ALL ORDER BY 1,2,3,4\n",
+   "n": 7,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "as_is_cat | as_was_cat | as_is_sub | as_was_sub | n | net_sales | gm\nElectrical | Electrical | Batteries & Bulbs | Batteries & Bulbs | 3207 | 43416.17 | 21456.08\nElectrical | Electrical | Cables & Plugs | Cables & Plugs | 1652 | 16242.53 | 8703.75\nElectrical | Electrical | Indoor Lighting | Indoor Lighting | 4092 | 110856.23 | 42838.57\nElectrical | Electrical | Smart Home | Smart Home | 395 | 15196.16 | 4343.29\nElectrical | Garden | Outdoor Lighting | Outdoor Lighting | 1090 | 33781.91 | 12586.84\nGarden | Garden | Barbecue & Grills | Barbecue & Grills | 162 | 12076.14 | 3717.69\nGarden | Garden | Edible Plants & Seeds | Edible Plants & Seeds | 1121 | 5436.22 | 2887.31\nGarden | Garden | Garden Furniture | Garden Furniture | 208 | 20373.49 | 6696.39\nGarden | Garden | Garden Tools | Garden Tools | 789 | 20401.10 | 8136.47\nGarden | Garden | Plants & Flowers | Plants & Flowers | 2582 | 33207.69 | 15003.82\nGarden | Garden | Pots & Planters | Pots & Planters | 705 | 11046.49 | 5159.14\nGarden | Garden | Soil & Fertiliser | Soil & Fertiliser | 702 | 12264.81 | 4518.50\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:04",
+   "statement": "SELECT cp.category, \n  COUNT(*) AS lines,\n  SUM(CASE WHEN f.standard_cost IS NULL THEN 1 ELSE 0 END) AS null_cost,\n  SUM(CASE WHEN f.standard_cost = 0 THEN 1 ELSE 0 END) AS zero_cost,\n  SUM(CASE WHEN f.net_amount IS NULL THEN 1 ELSE 0 END) AS null_net,\n  SUM(CASE WHEN f.quantity <= 0 THEN 1 ELSE 0 END) AS nonpos_qty,\n  SUM(CASE WHEN f.net_amount <= 0 THEN 1 ELSE 0 END) AS nonpos_net,\n  SUM(CASE WHEN ABS(f.standard_cost - f.quantity * p.standard_unit_cost) > 0.05 THEN 1 ELSE 0 END) AS cost_mismatch,\n  SUM(CASE WHEN f.standard_cost > f.net_amount THEN 1 ELSE 0 END) AS cost_gt_net,\n  MIN(f.etl_loaded_at) AS min_load, MAX(f.etl_loaded_at) AS max_load,\n  SUM(CASE WHEN f.channel_code='WB' OR s.store_id=900 THEN 1 ELSE 0 END) AS web_lines\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE f.sale_date BETWEEN DATE '2025-09-15' AND DATE '2025-11-02' AND cp.category IN ('Garden','Electrical') AND s.store_id<>999\nGROUP BY 1\n",
+   "n": 8,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | lines | null_cost | zero_cost | null_net | nonpos_qty | nonpos_net | cost_mismatch | cost_gt_net | min_load | max_load | web_lines\nElectrical | 13929 | 0 | 0 | 0 | 0 | 0 | 0 | 90 | 2025-09-16T01:00:00 | 2025-11-03T01:00:00 | 1633\nGarden | 8574 | 0 | 0 | 0 | 0 | 0 | 0 | 28 | 2025-09-16T01:00:00 | 2025-11-03T01:00:00 | 1093\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:10",
+   "statement": "SELECT w.status, COUNT(*) AS lines, ROUND(SUM(f.net_amount),2) AS net,\n       SUM(CASE WHEN f.sale_date BETWEEN DATE '2025-09-22' AND DATE '2025-10-26' THEN 1 ELSE 0 END) AS lines_saledate_in_p6\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nLEFT JOIN fact_web_order w ON w.web_order_id=f.receipt_id\nWHERE s.store_id=900 AND f.sale_date BETWEEN DATE '2025-09-01' AND DATE '2025-11-30'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 9,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "status | lines | net | lines_saledate_in_p6\ncollected | 5268 | 144164.67 | 1913\ndelivered | 13947 | 390177.04 | 4837\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:42:18",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, p.sku, f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period, cp.category,\n       ROUND(SUM(n.net_sales), 2) AS net_sales,\n       ROUND(100.0 * SUM(n.net_sales - n.cost) / SUM(n.net_sales), 1) AS gross_margin_pct\nFROM net_lines n\nJOIN dim_date d     ON d.calendar_date = n.business_date\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period = 6 AND cp.category IN ('Garden', 'Electrical')\nGROUP BY 1, 2, 3\nORDER BY cp.category\n",
+   "n": 10,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | category | net_sales | gross_margin_pct\nFY2025/26 | 6 | Electrical | 219493.00 | 41.0\nFY2025/26 | 6 | Garden | 114805.94 | 40.2\n(2 rows)"
+  }
+ ]
+}

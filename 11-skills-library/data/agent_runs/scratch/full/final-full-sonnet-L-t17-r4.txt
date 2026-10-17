@@ -1,0 +1,41 @@
+```json
+{
+  "sql": "WITH sold_lines AS (SELECT f.sales_line_id, f.sale_date, cp.subcategory, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND cp.category = 'Garden' AND cp.subcategory &lt;&gt; 'Outdoor Lighting' AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 1 AND 3), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT l.subcategory, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct FROM sold_lines l LEFT JOIN refunds r USING (sales_line_id) GROUP BY 1 ORDER BY 1",
+  "result": {
+    "columns": ["subcategory", "return_rate_pct"],
+    "rows": [
+      ["Barbecue &amp; Grills", 7.26],
+      ["Edible Plants &amp; Seeds", 0.96],
+      ["Garden Furniture", 12.87],
+      ["Garden Tools", 5.35],
+      ["Plants &amp; Flowers", 2.74],
+      ["Pots &amp; Planters", 3.86],
+      ["Soil &amp; Fertiliser", 1.58]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate = returned net (refund_net) / sold net, sale-week cohort: refunds are matched to the sold line through sales_line_id, whenever and wherever they were booked",
+    "Net amounts excluding VAT",
+    "Fiscal Q1 = P1 to P3 = fiscal weeks 1 to 13, resolved from dim_date",
+    "As-is hierarchy: current product version for category and subcategory",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Web shop (store 900) lines and web returns included, since the request has no channel restriction",
+    "Returns arrive up to 30 days after a sale; cohort completeness checked against the last loaded date"
+  ],
+  "assumptions": [
+    "'Last year' was read as FY2025/26, the fiscal year just ended and the one other requests in 2026 used. The request arrived on 6 Oct 2026, in FY2026/27. Q1 is 28 Apr to 27 Jul 2025 (weeks 1-13).",
+    "'Goods sold in Q1' was read as lines with a sale_date in Q1. Refunds are attributed back to the original sale whenever they were processed.",
+    "Garden was read as-is, the company default, because no as-was hierarchy was asked for. The Garden subcategories are those of the current product hierarchy.",
+    "The result covers all channels, stores and web together, because the request does not split them.",
+    "Sold net is the net amount after line discounts; the refund is refund_net."
+  ],
+  "caveats": [
+    "Correction for Outdoor Lighting: the subcategory moved from Garden to Electrical from 27 Oct 2025, and as-is it sits in Electrical for all history. Five outdoor lighting SKUs were delisted (Feb to Sep 2025), before the move, and never got a new Electrical version. Their current version is still Garden / Outdoor Lighting, so a plain current-version join would show them as an 8th Garden subcategory. They are Q1 sales of 19 lines and about EUR 375 net, with no returns. I excluded them, which leaves 7 Garden subcategories. On a Q1-as-it-was (as-was) basis, Outdoor Lighting would be part of Garden, but it is negligible here.",
+    "The Q1 cohort is complete: the last sale date is 27 Jul 2025 and the warehouse is loaded through 4 Oct 2026, well past the 30-day return window. The rates are final.",
+    "Garden Furniture (12.87%) and Barbecue &amp; Grills (7.26%) have far higher return rates than the others. Edible Plants &amp; Seeds is about 1%.",
+    "Data checks found no duplicate sales lines, no duplicate or orphan return lines and no refund larger than the sold line for the Q1 lines. Deprecated objects were not used. The query-check script passed with no failed checks.",
+    "The rpt_daily_store_sales control total does not apply: it has no product dimension and the result is not a store-level net sales figure."
+  ]
+}
+```

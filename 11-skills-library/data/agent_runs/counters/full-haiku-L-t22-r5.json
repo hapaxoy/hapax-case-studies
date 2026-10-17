@@ -1,0 +1,85 @@
+{
+ "run_id": "full-haiku-L-t22-r5",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T22",
+ "budget": 30,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "3e79d096c12f32b590fc3d5e0b3a1d01420a81a859d927ba91c28043a96778ca",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:06:08",
+   "statement": "SELECT campaign_id, campaign_name, start_date, end_date, channels, target_group, mailing_list_size, holdout_size\nFROM dim_campaign\nWHERE campaign_name ILIKE '%Spring Garden Launch%'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | channels | target_group | mailing_list_size | holdout_size\n1 | Spring Garden Launch 2024 | 2024-05-06 | 2024-05-26 | email+sms | All members with marketing consent at the campaign start | 7918 | 841\n9 | Spring Garden Launch 2025 | 2025-05-05 | 2025-05-25 | email+sms | All members with marketing consent at the campaign start | 12203 | 1204\n19 | Spring Garden Launch 2026 | 2026-05-04 | 2026-05-24 | email+sms | All members with marketing consent at the campaign start | 16624 | 1597\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:06:16",
+   "statement": "WITH campaign AS (\n    SELECT campaign_id, start_date, end_date\n    FROM dim_campaign\n    WHERE campaign_id = 19\n),\ncontacted_members AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    CROSS JOIN campaign\n    WHERE e.campaign_id = campaign.campaign_id\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nmember_sales AS (\n    SELECT m.member_id, SUM(f.net_amount) AS total_spending\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign.start_date AND campaign.end_date\n      AND m.member_id IN (SELECT member_id FROM contacted_members)\n    GROUP BY m.member_id\n)\nSELECT \n    (SELECT COUNT(*) FROM contacted_members) AS members_contacted,\n    ROUND(COALESCE(SUM(total_spending), 0), 2) AS total_spending_eur\nFROM member_sales;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | total_spending_eur\n15001 | 190687.59\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:06:21",
+   "statement": "SELECT COUNT(DISTINCT member_id) AS distinct_members_exposed\nFROM fact_campaign_exposure e\nJOIN dim_member m ON m.member_key = e.member_key\nWHERE e.campaign_id = 19;\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "distinct_members_exposed\n15001\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:06:27",
+   "statement": "WITH targeted AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    WHERE e.campaign_id = 19\n),\nholdout AS (\n    SELECT DISTINCT member_id\n    FROM campaign_holdout\n    WHERE campaign_id = 19\n)\nSELECT \n    (SELECT COUNT(*) FROM targeted) AS targeted_count,\n    (SELECT COUNT(*) FROM holdout) AS holdout_count,\n    (SELECT COUNT(*) FROM targeted t JOIN holdout h ON t.member_id = h.member_id) AS overlap_count;\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "targeted_count | holdout_count | overlap_count\n15001 | 1597 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:06:37",
+   "statement": "WITH campaign_dates AS (\n    SELECT start_date, end_date FROM dim_campaign WHERE campaign_id = 19\n),\ncontacted_members AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    WHERE e.campaign_id = 19\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nstore_sales AS (\n    SELECT f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    CROSS JOIN campaign_dates\n    WHERE f.channel_code = 'ST'\n      AND s.store_id <> 999\n      AND p.category <> 'ZZ Test'\n      AND f.sale_date BETWEEN campaign_dates.start_date AND campaign_dates.end_date\n      AND m.member_id IN (SELECT member_id FROM contacted_members)\n),\nweb_sales AS (\n    SELECT f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    CROSS JOIN campaign_dates\n    WHERE f.channel_code = 'WB'\n      AND p.category <> 'ZZ Test'\n      AND COALESCE(w.dispatch_date, f.sale_date) BETWEEN campaign_dates.start_date AND campaign_dates.end_date\n      AND m.member_id IN (SELECT member_id FROM contacted_members)\n)\nSELECT \n    'Store' AS channel,\n    ROUND(SUM(net_amount), 2) AS spending\nFROM store_sales\nUNION ALL\nSELECT \n    'Web' AS channel,\n    ROUND(SUM(net_amount), 2) AS spending\nFROM web_sales\nUNION ALL\nSELECT \n    'Total' AS channel,\n    ROUND((SELECT SUM(net_amount) FROM store_sales) + (SELECT SUM(net_amount) FROM web_sales), 2) AS spending;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel | spending\nStore | NULL\nWeb | NULL\nTotal | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:06:42",
+   "statement": "WITH contacted_members AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    WHERE e.campaign_id = 19\n),\nall_member_sales AS (\n    SELECT \n        COALESCE(w.dispatch_date, f.sale_date) AS sale_date,\n        f.net_amount,\n        f.channel_code\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN (\n        SELECT web_order_id,\n               CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n        FROM fact_web_order\n        WHERE status IN ('delivered', 'collected')\n    ) w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999\n      AND p.category <> 'ZZ Test'\n      AND f.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n      AND m.member_id IN (SELECT member_id FROM contacted_members)\n)\nSELECT \n    COUNT(*) AS line_count,\n    SUM(net_amount) AS total_amount\nFROM all_member_sales\nWHERE sale_date BETWEEN '2026-05-04' AND '2026-05-24';\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "line_count | total_amount\n7960 | 187643.53\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:06:50",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 7,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.3 s.\n\n== Row count ==\n  [PASS] 1 rows, 2 columns: members_with_sales, total_spending\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 1 rows) ==\n  members_with_sales | total_spending\n  2605 | 190687.59\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:07:08",
+   "statement": "-- Spring Garden Launch 2026: Members contacted and their spending May 4-24, 2026\nWITH contacted_members AS (\n    -- Distinct members in the campaign exposure table\n    SELECT DISTINCT m.member_id\n    FROM fact_campaign_exposure e\n    JOIN dim_member m ON m.member_key = e.member_key\n    WHERE e.campaign_id = 19\n),\nweb_dispatch AS (\n    -- Web order dispatch dates in Helsinki time\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nmember_sales AS (\n    -- Net sales from contacted members, May 4-24, 2026\n    SELECT \n        m.member_id,\n        COALESCE(w.dispatch_date, f.sale_date) AS sale_date,\n        f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999\n      AND p.category <> 'ZZ Test'\n      AND m.member_id IN (SELECT member_id FROM contacted_members)\n)\nSELECT \n    (SELECT COUNT(*) FROM contacted_members) AS members_contacted,\n    ROUND(SUM(net_amount), 2) AS total_spending_eur\nFROM member_sales\nWHERE sale_date BETWEEN '2026-05-04' AND '2026-05-24';\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | total_spending_eur\n15001 | 190687.59\n(1 row)"
+  }
+ ]
+}

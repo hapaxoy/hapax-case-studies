@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, fulfilment_type, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), web_net AS (SELECT w.dispatch_date AS business_date, w.fulfilment_type, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, w.fulfilment_type, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period AS period, ROUND(100.0 * SUM(CASE WHEN n.fulfilment_type = 'click_and_collect' THEN n.net_sales ELSE 0 END) / SUM(n.net_sales), 2) AS click_collect_share_pct FROM web_net n JOIN dim_date d ON d.calendar_date = n.business_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (9, 10) GROUP BY 1, 2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "period", "click_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 9, 29.24],
+      ["FY2025/26", 10, 30.75]
+    ]
+  },
+  "definitions_applied": [
+    "Click-and-collect share = click-and-collect net sales divided by all web net sales (click-and-collect counted as web)",
+    "Net sales excluding VAT, after returns; returns reduce net sales on their own return date",
+    "Web sales recognised on the Helsinki dispatch date (dispatch_ts_utc converted from UTC), not the order date",
+    "Web identified by store_id 900, not by channel_code",
+    "Click-and-collect identified by fact_web_order.fulfilment_type; returns assigned to the order type through sales_line_id",
+    "Cancelled and still-processing orders are not web sales (only delivered and collected orders with a dispatch time)",
+    "Store 999 and category ZZ Test excluded",
+    "Fiscal periods from dim_date (fiscal_year and fiscal_period), not calendar months",
+    "Control total checked against rpt_daily_store_sales for store 900"
+  ],
+  "assumptions": [
+    "Request received 6 Oct 2026 (FY2026/27), so 'last year' is read as FY2025/26, as in past requests made in FY2026/27 (REQ-D04, D08, D28, D35). FY2025/26 P9 is 22 Dec 2025 to 25 Jan 2026 and P10 is 26 Jan to 22 Feb 2026.",
+    "'Periods 9 and 10' is read as one share per period, giving two rows, not a single combined share for the two periods.",
+    "'Web sales' is read as net sales on the company definition (excluding VAT, after returns), the basis used for the click-and-collect share in REQ-D22.",
+    "Returns count as web returns only when they were booked to the web shop (store 900), as the company net sales definition and the control total do."
+  ],
+  "caveats": [
+    "Web sales are dated by Helsinki dispatch date. For click-and-collect that is the date the order was ready for collection, not the date the customer collected it. The order date is not used.",
+    "Some refunds on web orders were processed in physical stores. In P9 these were 1,100.14 EUR on click-and-collect and 4,657.68 EUR on home delivery. In P10 they were 1,655.62 EUR and 3,356.20 EUR. They are not part of web net sales on the company definition and are not deducted. If every refund were followed back to its web order, the shares would shift slightly.",
+    "Before returns, the share is 28.95% for P9 (63,662.80 of 219,929.50 EUR) and 30.62% for P10 (42,118.86 of 137,569.07 EUR).",
+    "Figures after returns are: P9 click-and-collect 58,536.07 of 200,208.58 EUR web net sales; P10 37,861.39 of 123,131.15 EUR.",
+    "The control total agrees with rpt_daily_store_sales for store 900. Sales before returns were 219,929.50 and 137,569.07 EUR, web returns were 19,720.92 and 14,437.92 EUR, and net sales were 200,208.58 and 123,131.15 EUR for P9 and P10. No unexplained gap.",
+    "No ZZ Test or store 999 lines changed the totals for these periods (the control total matches with the filters applied).",
+    "Period 10 contains 4 weeks and period 9 contains 5 weeks. The shares are ratios, so period length does not distort them.",
+    "I did not use rpt.v_daily_sales or rpt.v_weekly_store_sales, or channel_code for web or click-and-collect. The periods are before the 3 Nov 2025 migration cut-off in the other direction, but fulfilment_type and store 900 are valid across the whole range."
+  ]
+}
+```

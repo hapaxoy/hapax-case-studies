@@ -1,0 +1,45 @@
+```json
+{
+  "sql": "WITH s_agg AS (SELECT p.sku, sum(f.net_amount - f.standard_cost) AS margin_before_returns FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE s.region = 'South' AND f.channel_code = 'ST' AND NOT f.staff_purchase_flag AND f.sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' GROUP BY p.sku), r_agg AS (SELECT p.sku, sum(r.refund_net - r.standard_cost_returned) AS returned_margin FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id WHERE s.region = 'South' AND NOT f.staff_purchase_flag AND r.return_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' GROUP BY p.sku) SELECT c.sku, c.product_name, c.category, round(a.margin_before_returns - coalesce(r.returned_margin, 0), 2) AS gross_margin_eur FROM s_agg a LEFT JOIN r_agg r USING (sku) JOIN dim_product c ON c.sku = a.sku AND c.is_current ORDER BY gross_margin_eur DESC LIMIT 10",
+  "result": {
+    "columns": ["sku", "product_name", "category", "gross_margin_eur"],
+    "rows": [
+      [103075, "Cushions &amp; Throws Tuulikki 338", "Home Textiles &amp; Decor", 3816.37],
+      [100955, "Interior Paint Norvik 298", "Paint &amp; Decorating", 3637.87],
+      [101763, "Fixings &amp; Fasteners Nordhem 594", "Tools &amp; Hardware", 3259.86],
+      [103390, "Bedroom Peltola 793", "Furniture", 2971.80],
+      [100953, "Interior Paint Tuulikki 224", "Paint &amp; Decorating", 2583.78],
+      [103062, "Cushions &amp; Throws Kuusela 657", "Home Textiles &amp; Decor", 2236.06],
+      [101398, "Power Tools Havu Pro 689", "Tools &amp; Hardware", 2164.26],
+      [102538, "Cookware Nordhem 469", "Kitchen &amp; Dining", 1672.44],
+      [101369, "Power Tools Koivuranta 416", "Tools &amp; Hardware", 1519.19],
+      [102468, "Plumbing Parts Ahvenisto 279", "Bathroom &amp; Plumbing", 1469.28]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal Q4 of FY2024/25 = periods P10 to P12, 2025-01-27 to 2025-04-27 (ref_fiscal_calendar, fully loaded)",
+    "Gross margin = net sales excluding VAT (net_amount) minus standard cost of the units sold (standard_cost)",
+    "Returns netted off: refund_net minus standard_cost_returned, booked on the return date within the quarter, in South stores",
+    "Region taken from the store version in force at the sale date (fact store_key joined to dim_store)",
+    "Staff purchases excluded (staff_purchase_flag), including returns against staff-purchase lines",
+    "Store channel only (ST) in physical South stores; web shop (store 900) and Training store (999) excluded",
+    "Products aggregated by sku across slowly changing versions; name and category from the current version"
+  ],
+  "assumptions": [
+    "Read 'South region' as the region definition in force during Q4 FY24/25. Stores 101 to 105 were in South until 2025-04-27 and moved to Capital Region on 2025-04-28. Kouvola (114) was East in the quarter and is not counted.",
+    "Read 'Q4 of FY24/25' as FY2024/25 fiscal quarter 4 (P10 to P12), not a calendar quarter.",
+    "Read 'top 10 products' as individual SKUs ranked by absolute gross margin in EUR, not margin percentage.",
+    "Excluded staff purchases because they are not ordinary commercial sales. The request did not say whether to include them.",
+    "Measured gross margin after returns, on a return-date basis. Dropping returns changes the order slightly: Power Tools Nordhem 370 (101411) would enter the top 10 and Plumbing Parts Ahvenisto 279 (102468) would drop out.",
+    "Online sales are excluded. Web lines carry the web-shop store and are not assigned to a region."
+  ],
+  "caveats": [
+    "Region restatement: on 2025-04-28 stores 101 to 105 (Helsinki Vuosaari, Helsinki Pitäjänmäki, Espoo Lommila, Vantaa Tammisto, Kerava) moved from South to Capital Region, and Kouvola moved from East to South. This answer uses the region as it was during the quarter. If 'South' means today's South (Kouvola in, the five Capital Region stores out), the figures and some of the ranking change. Margins fall to roughly 2,882 for Cushions &amp; Throws Tuulikki 338 and 2,131 for Interior Paint Norvik 298. Plumbing Parts Ahvenisto 279 would rank 7th and Power Tools Havu Pro 689 would move to 9th. Power Tools Koivuranta 416 would drop out, and SKUs 101888, 102116 and 103415 would be close to the cut-off. Tell me if you want the current-region view.",
+    "Staff purchases excluded. Including them (and their returns) changes the margins only slightly and does not change the top 10 membership.",
+    "Five SKUs have more than one product version within the quarter. They are aggregated by sku so each product appears once.",
+    "Checks run on the South store lines for the quarter found no duplicate sales lines, no duplicate returns, no orphan returns, standard costs matching the product version, VAT arithmetic consistent, and no sales outside product listing dates. 197 lines sold below standard cost were left in as genuine.",
+    "No store closure affects the quarter (the only closure listed before it is store 104 in July to August 2024).",
+    "Margins are at standard cost, not actual purchase cost. Standard costs are revalued each April, so costs of the units sold on or after 1 April 2025 come from the revalued unit costs."
+  ]
+}
+```

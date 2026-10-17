@@ -1,0 +1,29 @@
+Perfect! The query is valid. Now let me prepare the final answer. The request asks for active members by tier, so I'll exclude the total row and provide just the tier breakdown:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2025-12-21' AS as_of_date\n),\nas_of AS (\n    SELECT d.fiscal_week_end_date AS as_of_end\n    FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date = params.as_of_date\n),\nactive AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    CROSS JOIN as_of\n    WHERE f.sale_date > as_of.as_of_end - 364\n      AND f.sale_date <= as_of.as_of_end\n)\nSELECT cur.tier, COUNT(*) AS active_members\nFROM active a\nCROSS JOIN as_of\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nWHERE cur.tier IS NOT NULL\nGROUP BY cur.tier\nORDER BY cur.tier;",
+  "result": {
+    "columns": ["tier", "active_members"],
+    "rows": [
+      ["Basic", 14654],
+      ["Gold", 3901],
+      ["Silver", 10971]
+    ]
+  },
+  "definitions_applied": [
+    "Active member: made at least one purchase in trailing 52 fiscal weeks ending with the as-of week",
+    "Tier: member's tier as recorded on the as-of date"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26, the prior fiscal year",
+    "Period 8 end date is 2025-12-21 (Sunday, end of fiscal week 34)",
+    "Any channel included (store and web)",
+    "Breakdown by tier only; no total row included"
+  ],
+  "caveats": [
+    "Query includes staff purchases",
+    "Members with no tier version valid on the as-of date are excluded (tier IS NOT NULL); this is expected behaviour as only tier values are reported"
+  ]
+}
+```

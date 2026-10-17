@@ -1,0 +1,24 @@
+```json
+{
+  "sql": "WITH first_version AS (SELECT member_id, join_date, home_store_id, ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS version_no FROM dim_member) SELECT COUNT(DISTINCT member_id) AS new_members FROM first_version WHERE version_no = 1 AND join_date = DATE '2026-09-25'",
+  "result": {
+    "columns": ["new_members"],
+    "rows": [[39]]
+  },
+  "definitions_applied": [
+    "New member: counted on the join date, at the home store in their first dim_member version",
+    "Members counted by distinct member_id, not by member_key, because dim_member keeps one row per version",
+    "Canonical dim_member table only; the stg_member_updates staging table was not used"
+  ],
+  "assumptions": [
+    "25 September 2026 is read as the calendar date of join_date, which is a date column and not a UTC timestamp, so no Helsinki time conversion applies",
+    "The figure includes online sign-ups (home store 900, 8 of the 39) and sign-ups at every physical store, because the request asks for all new members and does not limit it to a channel or store"
+  ],
+  "caveats": [
+    "No data problems found for this date. The 39 members each have exactly one version row on that date, and join_date never differs between versions of the same member (0 exceptions across all members).",
+    "The first version of every member starts on its join date, so counting by first version and counting by join_date give the same 39.",
+    "The warehouse is loaded through 4 October 2026, so 25 September 2026 is fully covered.",
+    "No store 999 or test-category filter applies, because this is a member count and not a sales figure."
+  ]
+}
+```

@@ -1,0 +1,103 @@
+{
+ "run_id": "full-haiku-S-t16-r1",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T16",
+ "budget": 12,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "a95a88c86ddf51e44034e12d9f3892f9dd52ae4d0934613f8da994d3105cdbc0",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:42:50",
+   "statement": "SELECT DISTINCT fiscal_year FROM dim_date ORDER BY fiscal_year DESC LIMIT 5\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2026/27\nFY2025/26\nFY2024/25\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:42:55",
+   "statement": "SELECT MIN(calendar_date) as min_date, MAX(calendar_date) as max_date, MIN(fiscal_year) as min_fy, MAX(fiscal_year) as max_fy FROM dim_date\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min_date | max_date | min_fy | max_fy\n2024-04-29 | 2026-10-04 | FY2024/25 | FY2026/27\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:42:58",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date \nFROM ref_fiscal_calendar \nWHERE fiscal_year = 'FY2025/26' AND fiscal_period IN (9, 10)\nORDER BY fiscal_period\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2025/26 | 9 | FY2025/26 P09 | 2025-12-22 | 2026-01-25\nFY2025/26 | 10 | FY2025/26 P10 | 2026-01-26 | 2026-02-22\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:43:05",
+   "statement": "SELECT \n  d.fiscal_period,\n  f.fulfilment_type,\n  COUNT(f.web_order_id) as order_count,\n  SUM(f.order_total_gross) as total_gross\nFROM fact_web_order f\nJOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\nWHERE d.fiscal_year = 'FY2025/26' \n  AND d.fiscal_period IN (9, 10)\n  AND f.status IN ('delivered', 'collected', 'processing')\nGROUP BY d.fiscal_period, f.fulfilment_type\nORDER BY d.fiscal_period, f.fulfilment_type\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_period | fulfilment_type | order_count | total_gross\n9 | click_and_collect | 1123 | 78902.91\n9 | home_delivery | 2699 | 185504.50\n10 | click_and_collect | 707 | 52004.37\n10 | home_delivery | 1641 | 118856.21\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:43:12",
+   "statement": "SELECT DISTINCT status FROM fact_web_order\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "status\ndelivered\ncancelled\ncollected\nprocessing\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:43:18",
+   "statement": "SELECT \n  d.fiscal_period,\n  f.fulfilment_type,\n  COUNT(f.web_order_id) as order_count,\n  SUM(f.order_total_gross) as total_gross,\n  ROUND(100.0 * SUM(f.order_total_gross) / SUM(SUM(f.order_total_gross)) OVER (PARTITION BY d.fiscal_period), 2) as pct_share\nFROM fact_web_order f\nJOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\nWHERE d.fiscal_year = 'FY2025/26' \n  AND d.fiscal_period IN (9, 10)\n  AND f.status IN ('delivered', 'collected')\nGROUP BY d.fiscal_period, f.fulfilment_type\nORDER BY d.fiscal_period, f.fulfilment_type\n",
+   "n": 6,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_period | fulfilment_type | order_count | total_gross | pct_share\n9 | click_and_collect | 1123 | 78902.91 | 29.84\n9 | home_delivery | 2699 | 185504.50 | 70.16\n10 | click_and_collect | 707 | 52004.37 | 30.44\n10 | home_delivery | 1641 | 118856.21 | 69.56\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:43:24",
+   "statement": "SELECT \n  d.fiscal_period,\n  f.status,\n  f.fulfilment_type,\n  COUNT(f.web_order_id) as order_count,\n  SUM(f.order_total_gross) as total_gross\nFROM fact_web_order f\nJOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\nWHERE d.fiscal_year = 'FY2025/26' \n  AND d.fiscal_period IN (9, 10)\nGROUP BY d.fiscal_period, f.status, f.fulfilment_type\nORDER BY d.fiscal_period, f.status, f.fulfilment_type\n",
+   "n": 7,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_period | status | fulfilment_type | order_count | total_gross\n9 | cancelled | click_and_collect | 44 | 3404.05\n9 | cancelled | home_delivery | 131 | 9757.49\n9 | collected | click_and_collect | 1123 | 78902.91\n9 | delivered | home_delivery | 2699 | 185504.50\n10 | cancelled | click_and_collect | 27 | 1590.63\n10 | cancelled | home_delivery | 74 | 4852.43\n10 | collected | click_and_collect | 707 | 52004.37\n10 | delivered | home_delivery | 1641 | 118856.21\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:43:32",
+   "statement": "SELECT \n  d.fiscal_period,\n  f.fulfilment_type,\n  SUM(f.order_total_gross) as order_total_gross,\n  SUM(fsl.net_amount) as sales_line_net\nFROM fact_web_order f\nJOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date\nLEFT JOIN fact_sales_line fsl ON f.web_order_id = fsl.receipt_id AND fsl.channel_code = 'WB'\nWHERE d.fiscal_year = 'FY2025/26' \n  AND d.fiscal_period IN (9, 10)\n  AND f.status IN ('delivered', 'collected')\nGROUP BY d.fiscal_period, f.fulfilment_type\nORDER BY d.fiscal_period, f.fulfilment_type\n",
+   "n": 8,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_period | fulfilment_type | order_total_gross | sales_line_net\n9 | click_and_collect | 78902.91 | NULL\n9 | home_delivery | 185504.50 | NULL\n10 | click_and_collect | 52004.37 | NULL\n10 | home_delivery | 118856.21 | NULL\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:43:36",
+   "statement": "SELECT \n  d.fiscal_period,\n  COUNT(*) as line_count,\n  SUM(fsl.net_amount) as total_net\nFROM fact_sales_line fsl\nJOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2025/26' \n  AND d.fiscal_period IN (9, 10)\n  AND fsl.channel_code = 'WB'\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 9,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "fiscal_period | line_count | total_net\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:43:41",
+   "statement": "SELECT \n  d.fiscal_period,\n  fsl.channel_code,\n  COUNT(*) as line_count,\n  SUM(fsl.net_amount) as total_net\nFROM fact_sales_line fsl\nJOIN dim_date d ON fsl.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2025/26' \n  AND d.fiscal_period IN (9, 10)\nGROUP BY d.fiscal_period, fsl.channel_code\nORDER BY d.fiscal_period, fsl.channel_code\n",
+   "n": 10,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_period | channel_code | line_count | total_net\n9 | NULL | 52926 | 1289654.92\n10 | NULL | 37735 | 920162.76\n(2 rows)"
+  }
+ ]
+}

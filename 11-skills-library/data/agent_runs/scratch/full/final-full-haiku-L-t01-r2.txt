@@ -1,0 +1,73 @@
+Perfect! The gap is explained by the LFL definition which explicitly excludes the web shop (store_id 900), so this is the expected behavior. Now I have all the information needed to provide my final answer.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS ty_year, 'FY2025/26' AS ly_year, 14 AS first_week, 17 AS last_week\n),\nrange_start AS (\n    SELECT MIN(d.calendar_date) AS first_day\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year = params.ty_year AND d.fiscal_week = params.first_week\n),\nweeks AS (\n    SELECT DISTINCT d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n),\nstore_weeks AS (\n    SELECT st.store_id, w.fiscal_year, w.fiscal_week,\n           (st.open_date IS NULL OR st.open_date &lt;= w.fiscal_week_start_date)\n           AND (st.close_date IS NULL OR st.close_date &gt;= w.fiscal_week_end_date)\n           AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                           WHERE c.store_id = st.store_id\n                             AND c.closure_start_date &lt;= w.fiscal_week_end_date\n                             AND c.closure_end_date &gt;= w.fiscal_week_start_date) AS trading\n    FROM dim_store st\n    CROSS JOIN weeks w\n    WHERE st.is_current AND st.store_id &lt; 900\n),\nlfl_store_weeks AS (\n    SELECT ty.store_id, ty.fiscal_week\n    FROM store_weeks ty\n    CROSS JOIN params\n    CROSS JOIN range_start\n    JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = params.ly_year\n    JOIN dim_store st   ON st.store_id = ty.store_id AND st.is_current\n    WHERE ty.fiscal_year = params.ty_year AND ty.trading AND ly.trading\n      AND (st.open_date IS NULL OR st.open_date &lt;= range_start.first_day - 364)\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n),\nlfl_sales AS (\n    SELECT d.fiscal_year, n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n    GROUP BY d.fiscal_year, n.store_id\n)\nSELECT ty.store_id, cs.store_name, ty.net_sales AS this_year, ly.net_sales AS last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct\nFROM lfl_sales ty\nCROSS JOIN params\nJOIN lfl_sales ly ON ly.store_id = ty.store_id AND ly.fiscal_year = params.ly_year\nJOIN dim_store cs ON cs.store_id = ty.store_id AND cs.is_current\nWHERE ty.fiscal_year = params.ty_year\nORDER BY ty.store_id;",
+  "result": {
+    "columns": ["store_id", "store_name", "this_year", "last_year", "lfl_growth_pct"],
+    "rows": [
+      [101, "Helsinki Vuosaari", 31715.79, 31622.99, 0.29],
+      [102, "Helsinki Pitäjänmäki", 59706.51, 53313.10, 11.99],
+      [103, "Espoo Lommila", 22824.61, 22470.13, 1.58],
+      [104, "Vantaa Tammisto", 41196.69, 41971.64, -1.85],
+      [105, "Kerava", 8503.09, 10118.08, -15.96],
+      [106, "Porvoo", 11133.95, 11697.17, -4.82],
+      [107, "Hyvinkää", 27550.12, 26055.76, 5.74],
+      [108, "Lahti", 44758.85, 43482.91, 2.93],
+      [109, "Hämeenlinna", 23588.06, 28614.15, -17.57],
+      [110, "Turku Kupittaa", 41376.61, 45165.18, -8.39],
+      [111, "Turku Härmälä", 20261.96, 18979.41, 6.76],
+      [112, "Raisio", 10670.38, 9316.21, 14.54],
+      [113, "Salo", 9555.04, 10100.56, -5.40],
+      [114, "Kouvola", 25636.27, 25368.63, 1.06],
+      [115, "Tampere Hervanta", 64076.81, 66117.96, -3.09],
+      [116, "Tampere Lielahti", 40365.05, 40872.94, -1.24],
+      [117, "Tampere Kaleva", 37826.15, 37532.97, 0.78],
+      [118, "Nokia", 34089.41, 33772.68, 0.94],
+      [119, "Pori", 32011.94, 35671.41, -10.26],
+      [120, "Rauma", 9150.75, 8690.68, 5.29],
+      [121, "Vaasa", 31410.77, 31970.99, -1.75],
+      [122, "Seinäjoki", 25295.06, 26236.96, -3.59],
+      [123, "Kokkola", 11387.22, 9398.29, 21.16],
+      [124, "Jyväskylä Palokka", 29210.75, 28799.06, 1.43],
+      [125, "Kuopio", 43412.25, 41857.64, 3.71],
+      [126, "Joensuu", 30156.45, 32760.33, -7.95],
+      [127, "Mikkeli", 19921.39, 27002.23, -26.22],
+      [128, "Lappeenranta", 30199.33, 28789.56, 4.90],
+      [130, "Kotka", 13605.35, 11910.84, 14.23],
+      [131, "Oulu Kaakkuri", 43750.46, 38630.70, 13.25],
+      [132, "Oulu Linnanmaa", 30420.56, 31193.18, -2.48],
+      [133, "Kemi", 10461.18, 9589.27, 9.09],
+      [134, "Rovaniemi", 20822.72, 20399.06, 2.08],
+      [135, "Kajaani", 8507.72, 7611.40, 11.78],
+      [136, "Tampere Lamminpää", 29819.11, 30449.95, -2.07],
+      [137, "Lohja", 12955.76, 10333.21, 25.38],
+      [138, "Iisalmi", 8976.69, 10024.01, -10.45],
+      [139, "Raahe", 14167.71, 12852.08, 10.24]
+    ]
+  },
+  "definitions_applied": [
+    "DEF-LFL-BASIS: Like-for-like compares physical stores week by week",
+    "DEF-LFL-OPEN: A store must have been open at least 52 weeks (364 days) before the first day of the period",
+    "DEF-LFL-BOTH-YEARS: A store-week counts only if the store traded in both the current year and the prior year",
+    "DEF-LFL-REFIT: Refit closure weeks are excluded from both years for the affected store",
+    "DEF-LFL-WEEK53: Week 53 is never included in LFL comparison",
+    "DEF-NET-SALES: Net sales excluding VAT, after returns",
+    "DEF-STORE-SCOPE: Physical stores only (store_id &lt; 900); web shop and training store excluded",
+    "DEF-TIMEZONE: Web order revenue recorded on Helsinki dispatch date, not UTC"
+  ],
+  "assumptions": [
+    "Period 4 this year is FY2026/27 P04 (fiscal weeks 14-17, 2026-08-03 to 2026-08-30)",
+    "Last year is FY2025/26 P04 (same fiscal weeks in the prior fiscal year)",
+    "Request asks for store-level breakdown (not regional summary) based on 'the stores' (plural)",
+    "Store-level LFL is calculated for all 38 physical stores that meet the LFL criteria"
+  ],
+  "caveats": [
+    "Web shop (store_id 900) is excluded from LFL by definition; control total gap of EUR 184,965 is web shop sales",
+    "Lohja (store 137) entered the LFL base on 3 November 2025; this is its first full period in the comparison",
+    "Tampere Lamminpää (store 136) entered the LFL base on 2 September 2024; it has one full prior-year comparison",
+    "Stores meeting the opening rule are only those open at least 52 weeks before P04 start (2025-06-01)",
+    "UTC/Helsinki timezone edge: some web orders and transactions near midnight appear in different days depending on timezone; results use Helsinki time throughout"
+  ]
+}
+```

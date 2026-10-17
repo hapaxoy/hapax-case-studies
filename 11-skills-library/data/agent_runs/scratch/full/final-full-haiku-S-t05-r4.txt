@@ -1,0 +1,28 @@
+```json
+{
+  "sql": "WITH sales_data AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    SUM(f.net_amount) as sales_amount\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND d.fiscal_week IN (5, 6, 7, 8)\n    AND f.staff_purchase_flag = FALSE\n  GROUP BY d.fiscal_year, d.fiscal_week\n),\nreturns_data AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_week,\n    SUM(r.refund_net) as refund_amount\n  FROM fact_return_line r\n  INNER JOIN dim_date d ON d.calendar_date = r.return_date\n  WHERE d.fiscal_year IN ('FY2024/25', 'FY2025/26')\n    AND d.fiscal_week IN (5, 6, 7, 8)\n  GROUP BY d.fiscal_year, d.fiscal_week\n),\ncombined AS (\n  SELECT \n    s.fiscal_year,\n    s.fiscal_week,\n    COALESCE(s.sales_amount, 0) - COALESCE(r.refund_amount, 0) as net_sales\n  FROM sales_data s\n  LEFT JOIN returns_data r ON s.fiscal_year = r.fiscal_year AND s.fiscal_week = r.fiscal_week\n),\npivot_data AS (\n  SELECT \n    fiscal_week,\n    MAX(CASE WHEN fiscal_year = 'FY2024/25' THEN net_sales END) as sales_fy2024_25,\n    MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) as sales_fy2025_26\n  FROM combined\n  GROUP BY fiscal_week\n)\nSELECT \n  fiscal_week as week,\n  sales_fy2024_25 as sales_last_year,\n  sales_fy2025_26 as sales_this_year,\n  ROUND(((sales_fy2025_26 - sales_fy2024_25) / sales_fy2024_25 * 100), 2) as growth_percent\nFROM pivot_data\nORDER BY fiscal_week",
+  "result": {
+    "columns": ["week", "sales_last_year", "sales_this_year", "growth_percent"],
+    "rows": [
+      [5, 311154.84, 324879.09, 4.41],
+      [6, 307461.97, 327560.36, 6.54],
+      [7, 307111.87, 322881.86, 5.13],
+      [8, 201188.23, 222867.53, 10.78]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: fact_sales_line net amounts minus fact_return_line refunds",
+    "Staff purchases excluded from sales totals",
+    "All channels combined (store and web)",
+    "Period 2 equals fiscal weeks 5-8",
+    "Growth percentage calculated as year-on-year change"
+  ],
+  "assumptions": [
+    "Total company sales includes all channels without segmentation",
+    "Staff purchases excluded as non-commercial transactions",
+    "Returns matched to return date rather than original sale date",
+    "This year is FY2025/26, last year is FY2024/25"
+  ],
+  "caveats": []
+}
+```

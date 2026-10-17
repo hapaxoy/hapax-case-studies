@@ -1,0 +1,42 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku, f.net_amount AS net_sales, f.standard_cost AS cost FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test') SELECT ROW_NUMBER() OVER (ORDER BY SUM(n.net_sales - n.cost) DESC) AS rank, 'FY2024/25' AS fiscal_year, 4 AS fiscal_quarter, cp.sku, cp.product_name, cp.brand, ROUND(SUM(n.net_sales - n.cost), 2) AS gross_margin_eur FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current WHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 10 AND 12 AND cs.region = 'South' GROUP BY cp.sku, cp.product_name, cp.brand ORDER BY SUM(n.net_sales - n.cost) DESC LIMIT 10",
+  "result": {
+    "columns": ["rank", "fiscal_year", "fiscal_quarter", "sku", "product_name", "brand", "gross_margin_eur"],
+    "rows": [
+      [1, "FY2024/25", 4, 103075, "Cushions &amp; Throws Tuulikki 338", "Tuulikki", 2927.42],
+      [2, "FY2024/25", 4, 100955, "Interior Paint Norvik 298", "Norvik", 2138.48],
+      [3, "FY2024/25", 4, 101763, "Fixings &amp; Fasteners Nordhem 594", "Nordhem", 2074.88],
+      [4, "FY2024/25", 4, 103390, "Bedroom Peltola 793", "Peltola", 1859.55],
+      [5, "FY2024/25", 4, 100953, "Interior Paint Tuulikki 224", "Tuulikki", 1383.86],
+      [6, "FY2024/25", 4, 103062, "Cushions &amp; Throws Kuusela 657", "Kuusela", 1346.56],
+      [7, "FY2024/25", 4, 102468, "Plumbing Parts Ahvenisto 279", "Ahvenisto", 1342.48],
+      [8, "FY2024/25", 4, 102538, "Cookware Nordhem 469", "Nordhem", 1177.39],
+      [9, "FY2024/25", 4, 101398, "Power Tools Havu Pro 689", "Havu Pro", 1095.66],
+      [10, "FY2024/25", 4, 101888, "Indoor Lighting Havu 419", "Havu", 978.84]
+    ]
+  },
+  "definitions_applied": [
+    "Gross margin = net sales minus standard cost of goods sold, both after returns (returned units credited back at standard_cost_returned)",
+    "Net sales excludes VAT; returns reduce sales on their own return date",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Web sales recognised on the Helsinki dispatch date (delivered/collected orders only); web (store 900, region Online) is not in the South region",
+    "As-is hierarchy: region taken from the current store version and product name, brand and category from the current product version, by sku",
+    "Fiscal Q4 = periods 10 to 12 = fiscal weeks 40 to 52 (27 Jan 2025 to 27 Apr 2025, 91 days)",
+    "Staff purchases included (company net sales definition)"
+  ],
+  "assumptions": [
+    "Q4 of FY24/25 is read as FY2024/25 periods 10 to 12 (27 January to 27 April 2025). The request names the year, so no relative reading was needed.",
+    "South is read as-is, the current company definition. That is ten stores: 106 Porvoo, 107 Hyvinkää, 108 Lahti, 109 Hämeenlinna, 110 Turku Kupittaa, 111 Turku Härmälä, 112 Raisio, 113 Salo, 114 Kouvola and 137 Lohja. The request did not ask for regions as they were at the time.",
+    "Products are ranked at the article (sku) level on euro gross margin, not margin percentage, and shown under their current name and brand.",
+    "Ranking is by gross margin in euros. Net sales and margin % were not asked for and are left out."
+  ],
+  "caveats": [
+    "Region reorganisation of 28 April 2025: South as-is no longer contains the five stores that moved to the new Capital Region (101 Vuosaari, 102 Pitäjänmäki, 103 Lommila, 104 Tammisto, 105 Kerava). It does contain Kouvola (114, moved from East to South). Those stores were in South for most of this quarter, so the old-report South would give larger figures and a different list. As-was, ranks 9 and 10 would be Power Tools Koivuranta 416 (sku 101369) and Plumbing Parts Ahvenisto 279, and Indoor Lighting Havu 419 would drop out. Ranks 1 to 8 would be the same articles in the same order, apart from Plumbing Parts Ahvenisto 279 and Power Tools Havu Pro 689, which swap places.",
+    "Control check: net sales for the ten South stores over the same 13 weeks agree to the cent with rpt_daily_store_sales, store by store (gap 0.00 in all ten stores). I did not run a control for the product-level margin itself, since the control table has no product dimension.",
+    "I found no duplicate sales or return line keys in the range and no null costs, quantities or non-positive net amounts, so no data corrections were needed. Only deprecated objects were avoided (rpt.v_daily_sales, the bak_, stg_, tmp_ and _old tables were not used).",
+    "Margin uses standard cost, which is revalued each April. The quarter ends just before the April 2025 revaluation takes effect, and the cost on each line is the one recorded at sale.",
+    "Dates 27 Jan to 27 Apr 2025 are whole fiscal weeks, fully inside the warehouse load (through 4 Oct 2026). Returns booked after 27 April 2025 on sales in this quarter are not included, because returns count on their own return date."
+  ]
+}
+```

@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "SELECT s.region, sum(CASE WHEN f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-08-31' THEN f.gross_amount ELSE 0 END) AS gross_sales_incl_vat_aug_2024, sum(CASE WHEN f.sale_date BETWEEN DATE '2024-09-01' AND DATE '2024-09-30' THEN f.gross_amount ELSE 0 END) AS gross_sales_incl_vat_sep_2024 FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key WHERE f.sale_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' AND s.store_id &lt;&gt; 999 GROUP BY s.region ORDER BY s.region",
+  "result": {
+    "columns": ["region", "gross_sales_incl_vat_aug_2024", "gross_sales_incl_vat_sep_2024"],
+    "rows": [
+      ["East", 296762.31, 249751.64],
+      ["North", 175960.85, 149625.27],
+      ["Online", 174410.47, 160395.63],
+      ["South", 489776.38, 445837.96],
+      ["West", 402582.35, 363697.29]
+    ]
+  },
+  "definitions_applied": [
+    "Gross sales = fact_sales_line.gross_amount (EUR including VAT), before returns (fact_return_line not used)",
+    "Region as at the time of sale: fact_sales_line.store_key joined to the dim_store version valid on the sale date, not the current store row",
+    "Calendar months by sale_date, which is the local Finnish business date",
+    "VAT as recorded on each line: 24% standard rate to 31 Aug 2024 and 25.5% from 1 Sep 2024, 14% and 10% reduced classes; gross_amount reconciles to net_amount x (1 + vat_rate) on every line",
+    "Web shop (store_id 900, region Online) treated as its own region row"
+  ],
+  "assumptions": [
+    "August and September 2024 mean calendar months (1-31 Aug, 1-30 Sep), not fiscal periods",
+    "Staff purchases (staff_purchase_flag = true) are included, because they are taxable sales that belong in a VAT filing",
+    "Web shop sales are included as a separate Online row because they carry VAT and are part of gross sales; Finance can drop that row if it is filed elsewhere",
+    "The 'old reports' regions are the four regions North, South, East and West held on the store version valid at the time (for example Kouvola was East, and the stores now in Capital Region were South)"
+  ],
+  "caveats": [
+    "Excluded the Training store (store_id 999, region Head office), 283 test lines worth 7,633.94 EUR gross across the two months, because it is not a trading store",
+    "Using the current store row would give the wrong answer: since 28 Apr 2025 stores 101-105 are in Capital Region and Kouvola (114) is in South, but in Aug-Sep 2024 they were South and East. The store_key on each sales line already points to the version valid on the sale date, so no remapping was needed",
+    "Tampere Lamminpää (store 136) opened on 2 Sep 2024 and is in West for September only, with 19,657.54 EUR gross",
+    "The 1 Sep 2024 change of the standard VAT rate from 24% to 25.5% is in the data, so September gross is not comparable with August on a like-for-like VAT basis",
+    "The Online row is a channel, not a geographic region, and is included on top of the four sales regions",
+    "Checked and found no problem: no duplicate lines, no days missing and no lines outside the store version validity",
+    "413 web lines have a UTC timestamp on a different calendar day from sale_date, because the Finnish local date is used; the sale_date was used as recorded"
+  ]
+}
+```

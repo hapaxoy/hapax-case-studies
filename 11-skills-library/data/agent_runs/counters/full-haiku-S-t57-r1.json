@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t57-r1",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T57",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "443ef6d6aa9f049a05be953d6c5d16a4d1b9ad58dcfba04753f76a9586e86bd6",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:36",
+   "statement": "SELECT DISTINCT store_id, store_name, city, region\nFROM dim_store\nWHERE is_current = true AND store_name LIKE '%Nokia%'\nORDER BY store_name\nLIMIT 20\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | store_name | city | region\n118 | Nokia | Nokia | West\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:40",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date\nFROM ref_fiscal_calendar\nWHERE fiscal_period = 5\nORDER BY fiscal_year DESC\nLIMIT 5\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date\nFY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27\nFY2025/26 | 5 | FY2025/26 P05 | 2025-08-25 | 2025-09-21\nFY2024/25 | 5 | FY2024/25 P05 | 2024-08-26 | 2024-09-22\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:44",
+   "statement": "SELECT MAX(sale_date) as latest_sale_date\nFROM fact_sales_line\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "latest_sale_date\n2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:49",
+   "statement": "SELECT \n  p.subcategory,\n  SUM(f.quantity) as units_sold\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE s.store_id = 118\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_period = 5\n  AND f.staff_purchase_flag = false\nGROUP BY p.subcategory\nORDER BY units_sold DESC\nLIMIT 3\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "subcategory | units_sold\nFixings & Fasteners | 560\nIndoor Lighting | 150\nCleaning Products | 136\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:55",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  COUNT(DISTINCT f.sales_line_id) as sales_lines,\n  SUM(f.quantity) as total_units_sold,\n  SUM(CASE WHEN f.staff_purchase_flag = true THEN f.quantity ELSE 0 END) as staff_units\nFROM fact_sales_line f\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE s.store_id = 118\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_period = 5\nGROUP BY d.fiscal_year, d.fiscal_period\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | sales_lines | total_units_sold | staff_units\nFY2026/27 | 5 | 1250 | 2245 | 34\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:35:59",
+   "statement": "SELECT *\nFROM ref_store_closure\nWHERE store_id = 118\nORDER BY closure_start_date\n",
+   "n": 6,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "closure_id | store_id | closure_type | closure_start_date | closure_end_date | weeks_closed\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:04",
+   "statement": "SELECT \n  p.subcategory,\n  SUM(CASE WHEN r.sales_line_id IS NOT NULL THEN r.quantity_returned ELSE 0 END) as units_returned\nFROM fact_sales_line f\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE s.store_id = 118\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_period = 5\nGROUP BY p.subcategory\nHAVING SUM(CASE WHEN r.sales_line_id IS NOT NULL THEN r.quantity_returned ELSE 0 END) > 0\nORDER BY units_returned DESC\nLIMIT 5\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "subcategory | units_returned\nCables & Plugs | 7\nStorage Boxes | 6\nFixings & Fasteners | 6\nPlants & Flowers | 6\nTableware | 5\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:10",
+   "statement": "SELECT \n  p.subcategory,\n  SUM(f.quantity) as units_sold,\n  SUM(CASE WHEN r.sales_line_id IS NOT NULL THEN r.quantity_returned ELSE 0 END) as units_returned,\n  SUM(f.quantity) - COALESCE(SUM(CASE WHEN r.sales_line_id IS NOT NULL THEN r.quantity_returned ELSE 0 END), 0) as net_units\nFROM fact_sales_line f\nLEFT JOIN fact_return_line r ON f.sales_line_id = r.sales_line_id\nINNER JOIN dim_store s ON f.store_key = s.store_key\nINNER JOIN dim_product p ON f.product_key = p.product_key\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE s.store_id = 118\n  AND d.fiscal_year = 'FY2026/27'\n  AND d.fiscal_period = 5\n  AND f.staff_purchase_flag = false\nGROUP BY p.subcategory\nORDER BY units_sold DESC\nLIMIT 5\n",
+   "n": 8,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "subcategory | units_sold | units_returned | net_units\nFixings & Fasteners | 560 | 6 | 554\nIndoor Lighting | 150 | 4 | 146\nCleaning Products | 136 | 1 | 135\nStorage Boxes | 136 | 6 | 130\nPlants & Flowers | 134 | 6 | 128\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:36:19",
+   "statement": "WITH period_5_sales AS (\n  SELECT \n    p.subcategory,\n    SUM(f.quantity) as units_sold,\n    ROW_NUMBER() OVER (ORDER BY SUM(f.quantity) DESC) as rank\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  INNER JOIN dim_product p ON f.product_key = p.product_key\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE s.store_id = 118\n    AND d.fiscal_year = 'FY2026/27'\n    AND d.fiscal_period = 5\n    AND f.staff_purchase_flag = false\n  GROUP BY p.subcategory\n)\nSELECT \n  rank,\n  subcategory,\n  units_sold\nFROM period_5_sales\nWHERE rank <= 3\nORDER BY rank\n",
+   "n": 9,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "rank | subcategory | units_sold\n1 | Fixings & Fasteners | 560\n2 | Indoor Lighting | 150\n3 | Cleaning Products | 136\n(3 rows)"
+  }
+ ]
+}

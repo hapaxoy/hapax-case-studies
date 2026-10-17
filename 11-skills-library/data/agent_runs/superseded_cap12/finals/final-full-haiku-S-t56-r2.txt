@@ -1,0 +1,27 @@
+I've used all 12 queries. Based on my investigation, I found a critical data issue: the requested web sales data exists but the `channel_code` field is NULL for all December 2025 sales. Web sales must be identified by `channel_id = 2` ("Web home delivery") instead.
+
+Here is my response:
+
+```json
+{
+  "sql": "SELECT d.calendar_date as sale_date, SUM(f.net_amount) as net_sales FROM fact_sales_line f INNER JOIN dim_date d ON f.sale_date = d.calendar_date WHERE f.channel_id = 2 AND f.sale_date BETWEEN '2025-12-15' AND '2025-12-23' GROUP BY d.calendar_date ORDER BY d.calendar_date",
+  "result": {
+    "columns": ["sale_date", "net_sales"],
+    "rows": []
+  },
+  "definitions_applied": [
+    "Web sales: channel_id = 2 (Web home delivery)",
+    "Net sales: net_amount field from fact_sales_line",
+    "Business date: sale_date field from fact_sales_line"
+  ],
+  "assumptions": [
+    "Request for 'web sales' interpreted as Web home delivery (channel_id = 2) only, not including Click and collect (channel_id = 3)",
+    "Period specified as calendar dates 2025-12-15 through 2025-12-23 inclusive"
+  ],
+  "caveats": [
+    "Unable to retrieve data: exhausted query limit while investigating. Channel identification issue in data: channel_code field is NULL for all December 2025 sales lines, requiring use of channel_id (= 2 for web home delivery) for filtering. Legacy channel code 'WB' could not be used.",
+    "Alternative interpretation: if 'web sales' should include both Web home delivery (channel_id 2, 2,850 lines) and Click and collect (channel_id 3, 1,009 lines), the SQL should use channel_id IN (2, 3) instead.",
+    "All December fiscal periods (P08, P09) are marked as fully_loaded in the warehouse, but this query could not be completed to retrieve the actual daily figures before query limit was reached."
+  ]
+}
+```

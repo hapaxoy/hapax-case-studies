@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "SELECT \n  dp.category,\n  SUM(CASE WHEN dd.fiscal_year = 'FY2024/25' THEN fsl.net_amount ELSE 0 END) AS net_sales_fy2024_25,\n  SUM(CASE WHEN dd.fiscal_year = 'FY2025/26' THEN fsl.net_amount ELSE 0 END) AS net_sales_fy2025_26,\n  ROUND((SUM(CASE WHEN dd.fiscal_year = 'FY2025/26' THEN fsl.net_amount ELSE 0 END) - \n          SUM(CASE WHEN dd.fiscal_year = 'FY2024/25' THEN fsl.net_amount ELSE 0 END)) / \n         SUM(CASE WHEN dd.fiscal_year = 'FY2024/25' THEN fsl.net_amount ELSE 0 END) * 100, 2) AS growth_percent\nFROM fact_sales_line fsl\nINNER JOIN dim_product dp ON fsl.product_key = dp.product_key\nINNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nWHERE dd.fiscal_period = 8\n  AND dd.fiscal_year IN ('FY2024/25', 'FY2025/26')\n  AND dp.category IN ('Garden', 'Electrical')\nGROUP BY dp.category\nORDER BY dp.category",
+  "result": {
+    "columns": ["category", "net_sales_fy2024_25", "net_sales_fy2025_26", "growth_percent"],
+    "rows": [
+      ["Electrical", 150317.52, 182217.99, 21.22],
+      ["Garden", 59501.02, 39146.83, -34.21]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: sum of fact_sales_line.net_amount (excluding VAT, after line discounts)",
+    "FY2024/25: fiscal year 2024/25 (the year before)",
+    "FY2025/26: fiscal year 2025/26 (last year)",
+    "Period 8: fiscal period 8 in each fiscal year (late November to late December)",
+    "Growth: percentage change from FY2024/25 to FY2025/26"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (most recent completed fiscal year)",
+    "The year before interpreted as FY2024/25 (prior fiscal year)",
+    "Both periods use fiscal calendar period 8 for seasonal comparability",
+    "All sales channels included (store and web)",
+    "All store formats and regions included without subdivision"
+  ],
+  "caveats": [
+    "Both fiscal periods are fully loaded in the warehouse",
+    "Net sales figures exclude returns; fact_return_line is not subtracted from sales",
+    "Staff purchases are included in the net sales figures (staff_purchase_flag not filtered)",
+    "Garden category shows significant decline of 34.21%, warrant review for causes (promotional timing, inventory, supply)"
+  ]
+}
+```

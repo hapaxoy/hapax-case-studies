@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t33-r1",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T33",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "ad98358aec435037ecba1d6c9949974c573ca883de715af9859ec7c17461cdba",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:02",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_week, min(calendar_date) d0, max(calendar_date) d1, count(*) n, min(fiscal_week_start_date) ws, max(fiscal_week_end_date) we\nFROM dim_date WHERE fiscal_period = 2 AND fiscal_year IN ('FY2026/27','FY2025/26','FY2024/25') GROUP BY ALL ORDER BY 1,3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_week | d0 | d1 | n | ws | we\nFY2024/25 | 2 | 5 | 2024-05-27 | 2024-06-02 | 7 | 2024-05-27 | 2024-06-02\nFY2024/25 | 2 | 6 | 2024-06-03 | 2024-06-09 | 7 | 2024-06-03 | 2024-06-09\nFY2024/25 | 2 | 7 | 2024-06-10 | 2024-06-16 | 7 | 2024-06-10 | 2024-06-16\nFY2024/25 | 2 | 8 | 2024-06-17 | 2024-06-23 | 7 | 2024-06-17 | 2024-06-23\nFY2025/26 | 2 | 5 | 2025-05-26 | 2025-06-01 | 7 | 2025-05-26 | 2025-06-01\nFY2025/26 | 2 | 6 | 2025-06-02 | 2025-06-08 | 7 | 2025-06-02 | 2025-06-08\nFY2025/26 | 2 | 7 | 2025-06-09 | 2025-06-15 | 7 | 2025-06-09 | 2025-06-15\nFY2025/26 | 2 | 8 | 2025-06-16 | 2025-06-22 | 7 | 2025-06-16 | 2025-06-22\nFY2026/27 | 2 | 5 | 2026-06-01 | 2026-06-07 | 7 | 2026-06-01 | 2026-06-07\nFY2026/27 | 2 | 6 | 2026-06-08 | 2026-06-14 | 7 | 2026-06-08 | 2026-06-14\nFY2026/27 | 2 | 7 | 2026-06-15 | 2026-06-21 | 7 | 2026-06-15 | 2026-06-21\nFY2026/27 | 2 | 8 | 2026-06-22 | 2026-06-28 | 7 | 2026-06-22 | 2026-06-28\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:09",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nweekly AS (\n    SELECT d.fiscal_year, d.fiscal_week, SUM(n.net_sales) AS net_sales\n    FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date\n    WHERE d.fiscal_year IN ('FY2026/27','FY2025/26') AND d.fiscal_period = 2\n    GROUP BY 1, 2\n),\nctrl AS (\n    SELECT d.fiscal_year, d.fiscal_week, SUM(c.net_sales) AS ctrl_net, SUM(CASE WHEN c.store_id=999 THEN c.net_sales ELSE 0 END) AS ctrl_999\n    FROM rpt_daily_store_sales c JOIN dim_date d ON d.calendar_date = c.business_date\n    WHERE d.fiscal_year IN ('FY2026/27','FY2025/26') AND d.fiscal_period = 2\n    GROUP BY 1, 2\n)\nSELECT w.*, c.ctrl_net, c.ctrl_999, w.net_sales - c.ctrl_net AS gap FROM weekly w JOIN ctrl c USING (fiscal_year, fiscal_week) ORDER BY 1, 2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | net_sales | ctrl_net | ctrl_999 | gap\nFY2025/26 | 5 | 330868.04 | 330868.04 | 0.00 | 0.00\nFY2025/26 | 6 | 329334.78 | 329334.78 | 0.00 | 0.00\nFY2025/26 | 7 | 325472.70 | 325472.70 | 0.00 | 0.00\nFY2025/26 | 8 | 210207.18 | 210207.18 | 0.00 | 0.00\nFY2026/27 | 5 | 341054.61 | 341054.61 | 0.00 | 0.00\nFY2026/27 | 6 | 362249.20 | 362249.20 | 0.00 | 0.00\nFY2026/27 | 7 | 220623.76 | 220623.76 | 0.00 | 0.00\nFY2026/27 | 8 | 370720.07 | 370720.07 | 0.00 | 0.00\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:15",
+   "statement": "SELECT d.fiscal_year, d.fiscal_week, d.calendar_date, d.day_name, d.is_trading_day, d.holiday_name,\n       SUM(c.net_sales) AS net, SUM(c.receipts) AS receipts, COUNT(DISTINCT c.store_id) AS stores\nFROM dim_date d LEFT JOIN rpt_daily_store_sales c ON c.business_date = d.calendar_date\nWHERE d.fiscal_period = 2 AND d.fiscal_year IN ('FY2026/27','FY2025/26') AND d.fiscal_week IN (7,8)\nGROUP BY ALL ORDER BY 3\n",
+   "n": 3,
+   "ok": true,
+   "rows": 28,
+   "output_preview": "fiscal_year | fiscal_week | calendar_date | day_name | is_trading_day | holiday_name | net | receipts | stores\nFY2025/26 | 7 | 2025-06-09 | Monday | true | NULL | 42246.40 | 835 | 40\nFY2025/26 | 7 | 2025-06-10 | Tuesday | true | NULL | 42467.36 | 835 | 40\nFY2025/26 | 7 | 2025-06-11 | Wednesday | true | NULL | 43345.63 | 866 | 40\nFY2025/26 | 7 | 2025-06-12 | Thursday | true | NULL | 48753.13 | 904 | 40\nFY2025/26 | 7 | 2025-06-13 | Friday | true | NULL | 50529.61 | 1024 | 40\nFY2025/26 | 7 | 2025-06-14 | Saturday | true | NULL | 67239.35 | 1283 | 40\nFY2025/26 | 7 | 2025-06-15 | Sunday | true | NULL | 30891.22 | 592 | 40\nFY2025/26 | 8 | 2025-06-16 | Monday | true | NULL | 45429.99 | 890 | 40\nFY2025/26 | 8 | 2025-06-17 | Tuesday | true | NULL | 41634.42 | 809 | 40\nFY2025/26 | 8 | 2025-06-18 | Wednesday | true | NULL | 45795.83 | 876 | 40\nFY2025/26 | 8 | 2025-06-19 | Thursday | true | NULL | 49658.45 | 904 | 40\nFY2025/26 | 8 | 2025-06-20 | Friday | false | Midsummer Eve | -1218.63 | 7 | 1\nFY2025/26 | 8 | 2025-06-21 | Saturday | false | Midsummer Day | -329.55 | 0 | 1\nFY2025/26 | 8 | 2025-06-22 | Sunday | true | NULL | 29236.67 | 610 | 40\nFY2026/27 | 7 | 2026-06-15 | Monday | true | NULL | 51182.35 | 954 | 38\nFY2026/27 | 7 | 2026-06-16 | Tuesday | true | NULL | 46395.98 | 889 | 38\nFY2026/27 | 7 | 2026-06-17 | Wednesday | true | NULL | 51474.78 | 941 | 38\nFY2026/27 | 7 | 2026-06-18 | Thursday | true | NULL | 49012.18 | 931 | 38\nFY2026/27 | 7 | 2026-06-19 | Friday | false | Midsummer "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:17",
+   "statement": "SELECT d.fiscal_year, d.fiscal_week, count(*) AS lines, count(DISTINCT f.sales_line_id) AS distinct_ids, count(DISTINCT (f.receipt_id, f.line_no)) AS distinct_rl,\n       min(f.etl_loaded_at) AS min_load, max(f.etl_loaded_at) AS max_load\nFROM fact_sales_line f JOIN dim_date d ON d.calendar_date = f.sale_date\nWHERE d.fiscal_period = 2 AND d.fiscal_year IN ('FY2026/27','FY2025/26')\nGROUP BY ALL ORDER BY 1, 2\n",
+   "n": 4,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "fiscal_year | fiscal_week | lines | distinct_ids | distinct_rl | min_load | max_load\nFY2025/26 | 5 | 14777 | 14777 | 14777 | 2025-05-27T01:00:00 | 2025-06-02T01:00:00\nFY2025/26 | 6 | 14238 | 14238 | 14238 | 2025-06-03T01:00:00 | 2025-06-09T01:00:00\nFY2025/26 | 7 | 14310 | 14310 | 14310 | 2025-06-10T01:00:00 | 2025-06-16T01:00:00\nFY2025/26 | 8 | 9769 | 9769 | 9769 | 2025-06-17T01:00:00 | 2025-06-23T01:00:00\nFY2026/27 | 5 | 14645 | 14645 | 14645 | 2026-06-02T01:00:00 | 2026-06-08T01:00:00\nFY2026/27 | 6 | 15587 | 15587 | 15587 | 2026-06-09T01:00:00 | 2026-06-15T01:00:00\nFY2026/27 | 7 | 10131 | 10131 | 10131 | 2026-06-16T01:00:00 | 2026-06-22T01:00:00\nFY2026/27 | 8 | 14721 | 14721 | 14721 | 2026-06-23T01:00:00 | 2026-06-29T01:00:00\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:22",
+   "statement": "SELECT store_id, store_name, open_date, close_date, valid_from, valid_to, is_current FROM dim_store\nWHERE close_date IS NOT NULL OR open_date >= DATE '2024-04-01' ORDER BY store_id\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "store_id | store_name | open_date | close_date | valid_from | valid_to | is_current\n129 | Savonlinna | NULL | 2026-01-25 | 2000-01-01 | 9999-12-31 | true\n136 | Tampere Lamminpää | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n137 | Lohja | 2024-11-04 | NULL | 2024-11-04 | 9999-12-31 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:27",
+   "statement": "WITH s AS (\n  SELECT business_date, store_id FROM rpt_daily_store_sales c JOIN dim_date d ON d.calendar_date=c.business_date\n  WHERE d.fiscal_period=2 AND d.fiscal_week=5 AND d.fiscal_year IN ('FY2026/27','FY2025/26') AND c.net_sales<>0 AND business_date IN (DATE '2025-05-27', DATE '2026-06-02')\n)\nSELECT store_id, max(CASE WHEN business_date=DATE '2025-05-27' THEN 1 ELSE 0 END) ly, max(CASE WHEN business_date=DATE '2026-06-02' THEN 1 ELSE 0 END) ty,\n  any_value(st.store_name) nm\nFROM s LEFT JOIN dim_store st USING (store_id) GROUP BY store_id HAVING ly<>ty ORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | ly | ty | nm\n129 | 1 | 0 | Savonlinna\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:38:38",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nweekly AS (\n    SELECT d.fiscal_year, d.fiscal_week, SUM(n.net_sales) AS net_sales\n    FROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date\n    WHERE d.fiscal_year IN ('FY2026/27','FY2025/26') AND d.fiscal_period = 2\n    GROUP BY 1, 2\n)\nSELECT ty.fiscal_year, ty.fiscal_week, ROUND(ty.net_sales, 2) AS net_sales_this_year, ROUND(ly.net_sales, 2) AS net_sales_last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct\nFROM weekly ty JOIN weekly ly ON ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = 'FY2025/26'\nWHERE ty.fiscal_year = 'FY2026/27' ORDER BY ty.fiscal_week\n",
+   "n": 7,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_week | net_sales_this_year | net_sales_last_year | growth_pct\nFY2026/27 | 5 | 341054.61 | 330868.04 | 3.1\nFY2026/27 | 6 | 362249.20 | 329334.78 | 10.0\nFY2026/27 | 7 | 220623.76 | 325472.70 | -32.2\nFY2026/27 | 8 | 370720.07 | 210207.18 | 76.4\n(4 rows)"
+  }
+ ]
+}

@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t21-r1",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T21",
+ "budget": 30,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "5ddc08b96b25a16f1b55d383e915db1e6f88e6fe2286ec935c73e00c18522c41",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:10",
+   "statement": "SELECT DISTINCT fiscal_year FROM dim_date WHERE fiscal_year LIKE 'FY202%' ORDER BY fiscal_year LIMIT 10\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year\nFY2024/25\nFY2025/26\nFY2026/27\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:13",
+   "statement": "SELECT fiscal_year, fiscal_quarter, fiscal_period, fiscal_period_label FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2024/25' ORDER BY fiscal_period\n",
+   "n": 2,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "fiscal_year | fiscal_quarter | fiscal_period | fiscal_period_label\nFY2024/25 | 1 | 1 | FY2024/25 P01\nFY2024/25 | 1 | 2 | FY2024/25 P02\nFY2024/25 | 1 | 3 | FY2024/25 P03\nFY2024/25 | 2 | 4 | FY2024/25 P04\nFY2024/25 | 2 | 5 | FY2024/25 P05\nFY2024/25 | 2 | 6 | FY2024/25 P06\nFY2024/25 | 3 | 7 | FY2024/25 P07\nFY2024/25 | 3 | 8 | FY2024/25 P08\nFY2024/25 | 3 | 9 | FY2024/25 P09\nFY2024/25 | 4 | 10 | FY2024/25 P10\nFY2024/25 | 4 | 11 | FY2024/25 P11\nFY2024/25 | 4 | 12 | FY2024/25 P12\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:19",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  SUM(f.gross_amount) as web_sales_gross\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_period IN (4, 5, 6)\n  AND f.channel_code = 'WB'\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | web_sales_gross\nFY2024/25 | 4 | 156217.19\nFY2024/25 | 5 | 153878.42\nFY2024/25 | 6 | 189483.12\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:24",
+   "statement": "SELECT \n  d.fiscal_period,\n  COUNT(*) as line_count,\n  COUNT(DISTINCT f.receipt_id) as order_count,\n  MIN(f.sale_date) as first_sale,\n  MAX(f.sale_date) as last_sale\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_period IN (4, 5, 6)\n  AND f.channel_code = 'WB'\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | line_count | order_count | first_sale | last_sale\n4 | 3952 | 1999 | 2024-07-29 | 2024-08-25\n5 | 4075 | 2030 | 2024-08-26 | 2024-09-22\n6 | 5259 | 2615 | 2024-09-23 | 2024-10-27\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:29",
+   "statement": "SELECT DISTINCT channel_code, channel_id, channel_name FROM dim_channel ORDER BY channel_code\n",
+   "n": 5,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Referenced column \"channel_code\" not found in FROM clause!\nCandidate bindings: \"channel_id\", \"channel_name\", \"channel_group\", \"legacy_channel_code\"\n\nLINE 1: SELECT DISTINCT channel_code, channel_id, channel_name FROM dim_channel...\n                        ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:31",
+   "statement": "SELECT DISTINCT channel_id, channel_name, channel_group, legacy_channel_code FROM dim_channel ORDER BY channel_id\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_id | channel_name | channel_group | legacy_channel_code\n1 | Store | store | ST\n2 | Web home delivery | web | WB\n3 | Click and collect | web | NULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:37",
+   "statement": "SELECT \n  d.fiscal_period,\n  f.channel_code,\n  c.channel_name,\n  SUM(f.gross_amount) as sales_gross\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nINNER JOIN dim_channel c ON f.channel_id = c.channel_id\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_period IN (4, 5, 6)\n  AND c.channel_group = 'web'\nGROUP BY d.fiscal_period, f.channel_code, c.channel_name\nORDER BY d.fiscal_period, f.channel_code\n",
+   "n": 7,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "fiscal_period | channel_code | channel_name | sales_gross\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:40",
+   "statement": "SELECT DISTINCT channel_code FROM fact_sales_line ORDER BY channel_code\n",
+   "n": 8,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "channel_code\nST\nWB\nNULL\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:41:45",
+   "statement": "SELECT \n  d.fiscal_year,\n  d.fiscal_period,\n  SUM(f.gross_amount) as web_sales_including_vat\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_period IN (4, 5, 6)\n  AND f.channel_code = 'WB'\nGROUP BY d.fiscal_year, d.fiscal_period\nORDER BY d.fiscal_period\n",
+   "n": 9,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | web_sales_including_vat\nFY2024/25 | 4 | 156217.19\nFY2024/25 | 5 | 153878.42\nFY2024/25 | 6 | 189483.12\n(3 rows)"
+  }
+ ]
+}

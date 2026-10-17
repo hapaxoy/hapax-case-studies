@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2025-12-21' AS as_of_date\n),\nas_of AS (\n    SELECT d.fiscal_week_end_date AS as_of_end\n    FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date = params.as_of_date\n),\nactive AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    CROSS JOIN as_of\n    WHERE f.sale_date > as_of.as_of_end - 364\n      AND f.sale_date <= as_of.as_of_end\n)\nSELECT cur.tier, COUNT(*) AS active_members\nFROM active a\nCROSS JOIN as_of\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nGROUP BY cur.tier\nORDER BY cur.tier;",
+  "result": {
+    "columns": ["tier", "active_members"],
+    "rows": [
+      ["Basic", 14654],
+      ["Gold", 3901],
+      ["Silver", 10971]
+    ]
+  },
+  "definitions_applied": [
+    "Active member: at least one purchase in trailing 52 fiscal weeks, in any channel",
+    "Member tier: version valid on as-of date",
+    "Trailing 52-week window: sale_date > (as-of Sunday - 364) through as-of Sunday inclusive"
+  ],
+  "assumptions": [
+    "Request received 2026-10-07; 'last year' interpreted as fiscal year FY2025/26",
+    "Period 8 FY2025/26 ends 2025-12-21 (fiscal week ending date)",
+    "As-of date for tier assignment: 2025-12-21, the fiscal week end date",
+    "Active member count window: 2025-12-18 through 2025-12-21 (trailing 52 weeks, excluding the boundary day)"
+  ],
+  "caveats": [
+    "Trailing 52-week calculation uses a fixed 364-day lookback rather than calendar weeks, per accepted historical queries (REQ-D29, REQ-D30)",
+    "Staff purchases and all sales channels (store and web) are included in the activity count",
+    "Members are counted only if a member version record exists valid on the as-of date; members enrolled or tier-changed after 2025-12-21 do not appear",
+    "Store 999 (web fulfillment pseudo-location) and ZZ Test category sales are included; exclusion filters not applied to active member definition per skill specification"
+  ]
+}
+```

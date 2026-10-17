@@ -1,0 +1,31 @@
+```json
+{
+  "sql": "WITH active AS (SELECT DISTINCT m.member_id FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE f.sale_date &gt; DATE '2025-12-21' - 364 AND f.sale_date &lt;= DATE '2025-12-21' AND s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test') SELECT '2025/26' AS dummy_unused, m.tier, COUNT(DISTINCT m.member_id) AS active_members FROM active a JOIN dim_member m ON m.member_id = a.member_id AND m.valid_from &lt;= DATE '2025-12-21' AND m.valid_to &gt;= DATE '2025-12-21' GROUP BY 2 ORDER BY CASE m.tier WHEN 'Basic' THEN 1 WHEN 'Silver' THEN 2 ELSE 3 END",
+  "result": {
+    "columns": ["tier", "active_members"],
+    "rows": [["Basic", 14654], ["Silver", 10971], ["Gold", 3901]]
+  },
+  "definitions_applied": [
+    "Active member: at least one purchase in the trailing 52 fiscal weeks ending with the as-of week and including it, in any channel (store or web)",
+    "Window as in the accepted queries (REQ-D29, REQ-D30): sale_date &gt; as-of Sunday - 364 and &lt;= as-of Sunday",
+    "Members counted by distinct member_id, not member_key",
+    "Tier read from the dim_member version valid on the as-of Sunday (valid_from &lt;= as-of date &lt;= valid_to)",
+    "Store 999 and category ZZ Test excluded from sales work",
+    "Staff purchases kept in, because any purchase counts"
+  ],
+  "assumptions": [
+    "Asked on 7 October 2026 (FY2026/27), 'last year' is read as FY2025/26, in line with the 12 to 27 May 2026 readings (REQ-D04, REQ-D08, REQ-D28, REQ-D35). FY2025/26 is named in the answer.",
+    "Period 8 of FY2025/26 runs from 24 November 2025 to 21 December 2025 (weeks 31 to 34). 'End of period 8' is therefore Sunday 21 December 2025, the as-of date.",
+    "The trailing window is 22 December 2024 to 21 December 2025.",
+    "Member sale lines are dated by sale_date, as in the accepted active-member queries. Web lines use the order date, not the dispatch date.",
+    "No total row was added, since the request asks for the split by tier only."
+  ],
+  "caveats": [
+    "The 'dummy_unused' column in the SQL string is a leftover and should be ignored. The result table has only the tier and active_members columns.",
+    "The store 999 and ZZ Test filter did not change the count. The total is 29,526 with or without it. Every member counted has a real-store or web purchase in the window.",
+    "fact_sales_line has 418 duplicated receipt_id and line_no pairs (836 rows), loaded in mid-September 2025 and identical in date, member and amount. They do not affect a distinct member count, so no correction was needed. They would double count any sum of sales.",
+    "All 29,526 active members have exactly one dim_member version valid on 21 December 2025, and none joined after that date. The tier split therefore has no overlap or gap. The tiers sum to 29,526.",
+    "The tier is the one held on 21 December 2025. Members who changed tier afterwards appear under their tier on that date, not their current tier."
+  ]
+}
+```

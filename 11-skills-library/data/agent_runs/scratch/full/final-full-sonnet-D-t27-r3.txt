@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), lines AS (SELECT CASE WHEN s.store_id = 900 THEN w.dispatch_date ELSE f.sale_date END AS business_date, s.region, f.gross_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test') SELECT region, SUM(CASE WHEN business_date BETWEEN DATE '2024-08-01' AND DATE '2024-08-31' THEN gross_amount ELSE 0 END) AS august_2024_gross_incl_vat, SUM(CASE WHEN business_date BETWEEN DATE '2024-09-01' AND DATE '2024-09-30' THEN gross_amount ELSE 0 END) AS september_2024_gross_incl_vat FROM lines WHERE business_date BETWEEN DATE '2024-08-01' AND DATE '2024-09-30' GROUP BY region ORDER BY region",
+  "result": {
+    "columns": ["region", "august_2024_gross_incl_vat", "september_2024_gross_incl_vat"],
+    "rows": [
+      ["East", 296762.31, 249751.64],
+      ["North", 175960.85, 149625.27],
+      ["Online", 173563.99, 160307.64],
+      ["South", 489776.38, 445837.96],
+      ["West", 402582.35, 363697.29]
+    ]
+  },
+  "definitions_applied": [
+    "Gross sales = sum of gross_amount on sales lines (each line carries its own VAT rate), before returns",
+    "As-was regions: region taken from the dim_store version on the fact line's store_key",
+    "Web sales recognised on the Helsinki dispatch date (fact_web_order joined on receipt_id = web_order_id), delivered and collected orders only; web shown as its own Online region (store 900)",
+    "Store 999 and category ZZ Test excluded",
+    "Calendar months used, as the request names months for a VAT filing, not fiscal periods",
+    "Did not use channel_code, rpt.v_daily_sales or any deprecated, staging, backup or tmp table",
+    "Control total: net sales before returns for the same lines and days (stores and web store 900) agree with rpt_daily_store_sales for every store"
+  ],
+  "assumptions": [
+    "August and September 2024 read as calendar months (1 to 31 August and 1 to 30 September 2024), not fiscal periods",
+    "Regions as they were means as-was: the four regions of the time (South, West, East, North) plus Online. Capital Region did not exist until 28 April 2025, so it has no row",
+    "Web gross sales are dated on the Helsinki dispatch date rather than the order date, per the company definition of web sales. Orders placed in July and dispatched in August are in; orders placed in late September and dispatched in October are out",
+    "Returns excluded as the request asks for gross sales before returns, so no refund column is shown",
+    "Online is kept as its own row since web sales have no physical region"
+  ],
+  "caveats": [
+    "Store 999 (training store, 283 lines) and ZZ Test articles (68 lines) were excluded from the Aug to Sep 2024 lines; this lowers the totals relative to an unfiltered sum",
+    "Gross amounts use the VAT rate in force on each line: 24% for standard goods in August 2024 and 25.5% from 1 September 2024. Reduced classes (14% and 10%) are unchanged. I checked that gross_amount equals net_amount times (1 + vat_rate) on every line in the range and that vat_rate matches each article's vat_class, with no mismatches",
+    "I found no duplicate sales lines (sales_line_id and receipt_id + line_no both unique) and no unmatched web lines, so no data corrections were needed",
+    "Stores 101 to 105 report under South and 114 Kouvola under East, as they were in 2024. As-is reporting would move them to Capital Region and South respectively and give different regional figures",
+    "Cancelled and not-yet-dispatched web orders have no sales lines and so are not in the figures",
+    "The VAT filing basis may differ: if VAT is due on the order or payment date rather than the dispatch date, the Online row would change. This figure follows the company sales definition"
+  ]
+}
+```

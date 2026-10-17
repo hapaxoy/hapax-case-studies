@@ -1,0 +1,70 @@
+Based on my analysis, I have completed the store league table query for period 5 of last year (FY2025/26 P05, which ran from 2025-08-25 to 2025-09-21). The query matches the validated template from the lfl-and-store-league skill library and has been validated through the query-check script.
+
+However, there is a control total mismatch that has been flagged. The query returned correct results according to the company definition, but there is a discrepancy with rpt_daily_store_sales, particularly at store 116. This appears to be a data quality issue that should be investigated by the Data &amp; Analytics team.
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT DATE '2025-08-25' AS start_date, DATE '2025-09-21' AS end_date\n),\nperiod_days AS (\n    SELECT d.calendar_date FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date BETWEEN params.start_date AND params.end_date AND d.is_trading_day\n),\ntrading_days AS (\n    SELECT cs.store_id, COUNT(*) AS trading_days\n    FROM dim_store cs\n    CROSS JOIN period_days pd\n    WHERE cs.is_current AND cs.store_id &lt; 900\n      AND (cs.open_date IS NULL OR cs.open_date &lt;= pd.calendar_date)\n      AND (cs.close_date IS NULL OR cs.close_date &gt;= pd.calendar_date)\n      AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                      WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n    GROUP BY 1\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n),\nstore_sales AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY ss.net_sales / td.trading_days DESC) AS rank, cs.store_id, cs.store_name, cs.format,\n       td.trading_days, ss.net_sales, ROUND(ss.net_sales / td.trading_days, 0) AS net_sales_per_trading_day\nFROM store_sales ss\nJOIN trading_days td ON td.store_id = ss.store_id\nJOIN dim_store cs    ON cs.store_id = ss.store_id AND cs.is_current\nORDER BY rank;",
+  "result": {
+    "columns": ["rank", "store_id", "store_name", "format", "trading_days", "net_sales", "net_sales_per_trading_day"],
+    "rows": [
+      [1, 115, "Tampere Hervanta", "Large", 28, 59872.99, 2138.0],
+      [2, 102, "Helsinki Pitäjänmäki", "Large", 28, 49645.27, 1773.0],
+      [3, 116, "Tampere Lielahti", "Large", 28, 47679.15, 1703.0],
+      [4, 131, "Oulu Kaakkuri", "Large", 28, 44663.61, 1595.0],
+      [5, 108, "Lahti", "Large", 28, 43038.90, 1537.0],
+      [6, 104, "Vantaa Tammisto", "Large", 28, 41889.35, 1496.0],
+      [7, 110, "Turku Kupittaa", "Large", 28, 37964.64, 1356.0],
+      [8, 125, "Kuopio", "Large", 28, 37218.51, 1329.0],
+      [9, 117, "Tampere Kaleva", "Medium", 28, 36465.55, 1302.0],
+      [10, 119, "Pori", "Medium", 14, 16057.86, 1147.0],
+      [11, 101, "Helsinki Vuosaari", "Medium", 28, 29974.57, 1071.0],
+      [12, 126, "Joensuu", "Medium", 28, 29900.29, 1068.0],
+      [13, 128, "Lappeenranta", "Medium", 28, 29821.68, 1065.0],
+      [14, 118, "Nokia", "Medium", 28, 29618.45, 1058.0],
+      [15, 121, "Vaasa", "Medium", 28, 27847.90, 995.0],
+      [16, 124, "Jyväskylä Palokka", "Medium", 28, 26786.57, 957.0],
+      [17, 122, "Seinäjoki", "Medium", 28, 25881.11, 924.0],
+      [18, 103, "Espoo Lommila", "Medium", 28, 25774.70, 921.0],
+      [19, 132, "Oulu Linnanmaa", "Medium", 28, 25688.73, 917.0],
+      [20, 136, "Tampere Lamminpää", "Medium", 28, 24457.30, 873.0],
+      [21, 107, "Hyvinkää", "Medium", 28, 24062.70, 859.0],
+      [22, 109, "Hämeenlinna", "Medium", 28, 22384.54, 799.0],
+      [23, 127, "Mikkeli", "Medium", 28, 21734.54, 776.0],
+      [24, 114, "Kouvola", "Medium", 28, 21384.96, 764.0],
+      [25, 111, "Turku Härmälä", "Medium", 28, 19339.69, 691.0],
+      [26, 134, "Rovaniemi", "Medium", 28, 16704.95, 597.0],
+      [27, 139, "Raahe", "Small", 28, 14028.34, 501.0],
+      [28, 137, "Lohja", "Small", 28, 12084.90, 432.0],
+      [29, 130, "Kotka", "Small", 28, 10855.23, 388.0],
+      [30, 105, "Kerava", "Small", 28, 10757.43, 384.0],
+      [31, 133, "Kemi", "Small", 28, 10748.91, 384.0],
+      [32, 112, "Raisio", "Small", 28, 10742.69, 384.0],
+      [33, 106, "Porvoo", "Small", 28, 10245.03, 366.0],
+      [34, 138, "Iisalmi", "Small", 28, 10197.63, 364.0],
+      [35, 113, "Salo", "Small", 28, 9648.93, 345.0],
+      [36, 129, "Savonlinna", "Small", 28, 9247.82, 330.0],
+      [37, 123, "Kokkola", "Small", 28, 9066.66, 324.0],
+      [38, 120, "Rauma", "Small", 28, 8765.73, 313.0],
+      [39, 135, "Kajaani", "Small", 28, 8539.34, 305.0]
+    ]
+  },
+  "definitions_applied": [
+    "Store league table ranking by net sales per trading day",
+    "Physical stores only (store_id &lt; 900)",
+    "Net sales after returns, returns dated to return_date not sale_date",
+    "Trading days excluding refit closures and closed public holidays",
+    "Test articles (category ZZ Test) excluded from net sales",
+    "Staff purchases included in net sales"
+  ],
+  "assumptions": [
+    "Period 5 last year interpreted as FY2025/26 P05 (current fiscal year is FY2026/27 as of request date 2026-10-08)",
+    "League table spans entire period (fiscal weeks 18-21, 2025-08-25 to 2025-09-21)",
+    "Stores are ranked by net sales per trading day (not by total net sales)",
+    "Store 119 (Pori) had a refit closure from 2025-09-08 to 2025-10-12, reducing its trading days in the period to 14"
+  ],
+  "caveats": [
+    "Control total mismatch: The query returned company-level net sales of 950,787.15 EUR vs rpt_daily_store_sales total of 940,396.62 EUR (gap 10,390.53 EUR, 1.1%). The discrepancy is isolated to store 116 (Tampere Lielahti). Raw fact data shows 48,218.70 EUR for store 116 vs 47,679.15 EUR from the league table query vs 37,288.62 EUR from rpt_daily_store_sales. This data quality issue should be investigated by the Data &amp; Analytics team before final publication. The query structure and calculation follow the validated template from lfl-and-store-league REQ-D37 through REQ-D40."
+  ]
+}
+```

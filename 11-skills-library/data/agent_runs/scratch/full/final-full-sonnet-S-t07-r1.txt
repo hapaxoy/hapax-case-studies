@@ -1,0 +1,43 @@
+```json
+{
+  "sql": "WITH sold AS (SELECT p.sku, sum(f.net_amount) AS sales_net, sum(f.standard_cost) AS sales_cost FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key WHERE f.sale_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND s.region = 'South' GROUP BY p.sku), returned AS (SELECT p.sku, sum(r.refund_net) AS refund_net, sum(r.standard_cost_returned) AS refund_cost FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE r.return_date BETWEEN DATE '2025-01-27' AND DATE '2025-04-27' AND s.region = 'South' GROUP BY p.sku), names AS (SELECT sku, max(product_name) AS product_name FROM dim_product GROUP BY sku) SELECT sold.sku, names.product_name, round(sold.sales_net - coalesce(returned.refund_net, 0) - (sold.sales_cost - coalesce(returned.refund_cost, 0)), 2) AS gross_margin_eur FROM sold JOIN names USING (sku) LEFT JOIN returned USING (sku) ORDER BY gross_margin_eur DESC LIMIT 10",
+  "result": {
+    "columns": ["sku", "product_name", "gross_margin_eur"],
+    "rows": [
+      [103075, "Cushions &amp; Throws Tuulikki 338", 3866.86],
+      [100955, "Interior Paint Norvik 298", 3694.11],
+      [101763, "Fixings &amp; Fasteners Nordhem 594", 3277.05],
+      [103390, "Bedroom Peltola 793", 3048.27],
+      [100953, "Interior Paint Tuulikki 224", 2611.47],
+      [103062, "Cushions &amp; Throws Kuusela 657", 2247.58],
+      [101398, "Power Tools Havu Pro 689", 2181.77],
+      [102538, "Cookware Nordhem 469", 1693.80],
+      [101369, "Power Tools Koivuranta 416", 1519.19],
+      [102468, "Plumbing Parts Ahvenisto 279", 1476.60]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: Q4 of FY2024/25 is fiscal periods 10-12, 2025-01-27 to 2025-04-27 (ref_fiscal_calendar, fully loaded)",
+    "Gross margin = net sales excluding VAT minus standard cost of units sold, after deducting returns (refund_net less standard_cost_returned)",
+    "Store versions as at the transaction date (fact store_key joined to dim_store), so a store's region is the one it had when the sale or return happened",
+    "Products grouped by SKU across product versions (dim_product.sku, not product_key)",
+    "Return side counted by return date and the store where the return was booked, as in rpt_daily_store_sales (net sales = sales before returns minus returns)",
+    "Web shop (900) and Training store (999) are not in the South region"
+  ],
+  "assumptions": [
+    "Gross margin is a EUR amount (net sales less standard cost, net of returns), not a percentage; ranking is by EUR margin",
+    "South means the region as it stood during Q4 FY24/25: stores 101-113 and Lohja (137, opened 2024-11-04). Kouvola (114) was East then, so it is excluded",
+    "Staff purchases are included, matching rpt_daily_store_sales, which includes them. Excluding them gives the same top 10 in the same order, with small changes to a few values",
+    "Standard cost is used as the cost of goods, since the warehouse carries no actual cost",
+    "Online sales are not attributed to South, even for click-and-collect orders"
+  ],
+  "caveats": [
+    "Regions were redrawn on 2025-04-28, the day after the quarter ended. Stores 101-105 (Helsinki Vuosaari, Helsinki Pitäjänmäki, Espoo Lommila, Vantaa Tammisto, Kerava) moved from South to a new Capital Region, and Kouvola moved from East to South. Joining on the current dim_store row would give a different South (the 5 capital-area stores out, Kouvola in) and a different top 10. In that version SKU 101888 enters the top 10, 101369 drops out, and the values fall to 2927 for the top product against 3867. I used the region as it was at the time. Say if you want the current structure restated back over the quarter",
+    "The warehouse has several backup, staging and temp tables (bak_*, stg_*, dim_*_old, tmp_*) and the rpt schema views. I did not use any of them. The staging tables hold only October 2026 loads and no Q4 rows",
+    "I checked for duplicate sales or return lines, orphan returns, standard cost not matching quantity times the unit cost, and product or store version mismatches in this quarter's South data. I found none. The sales and returns lines reconcile to rpt_daily_store_sales for every South store",
+    "The dim_store.format comment says Hyper/Standard/Express but the data holds Small/Medium/Large, and the dim_member.home_store_id comment is unrelated. Neither affects this answer",
+    "Standard unit costs are revalued each April. Since the quarter ends 27 April, the cost carried on each line is the standard cost version in force on the sale date",
+    "Margins are at standard cost, not actual purchase cost, so they can differ from the finance gross margin"
+  ]
+}
+```

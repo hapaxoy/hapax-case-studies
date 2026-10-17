@@ -1,0 +1,24 @@
+Now I have verified the result. Let me prepare the final JSON response:
+
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: stores on the sale date, web on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT SUM(n.net_sales) AS net_sales\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21",
+  "result": {
+    "columns": ["net_sales"],
+    "rows": [[1109546.52]]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Store scope: physical stores and web shop (store 900), excluding store 999 and ZZ Test category",
+    "Return timing: returns reduce net sales on the return date, not the sale date",
+    "Web recognition: web sales recognized on dispatch date in Helsinki time"
+  ],
+  "assumptions": [
+    "Interpreted 'last month' as the last completed fiscal period, which is FY2026/27 P05 (fiscal weeks 18-21, 2026-08-31 to 2026-09-27)",
+    "Request is for total company (all stores and channels combined) with no breakdown"
+  ],
+  "caveats": [
+    "No issues found. Query validation passed with no errors or warnings."
+  ]
+}
+```

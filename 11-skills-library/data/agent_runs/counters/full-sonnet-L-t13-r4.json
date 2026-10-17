@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-L-t13-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T13",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "a637e3c2be18f0ba37f7715c27c7004c003d69091035911afb02c7b967a8119d",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:05:02",
+   "statement": "SELECT 'fmt' AS k, format AS a, CAST(COUNT(DISTINCT store_id) AS VARCHAR) AS b, CAST(COUNT(*) AS VARCHAR) AS c FROM dim_store GROUP BY format\nUNION ALL\nSELECT 'p4', fiscal_period_label, CAST(MIN(calendar_date) AS VARCHAR), CAST(MAX(calendar_date) AS VARCHAR) FROM dim_date WHERE fiscal_year='FY2026/27' AND fiscal_period=4 GROUP BY 2\nUNION ALL\nSELECT 'dups', 'sales_line_id', CAST(COUNT(*) AS VARCHAR), CAST(COUNT(DISTINCT sales_line_id) AS VARCHAR) FROM fact_sales_line f JOIN dim_date d ON d.calendar_date=f.sale_date WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4\n",
+   "n": 1,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "k | a | b | c\nfmt | Web | 1 | 1\nfmt | Training | 1 | 1\nfmt | Small | 13 | 14\nfmt | Large | 8 | 10\nfmt | Medium | 18 | 21\np4 | FY2026/27 P04 | 2026-08-03 | 2026-08-30\ndups | sales_line_id | 48107 | 48107\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:05:11",
+   "statement": "SELECT cs.format AS cur_format, s.format AS ver_format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       COUNT(DISTINCT (s.store_id, f.receipt_id)) AS receipts_store,\n       COUNT(DISTINCT (s.store_id, f.sale_date, f.receipt_id)) AS receipts_store_date,\n       SUM(f.net_amount) AS net,\n       ROUND(SUM(f.net_amount)/COUNT(DISTINCT f.receipt_id),2) AS atv,\n       COUNT(DISTINCT s.store_id) AS stores\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE s.store_id<900 AND NOT f.staff_purchase_flag AND p.category<>'ZZ Test'\n  AND d.fiscal_year='FY2026/27' AND d.fiscal_period=4\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "cur_format | ver_format | receipts | receipts_store | receipts_store_date | net | atv | stores\nLarge | Large | 6508 | 6508 | 6508 | 394865.46 | 60.67 | 8\nMedium | Medium | 8641 | 8641 | 8641 | 520763.45 | 60.27 | 18\nSmall | Small | 2598 | 2598 | 2598 | 131841.05 | 50.75 | 12\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:05:24",
+   "statement": "WITH l AS (\n  SELECT f.receipt_id, s.store_id, f.sale_date, f.staff_purchase_flag, p.category, f.net_amount, f.quantity, f.channel_code\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  JOIN dim_date d ON d.calendar_date=f.sale_date\n  WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 AND s.store_id<900)\nSELECT 'mixed_staff_receipts' AS chk, CAST(COUNT(*) AS VARCHAR) AS v FROM (SELECT receipt_id FROM l GROUP BY 1 HAVING COUNT(DISTINCT staff_purchase_flag)>1)\nUNION ALL SELECT 'staff_receipts', CAST(COUNT(DISTINCT receipt_id) AS VARCHAR) FROM l WHERE staff_purchase_flag\nUNION ALL SELECT 'test_lines_in_nonstaff', CAST(COUNT(*) AS VARCHAR) FROM l WHERE category='ZZ Test' AND NOT staff_purchase_flag\nUNION ALL SELECT 'store999_lines', CAST(COUNT(*) AS VARCHAR) FROM l WHERE store_id=999\nUNION ALL SELECT 'nonpositive_net_lines', CAST(COUNT(*) AS VARCHAR) FROM l WHERE net_amount<=0 OR quantity<=0\nUNION ALL SELECT 'channel_'||COALESCE(channel_code,'null'), CAST(COUNT(*) AS VARCHAR) FROM l GROUP BY channel_code\nUNION ALL SELECT 'rpt_receipts_P4_all_stores', CAST(SUM(receipts) AS VARCHAR) FROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date=r.business_date WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 AND r.store_id<900\nUNION ALL SELECT 'ours_receipts_all_incl_staff_excl_999', CAST(COUNT(DISTINCT receipt_id) AS VARCHAR) FROM l WHERE store_id<>999 AND category<>'ZZ Test'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "chk | v\nmixed_staff_receipts | 0\nstaff_receipts | 280\ntest_lines_in_nonstaff | 0\nstore999_lines | 0\nnonpositive_net_lines | 0\nchannel_null | 41521\nrpt_receipts_P4_all_stores | 18027\nours_receipts_all_incl_staff_excl_999 | 18027\n(8 rows)"
+  }
+ ]
+}

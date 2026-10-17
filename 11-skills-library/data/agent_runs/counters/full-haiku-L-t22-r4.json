@@ -1,0 +1,103 @@
+{
+ "run_id": "full-haiku-L-t22-r4",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T22",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "fd045b4977061865c2cb6a853aa7c87fcdd4b04efea373f7514ace2527868d7b",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:16:50",
+   "statement": "SELECT \n    campaign_id, \n    campaign_name, \n    start_date, \n    end_date, \n    channels, \n    mailing_list_size,\n    holdout_size\nFROM dim_campaign\nWHERE campaign_name ILIKE '%Spring Garden Launch%'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | channels | mailing_list_size | holdout_size\n1 | Spring Garden Launch 2024 | 2024-05-06 | 2024-05-26 | email+sms | 7918 | 841\n9 | Spring Garden Launch 2025 | 2025-05-05 | 2025-05-25 | email+sms | 12203 | 1204\n19 | Spring Garden Launch 2026 | 2026-05-04 | 2026-05-24 | email+sms | 16624 | 1597\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:16:54",
+   "statement": "SELECT \n    COUNT(DISTINCT member_key) AS members_contacted,\n    COUNT(*) AS total_exposures\nFROM fact_campaign_exposure\nWHERE campaign_id = 19\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | total_exposures\n15063 | 31685\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:16:58",
+   "statement": "SELECT \n    SUM(f.net_amount) AS total_net_sales,\n    COUNT(*) AS line_count,\n    COUNT(DISTINCT f.member_key) AS members_with_sales\nFROM fact_sales_line f\nINNER JOIN (\n    SELECT DISTINCT member_key \n    FROM fact_campaign_exposure \n    WHERE campaign_id = 19\n) c ON f.member_key = c.member_key\nWHERE f.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_net_sales | line_count | members_with_sales\n191189.55 | 8121 | 2620\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:17:22",
+   "statement": "-- Get members contacted in Spring Garden Launch 2026 and their spending 4-24 May 2026\nWITH campaign_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure fce\n  INNER JOIN dim_member m ON fce.member_key = m.member_key\n  WHERE fce.campaign_id = 19\n),\nstore_sales AS (\n  SELECT \n    SUM(fsl.net_amount) AS total_spending\n  FROM fact_sales_line fsl\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN dim_member dm ON fsl.member_key = dm.member_key\n  INNER JOIN campaign_members cm ON dm.member_id = cm.member_id\n  WHERE fsl.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n    AND ds.store_id < 900  -- physical stores only\n    AND dp.category != 'ZZ Test'\n),\nweb_sales AS (\n  SELECT \n    SUM(fsl.net_amount) AS total_spending\n  FROM fact_sales_line fsl\n  INNER JOIN fact_web_order fwo ON fsl.receipt_id = fwo.web_order_id\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN dim_member dm ON fsl.member_key = dm.member_key\n  INNER JOIN campaign_members cm ON dm.member_id = cm.member_id\n  WHERE CAST(TIMEZONE('Europe/Helsinki', fwo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN '2026-05-04' AND '2026-05-24'\n    AND dp.category != 'ZZ Test'\n    AND fwo.status != 'cancelled'\n)\nSELECT \n  (SELECT COUNT(*) FROM campaign_members) AS members_contacted,\n  COALESCE((SELECT total_spending FROM store_sales), 0) + \n  COALESCE((SELECT total_spending FROM web_sales), 0) AS total_spending_eur\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | total_spending_eur\n15001 | 190687.59\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:17:28",
+   "statement": "-- Verify member contact count by looking at the raw exposure data\nWITH campaign_members AS (\n  SELECT DISTINCT m.member_id, COUNT(DISTINCT fce.exposure_id) as exposures\n  FROM fact_campaign_exposure fce\n  INNER JOIN dim_member m ON fce.member_key = m.member_key\n  WHERE fce.campaign_id = 19\n  GROUP BY m.member_id\n)\nSELECT \n  COUNT(*) AS unique_members,\n  SUM(exposures) AS total_exposures,\n  MIN(exposures) AS min_contacts_per_member,\n  MAX(exposures) AS max_contacts_per_member,\n  AVG(exposures) AS avg_contacts_per_member\nFROM campaign_members\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "unique_members | total_exposures | min_contacts_per_member | max_contacts_per_member | avg_contacts_per_member\n15001 | 31685 | 1 | 4 | 2.1121925204986334\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:17:37",
+   "statement": "-- Check for returns during the period that affect our campaign members\nWITH campaign_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure fce\n  INNER JOIN dim_member m ON fce.member_key = m.member_key\n  WHERE fce.campaign_id = 19\n)\nSELECT \n  SUM(frl.refund_net) AS total_refunds_net,\n  COUNT(*) AS return_line_count\nFROM fact_return_line frl\nINNER JOIN dim_member dm ON frl.member_key = dm.member_key\nINNER JOIN campaign_members cm ON dm.member_id = cm.member_id\nWHERE frl.return_date BETWEEN '2026-05-04' AND '2026-05-24'\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_refunds_net | return_line_count\n8231.32 | 289\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:17:47",
+   "statement": "-- Calculate net sales (after returns) for campaign members during May 4-24\nWITH campaign_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure fce\n  INNER JOIN dim_member m ON fce.member_key = m.member_key\n  WHERE fce.campaign_id = 19\n),\nstore_sales AS (\n  SELECT \n    SUM(fsl.net_amount) AS sales_amount,\n    0 AS returns_amount\n  FROM fact_sales_line fsl\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN dim_member dm ON fsl.member_key = dm.member_key\n  INNER JOIN campaign_members cm ON dm.member_id = cm.member_id\n  WHERE fsl.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n    AND ds.store_id < 900  -- physical stores only\n    AND dp.category != 'ZZ Test'\n),\nweb_sales AS (\n  SELECT \n    SUM(fsl.net_amount) AS sales_amount,\n    0 AS returns_amount\n  FROM fact_sales_line fsl\n  INNER JOIN fact_web_order fwo ON fsl.receipt_id = fwo.web_order_id\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN dim_member dm ON fsl.member_key = dm.member_key\n  INNER JOIN campaign_members cm ON dm.member_id = cm.member_id\n  WHERE CAST(TIMEZONE('Europe/Helsinki', fwo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN '2026-05-04' AND '2026-05-24'\n    AND dp.category != 'ZZ Test'\n    AND fwo.status != 'cancelled'\n),\nreturns_during_period AS (\n  SELECT \n    SUM(frl.refund_net) AS returns_amount\n  FROM fact_return_line frl\n  INNER JOIN dim_member dm ON frl.member_key = dm.member_key\n  INNER JOIN campaign_members cm ON dm.member_id = cm.member_id\n  INNER JOIN dim_product dp ON frl.product_key = dp.product_key\n  WHERE frl.return_date BETWEEN '2026-05-04' AND '2026-05-24'\n    AND dp.category != 'ZZ Test'\n)\nSELECT \n  (SELECT COUNT(*) FROM campaign_members) AS members_contacted,\n  COALESCE((SELECT sales_amount FROM store_sales), 0) + \n  COALESCE((SELECT sales_amount FROM web_sales), 0) - \n  COALESCE((SELECT returns_amount FROM returns_during_period), 0) AS net_sales_eur\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | net_sales_eur\n15001 | 182456.27\n(1 row)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:18:16",
+   "statement": "query-check/scripts/query_check.py --grain member_id",
+   "n": 8,
+   "ok": false,
+   "rows": null,
+   "output_preview": "\n[stderr]\nusage: query_check.py [-h] (--sql SQL | --file FILE) [--grain GRAIN]\n                      [--date-col DATE_COL] [--start START] [--end END]\n                      [--period PERIOD] [--ts-col TS_COL] [--control]\n                      [--value-col VALUE_COL]\n                      [--control-measure CONTROL_MEASURE]\n                      [--store-col STORE_COL]\n                      [--control-stores CONTROL_STORES]\n                      [--tolerance TOLERANCE] [--show SHOW] [--json]\n                      db\nquery_check.py: error: one of the arguments --sql --file is required\n\n[exit code 2]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:24",
+   "statement": "-- Verify the breakdown of spending\nWITH campaign_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure fce\n  INNER JOIN dim_member m ON fce.member_key = m.member_key\n  WHERE fce.campaign_id = 19\n)\nSELECT \n  'Store sales' as category,\n  SUM(fsl.net_amount) AS amount\nFROM fact_sales_line fsl\nINNER JOIN dim_store ds ON fsl.store_key = ds.store_key\nINNER JOIN dim_product dp ON fsl.product_key = dp.product_key\nINNER JOIN dim_member dm ON fsl.member_key = dm.member_key\nINNER JOIN campaign_members cm ON dm.member_id = cm.member_id\nWHERE fsl.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n  AND ds.store_id < 900\n  AND dp.category != 'ZZ Test'\n\nUNION ALL\n\nSELECT \n  'Web sales' as category,\n  SUM(fsl.net_amount) AS amount\nFROM fact_sales_line fsl\nINNER JOIN fact_web_order fwo ON fsl.receipt_id = fwo.web_order_id\nINNER JOIN dim_product dp ON fsl.product_key = dp.product_key\nINNER JOIN dim_member dm ON fsl.member_key = dm.member_key\nINNER JOIN campaign_members cm ON dm.member_id = cm.member_id\nWHERE CAST(TIMEZONE('Europe/Helsinki', fwo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN '2026-05-04' AND '2026-05-24'\n  AND dp.category != 'ZZ Test'\n  AND fwo.status != 'cancelled'\n\nUNION ALL\n\nSELECT \n  'Returns' as category,\n  -SUM(frl.refund_net) AS amount\nFROM fact_return_line frl\nINNER JOIN dim_member dm ON frl.member_key = dm.member_key\nINNER JOIN campaign_members cm ON dm.member_id = cm.member_id\nINNER JOIN dim_product dp ON frl.product_key = dp.product_key\nWHERE frl.return_date BETWEEN '2026-05-04' AND '2026-05-24'\n  AND dp.category != 'ZZ Test'\n",
+   "n": 9,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "category | amount\nStore sales | 155518.67\nWeb sales | 35168.92\nReturns | -8231.32\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:18:32",
+   "statement": "-- Spring Garden Launch 2026: members contacted and their spending 4-24 May 2026\nWITH campaign_members AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_campaign_exposure fce\n  INNER JOIN dim_member m ON fce.member_key = m.member_key\n  WHERE fce.campaign_id = 19\n),\nstore_sales AS (\n  SELECT SUM(fsl.net_amount) AS amount\n  FROM fact_sales_line fsl\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN dim_member dm ON fsl.member_key = dm.member_key\n  INNER JOIN campaign_members cm ON dm.member_id = cm.member_id\n  WHERE fsl.sale_date BETWEEN '2026-05-04' AND '2026-05-24'\n    AND ds.store_id < 900\n    AND dp.category != 'ZZ Test'\n),\nweb_sales AS (\n  SELECT SUM(fsl.net_amount) AS amount\n  FROM fact_sales_line fsl\n  INNER JOIN fact_web_order fwo ON fsl.receipt_id = fwo.web_order_id\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  INNER JOIN dim_member dm ON fsl.member_key = dm.member_key\n  INNER JOIN campaign_members cm ON dm.member_id = cm.member_id\n  WHERE CAST(TIMEZONE('Europe/Helsinki', fwo.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN '2026-05-04' AND '2026-05-24'\n    AND dp.category != 'ZZ Test'\n    AND fwo.status != 'cancelled'\n),\nreturns_net AS (\n  SELECT SUM(frl.refund_net) AS amount\n  FROM fact_return_line frl\n  INNER JOIN dim_member dm ON frl.member_key = dm.member_key\n  INNER JOIN campaign_members cm ON dm.member_id = cm.member_id\n  INNER JOIN dim_product dp ON frl.product_key = dp.product_key\n  WHERE frl.return_date BETWEEN '2026-05-04' AND '2026-05-24'\n    AND dp.category != 'ZZ Test'\n)\nSELECT \n  (SELECT COUNT(*) FROM campaign_members) AS members_contacted,\n  ROUND(COALESCE((SELECT amount FROM store_sales), 0) + \n        COALESCE((SELECT amount FROM web_sales), 0) - \n        COALESCE((SELECT amount FROM returns_net), 0), 2) AS net_sales_eur\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | net_sales_eur\n15001 | 182456.27\n(1 row)"
+  }
+ ]
+}

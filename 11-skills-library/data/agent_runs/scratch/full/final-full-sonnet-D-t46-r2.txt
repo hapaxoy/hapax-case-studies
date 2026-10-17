@@ -1,0 +1,45 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, p.sku, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test') SELECT ROW_NUMBER() OVER (ORDER BY SUM(n.net_sales) DESC) AS rank, n.sku, cp.product_name, ROUND(SUM(n.net_sales), 2) AS net_sales FROM net_lines n JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current WHERE n.business_date &gt;= DATE '2025-11-03' AND n.business_date &lt;= DATE '2026-10-04' GROUP BY n.sku, cp.product_name ORDER BY net_sales DESC LIMIT 10",
+  "result": {
+    "columns": ["rank", "sku", "product_name", "net_sales"],
+    "rows": [
+      [1, 100955, "Interior Paint Norvik 298", 14499.84],
+      [2, 103774, "Christmas Decorations Poutaranta Home 601", 13300.74],
+      [3, 103390, "Bedroom Peltola 793", 10907.95],
+      [4, 100529, "Garden Furniture Raudikko 536", 10052.48],
+      [5, 103747, "Christmas Decorations Mäntylä 402", 9326.33],
+      [6, 103791, "Christmas Decorations Havu 430", 9209.38],
+      [7, 100573, "Garden Furniture Ahvenisto 564", 7495.15],
+      [8, 100528, "Garden Furniture Norvik 499", 7411.38],
+      [9, 103928, "Sauna &amp; Winter Havu 699", 7130.21],
+      [10, 103415, "Home Office Peltola 918", 6889.60]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales = net sales (excluding VAT) after returns, for the web shop pseudo-store (store_id 900), not channel_code or channel_id",
+    "Web sales dated on the Helsinki dispatch date (delivered and collected orders only, click-and-collect included); cancelled and processing orders have no sales lines and are not sales",
+    "Returns reduce net sales on their own return date, taken from fact_return_line booked to store 900",
+    "Store 999 and category ZZ Test left out",
+    "Products ranked by stable SKU, with the name from the current product version (as-is)",
+    "Control total checked against rpt_daily_store_sales for store 900 over the same days"
+  ],
+  "assumptions": [
+    "'Web sales' read as net sales excluding VAT after returns, the company definition, rather than gross or units",
+    "'Since the platform migration on 3 November 2025' read as 3 November 2025 to 4 October 2026, the last day loaded (the request is dated 8 October 2026)",
+    "The window is applied to the dispatch date, so orders placed before 3 November but dispatched on or after it are included, and orders placed but not yet dispatched are not",
+    "'Products' read as articles (SKU), not subcategories or brands",
+    "Returns in the window are counted whenever the original sale happened, since a return reduces net sales on its own date"
+  ],
+  "caveats": [
+    "Web sales are filtered on store_id 900, not channel_code (empty after 3 Nov 2025) or channel_id (absent before it)",
+    "Web dates use the Helsinki dispatch date, not sale_date, which is the order date on web lines",
+    "Test articles (ZZ Test) in web orders were left out, a net of 25.50 EUR in the window, which does not affect the ranking",
+    "The web total for the window, 2,150,090.07 EUR net, matches rpt_daily_store_sales for store 900 exactly",
+    "I found no duplicate sales lines, return lines or web orders, and no SKU with more than one current version",
+    "Seasonal and furniture items rank high, so the list will shift with the season",
+    "The 10th and 11th products are 6,889.60 and 6,679.65 EUR, so the cut-off is clear",
+    "Net figures are after returns. Some of the most recent web orders may still receive returns, since returns can arrive up to 30 days after a sale"
+  ]
+}
+```

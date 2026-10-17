@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')) SELECT d.fiscal_year, d.fiscal_period, SUM(f.gross_amount) AS web_sales_incl_vat FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN web_dispatch w ON w.web_order_id = f.receipt_id JOIN dim_date d ON d.calendar_date = w.dispatch_date WHERE s.store_id = 900 AND p.category &lt;&gt; 'ZZ Test' AND d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 2 GROUP BY d.fiscal_year, d.fiscal_period ORDER BY d.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_sales_incl_vat"],
+    "rows": [
+      ["FY2024/25", 4, 156427.22],
+      ["FY2024/25", 5, 153246.24],
+      ["FY2024/25", 6, 192906.29]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales recognised on the Helsinki dispatch date (for click-and-collect, the ready-for-collection date), not the order date",
+    "Web identified by store_id 900, not channel_code",
+    "Click-and-collect counted as web",
+    "Cancelled and still-processing orders excluded (only delivered and collected orders count as sales)",
+    "Figures including VAT: the sum of gross_amount on the sales lines, each line at its own VAT rate (24%, 25.5%, 14%, 10%)",
+    "Before returns: refunds not deducted",
+    "Store 999 and test articles (category ZZ Test) excluded",
+    "Staff purchases included",
+    "Fiscal calendar: FY2024/25 Q2 is periods 4 to 6, fiscal weeks 14 to 26, 29 Jul 2024 to 27 Oct 2024 (13 weeks)",
+    "Helsinki time for the dispatch date (UTC timestamps converted)"
+  ],
+  "assumptions": [
+    "\"Q2 of FY24/25\" is read as FY2024/25, as the request names the year and periods 4 to 6.",
+    "\"Web sales\" follows the company definition: dispatch-date recognition, so orders placed in late July but dispatched in P4 count in P4, and orders placed near the end of P6 but dispatched later count in the next period.",
+    "\"Before returns\" is read as no refund deduction at all, so the figures are gross sales including VAT with refund_gross not subtracted.",
+    "The dictionary does not define a figure including VAT beyond summing gross_amount from the lines. I used that sum and did not apply any flat VAT rate to a net total."
+  ],
+  "caveats": [
+    "Two test-article lines (category ZZ Test) sit in web orders dispatched in this quarter, one in P4 (8.06 incl. VAT) and one in P5 (3.77 incl. VAT). I excluded them as the company rule requires, so the figures are 11.83 lower in total than a raw sum of the web lines.",
+    "The general VAT rate rose from 24% to 25.5% on 1 September 2024, which falls in P5. P5 therefore mixes lines at 24% (orders placed before the change but dispatched after it) and 25.5%. I used the rate each line carries and did not restate anything to one rate. P4 is all 24% and P6 all 25.5% on standard-rate goods.",
+    "I checked that the net amount on the same lines matches rpt_daily_store_sales (store 900, net_sales_before_returns) to the cent in each of the three periods (126242.65, 122660.57 and 153786.32 excl. VAT). So the line selection is complete and has no duplicates, but the control table is net only, so it does not check the including-VAT figures directly.",
+    "I found no duplicate lines or missing lines. For every order in the range, the line count and the gross total agree with fact_web_order.",
+    "Because the figures are before returns, they are not net sales. Returns on web sales would lower them.",
+    "I did not use rpt.v_daily_sales, which silently omits web sales from 3 November 2025. This request falls before that date, so the view would not have changed this answer anyway."
+  ]
+}
+```

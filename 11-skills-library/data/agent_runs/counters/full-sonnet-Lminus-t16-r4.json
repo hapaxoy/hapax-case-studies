@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t16-r4",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T16",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "0c50752ba50cb844ffbc1882fb1c223c3c6ddfc63fd5e980c7d7ca44a5d4ab97",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:35:30",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 9 AS first_period, 10 AS last_period\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nweb_lines AS (\n    SELECT w.dispatch_date AS business_date, o.fulfilment_type, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, o.fulfilment_type, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN fact_web_order o ON o.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period,\n       SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) AS click_collect_net,\n       SUM(l.net_sales) AS web_net,\n       ROUND(100.0 * SUM(CASE WHEN l.fulfilment_type = 'click_and_collect' THEN l.net_sales ELSE 0 END) / SUM(l.net_sales), 1) AS click_collect_share_pct\nFROM web_lines l\nJOIN dim_date d ON d.calendar_date = l.business_date\nCROSS JOIN params\nWHERE d.fiscal_year = params.fiscal_year AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1, 2\nORDER BY 1, 2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | click_collect_net | web_net | click_collect_share_pct\nFY2025/26 | 9 | 58536.07 | 200208.58 | 29.2\nFY2025/26 | 10 | 37861.39 | 123131.15 | 30.7\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:35:38",
+   "statement": "WITH per AS (\n  SELECT fiscal_period, MIN(calendar_date) AS s, MAX(calendar_date) AS e FROM dim_date WHERE fiscal_year='FY2025/26' AND fiscal_period IN (9,10) GROUP BY 1\n),\nlines AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, s.store_id, f.channel_code, f.etl_loaded_at, o.fulfilment_type, o.status,\n         CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dd\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\n  JOIN fact_web_order o ON o.web_order_id=f.receipt_id\n)\nSELECT 'lines_by_store_nonweb' AS chk, COUNT(*) AS n, COUNT(DISTINCT sales_line_id) AS dist_ids, COUNT(DISTINCT (receipt_id, line_no)) AS dist_rl\nFROM lines, (SELECT MIN(s) s, MAX(e) e FROM per) p WHERE dd BETWEEN p.s AND p.e AND store_id <> 900\nUNION ALL\nSELECT 'lines_store900', COUNT(*), COUNT(DISTINCT sales_line_id), COUNT(DISTINCT (receipt_id, line_no))\nFROM lines, (SELECT MIN(s) s, MAX(e) e FROM per) p WHERE dd BETWEEN p.s AND p.e AND store_id = 900\nUNION ALL\nSELECT 'period_'||CAST(fiscal_period AS VARCHAR)||'_'||CAST(s AS VARCHAR)||'_'||CAST(e AS VARCHAR), 0,0,0 FROM per\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "chk | n | dist_ids | dist_rl\nlines_by_store_nonweb | 0 | 0 | 0\nlines_store900 | 12647 | 12647 | 12647\nperiod_9_2025-12-22_2026-01-25 | 0 | 0 | 0\nperiod_10_2026-01-26_2026-02-22 | 0 | 0 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:35:40",
+   "statement": "SELECT s.store_id, o.fulfilment_type, COUNT(*) AS returns, SUM(r.refund_net) AS refund_net\nFROM fact_return_line r\nJOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\nJOIN fact_web_order o ON o.web_order_id = f.receipt_id\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_date d ON d.calendar_date = r.return_date\nWHERE d.fiscal_year='FY2025/26' AND d.fiscal_period IN (9,10)\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 61,
+   "output_preview": "store_id | fulfilment_type | returns | refund_net\n101 | click_and_collect | 1 | 6.00\n101 | home_delivery | 7 | 455.68\n102 | click_and_collect | 4 | 140.89\n102 | home_delivery | 17 | 1042.43\n103 | click_and_collect | 1 | 6.49\n103 | home_delivery | 4 | 274.52\n104 | click_and_collect | 3 | 173.68\n104 | home_delivery | 9 | 191.98\n105 | home_delivery | 1 | 13.26\n106 | click_and_collect | 1 | 11.40\n106 | home_delivery | 1 | 4.28\n107 | home_delivery | 5 | 309.29\n108 | click_and_collect | 5 | 108.28\n108 | home_delivery | 9 | 521.09\n109 | click_and_collect | 3 | 166.75\n109 | home_delivery | 1 | 4.99\n110 | click_and_collect | 3 | 40.83\n110 | home_delivery | 18 | 601.39\n111 | click_and_collect | 5 | 305.04\n111 | home_delivery | 4 | 98.93\n112 | home_delivery | 1 | 10.05\n113 | home_delivery | 1 | 68.20\n114 | click_and_collect | 1 | 54.04\n114 | home_delivery | 7 | 181.45\n115 | click_and_collect | 4 | 185.10\n115 | home_delivery | 21 | 862.11\n116 | click_and_collect | 7 | 232.20\n116 | home_delivery | 18 | 743.83\n117 | click_and_collect | 1 | 25.24\n117 | home_delivery | 6 | 119.64\n118 | click_and_collect | 4 | 423.24\n118 | home_delivery | 8 | 166.92\n119 | click_and_collect | 5 | 181.47\n119 | home_delivery | 5 | 101.84\n121 | home_delivery | 6 | 260.18\n122 | click_and_collect | 3 | 65.51\n122 | home_delivery | 4 | 206.89\n123 | home_delivery | 1 | 15.84\n124 | click_and_collect | 1 | 7.62\n124 | home_delivery | 9 | 240.73\n125 | click_and_collect | 1 | 135.15\n125 | home_delivery | 11 | 320.60\n126 | "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:35:45",
+   "statement": "SELECT d.fiscal_period, SUM(r.net_sales) AS rpt_net, SUM(r.net_sales_before_returns) AS rpt_gross_of_returns, SUM(r.returns_net) AS rpt_returns, COUNT(DISTINCT r.business_date) AS days\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\nWHERE r.store_id = 900 AND d.fiscal_year='FY2025/26' AND d.fiscal_period IN (9,10)\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_period | rpt_net | rpt_gross_of_returns | rpt_returns | days\n9 | 200208.58 | 219929.50 | 19720.92 | 35\n10 | 123131.15 | 137569.07 | 14437.92 | 28\n(2 rows)"
+  }
+ ]
+}

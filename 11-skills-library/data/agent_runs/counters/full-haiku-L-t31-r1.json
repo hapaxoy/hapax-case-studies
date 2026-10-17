@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-L-t31-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T31",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "03d18728b1693b8735252c0abef534c0c8af7199912433e00347d39274e0f06a",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:48:25",
+   "statement": "fiscal-calendar/scripts/fiscal.py P8 FY2025/26",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P8 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P08\n  fiscal_weeks                       31-34\n  start_date                         2025-11-24\n  end_date                           2025-12-21\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-12-21\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 31 AND 34)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:48:35",
+   "statement": "WITH params AS (\n    SELECT DATE '2025-12-21' AS as_of_date\n),\nas_of AS (\n    SELECT d.fiscal_week_end_date AS as_of_end\n    FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date = params.as_of_date\n),\nactive AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    CROSS JOIN as_of\n    WHERE f.sale_date > as_of.as_of_end - 364\n      AND f.sale_date <= as_of.as_of_end\n)\nSELECT cur.tier, COUNT(*) AS active_members\nFROM active a\nCROSS JOIN as_of\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nGROUP BY GROUPING SETS ((cur.tier), ())\nORDER BY cur.tier NULLS LAST\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "tier | active_members\nBasic | 14654\nGold | 3901\nSilver | 10971\nNULL | 29526\n(4 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:48:41",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain member_id",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [WARN] Sales lines used without a filter on store 999 (REG-STORE-999, TEAM-EXCLUSIONS).\n  [WARN] Sales lines used without a filter on category 'ZZ Test' (REG-TEST-SKU, TEAM-EXCLUSIONS).\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 4 rows, 2 columns: tier, active_members\n\n== Duplicate keys ==\n  [FAIL] Grain column(s) not in the result: member_id.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 4 rows) ==\n  tier | active_members\n  Basic | 14654\n  Gold | 3901\n  Silver | 10971\n   | 29526\n\nResult: FAILED - fix before sending\n\n[exit code 1]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:48:52",
+   "statement": "WITH params AS (\n    SELECT DATE '2025-12-21' AS as_of_date\n),\nas_of AS (\n    SELECT d.fiscal_week_end_date AS as_of_end\n    FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date = params.as_of_date\n),\nactive AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    CROSS JOIN as_of\n    WHERE f.sale_date > as_of.as_of_end - 364\n      AND f.sale_date <= as_of.as_of_end\n      AND s.store_id < 900  -- exclude store 999 (training store) and web 900\n      AND p.category != 'ZZ Test'\n)\nSELECT cur.tier, COUNT(*) AS active_members\nFROM active a\nCROSS JOIN as_of\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nWHERE cur.tier IS NOT NULL\nGROUP BY cur.tier\nORDER BY cur.tier\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members\nBasic | 13330\nGold | 3750\nSilver | 10310\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:05",
+   "statement": "WITH params AS (\n    SELECT DATE '2025-12-21' AS as_of_date\n),\nas_of AS (\n    SELECT d.fiscal_week_end_date AS as_of_end\n    FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date = params.as_of_date\n),\nactive AS (\n    SELECT DISTINCT m.member_id\n    FROM fact_sales_line f\n    JOIN dim_member m ON m.member_key = f.member_key\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    CROSS JOIN as_of\n    WHERE f.sale_date > as_of.as_of_end - 364\n      AND f.sale_date <= as_of.as_of_end\n      AND s.store_id != 999  -- exclude training store\n      AND p.category != 'ZZ Test'\n)\nSELECT cur.tier, COUNT(*) AS active_members\nFROM active a\nCROSS JOIN as_of\nJOIN dim_member cur ON cur.member_id = a.member_id\n                   AND as_of.as_of_end BETWEEN cur.valid_from AND cur.valid_to\nWHERE cur.tier IS NOT NULL\nGROUP BY cur.tier\nORDER BY cur.tier\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members\nBasic | 14654\nGold | 3901\nSilver | 10971\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:49:11",
+   "statement": "query-check/scripts/query_check.py --file q.sql --period FY2025/26 P08",
+   "n": 6,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 3 rows, 2 columns: tier, active_members\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2025-11-24 to 2025-12-21 (28 days; fiscal: FY2025/26 P08).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 7 rows in the range only in Helsinki time, 13 only in UTC; fact_sales_line.sale_ts_utc: 12 rows in the range only in Helsinki time, 24 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 3 rows) ==\n  tier | active_members\n  Basic | 14654\n  Gold | 3901\n  Silver | 10971\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

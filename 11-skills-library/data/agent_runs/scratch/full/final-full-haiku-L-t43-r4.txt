@@ -1,0 +1,40 @@
+Perfect! The query-check passed. Now I'll format the final answer as a JSON object:
+
+```json
+{
+  "sql": "WITH product_sales AS (\n  SELECT \n    p.sku,\n    p.product_name,\n    SUM(fsl.net_amount) - COALESCE(SUM(CASE WHEN frl.return_line_id IS NOT NULL THEN frl.refund_net ELSE 0 END), 0) AS net_sales\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date d ON fsl.sale_date = d.calendar_date\n  INNER JOIN dim_product p ON fsl.product_key = p.product_key\n  INNER JOIN dim_store s ON fsl.store_key = s.store_key\n  LEFT JOIN fact_return_line frl ON fsl.sales_line_id = frl.sales_line_id\n  WHERE d.fiscal_year = 'FY2026/27' \n    AND d.fiscal_week BETWEEN 18 AND 21\n    AND s.store_id &lt; 900\n    AND p.category != 'ZZ Test'\n  GROUP BY p.sku, p.product_name\n)\nSELECT \n  ROW_NUMBER() OVER (ORDER BY net_sales DESC) AS rank,\n  sku,\n  product_name,\n  net_sales\nFROM product_sales\nORDER BY net_sales DESC\nLIMIT 10",
+  "result": {
+    "columns": ["rank", "sku", "product_name", "net_sales"],
+    "rows": [
+      [1, 100955, "Interior Paint Norvik 298", 7942.03],
+      [2, 100927, "Outdoor Lighting Kultala 862", 6800.15],
+      [3, 103415, "Home Office Peltola 918", 6116.33],
+      [4, 101411, "Power Tools Nordhem 370", 4924.03],
+      [5, 102116, "Smart Home Tuulikki 855", 4921.36],
+      [6, 101398, "Power Tools Havu Pro 689", 4634.30],
+      [7, 103434, "Home Office Tuulikki 821", 4595.99],
+      [8, 101022, "Interior Paint Kultala 377", 4101.62],
+      [9, 103697, "Storage Boxes Tuulikki 952", 3909.49],
+      [10, 101888, "Indoor Lighting Havu 419", 3823.86]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: the net amount excluding VAT, after returns",
+    "Last period: the last completed fiscal period (FY2026/27 P05, weeks 18-21, 2026-08-31 to 2026-09-27)",
+    "Best-selling: products ranked by highest net sales revenue",
+    "Store scope: physical stores only (store_id &lt; 900), excluding web shop and training store"
+  ],
+  "assumptions": [
+    "Best-selling is measured by net sales revenue (EUR excluding VAT) rather than units sold or other metrics",
+    "Last period refers to the most recent complete fiscal period as of the warehouse load date (2026-10-04)",
+    "Physical stores only, excluding store 999 (training) per company definitions",
+    "Test articles (category ZZ Test) excluded per company definitions"
+  ],
+  "caveats": [
+    "Store 999 and category ZZ Test excluded per company definitions; neither had sales in this period",
+    "Returns are accounted for by subtracting refund amounts linked to the original sales lines",
+    "All figures in EUR, net of VAT (company standard)",
+    "Web sales excluded from these product rankings"
+  ]
+}
+```

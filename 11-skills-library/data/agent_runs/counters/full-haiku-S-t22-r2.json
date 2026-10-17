@@ -1,0 +1,67 @@
+{
+ "run_id": "full-haiku-S-t22-r2",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T22",
+ "budget": 30,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "ec43cf5299a2759a57e3d1f5e43516a392faebe2a276974da676ea3709fbd912",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:28:14",
+   "statement": "SELECT campaign_id, campaign_name, start_date, end_date, mailing_list_size\nFROM dim_campaign\nWHERE campaign_name LIKE '%Spring Garden Launch 2026%'\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | mailing_list_size\n19 | Spring Garden Launch 2026 | 2026-05-04 | 2026-05-24 | 16624\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:28:19",
+   "statement": "SELECT campaign_id, campaign_name, mailing_list_size, holdout_size, mailing_list_size - holdout_size AS contacted\nFROM dim_campaign\nWHERE campaign_name = 'Spring Garden Launch 2026'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "campaign_id | campaign_name | mailing_list_size | holdout_size | contacted\n19 | Spring Garden Launch 2026 | 16624 | 1597 | 15027\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:28:24",
+   "statement": "-- Get all members contacted (not in holdout) for campaign 19\n-- Then sum their spending between May 4 and May 24, 2026\nWITH contacted_members AS (\n  -- Get all members in the mailing list\n  SELECT DISTINCT m.member_id\n  FROM dim_member m\n  WHERE m.is_current = true\n  EXCEPT\n  -- Subtract those in the holdout\n  SELECT member_id FROM campaign_holdout WHERE campaign_id = 19\n)\nSELECT \n  SUM(f.net_amount) AS total_spending\nFROM fact_sales_line f\nINNER JOIN dim_member m ON f.member_key = m.member_key\nINNER JOIN contacted_members cm ON m.member_id = cm.member_id\nWHERE f.sale_date >= '2026-05-04' \n  AND f.sale_date <= '2026-05-24'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_spending\n628382.87\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:28:31",
+   "statement": "-- Final answer: members contacted for Spring Garden Launch 2026 and their spending May 4-24\nWITH contacted_members AS (\n  -- Get all members in the mailing list for campaign 19\n  SELECT DISTINCT m.member_id\n  FROM dim_member m\n  WHERE m.is_current = true\n  EXCEPT\n  -- Subtract those in the holdout\n  SELECT member_id FROM campaign_holdout WHERE campaign_id = 19\n)\nSELECT \n  (SELECT COUNT(DISTINCT member_id) FROM contacted_members) AS members_contacted,\n  SUM(f.net_amount) AS spending_may_4_to_24\nFROM fact_sales_line f\nINNER JOIN dim_member m ON f.member_key = m.member_key\nINNER JOIN contacted_members cm ON m.member_id = cm.member_id\nWHERE f.sale_date >= '2026-05-04' \n  AND f.sale_date <= '2026-05-24'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "members_contacted | spending_may_4_to_24\n58403 | 628382.87\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:28:35",
+   "statement": "-- Verify contacted member count for campaign 19\nSELECT \n  c.mailing_list_size,\n  c.holdout_size,\n  (c.mailing_list_size - c.holdout_size) AS members_contacted\nFROM dim_campaign c\nWHERE c.campaign_id = 19\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "mailing_list_size | holdout_size | members_contacted\n16624 | 1597 | 15027\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:28:39",
+   "statement": "-- Get the total spending of members contacted for campaign 19 during May 4-24, 2026\nSELECT \n  SUM(f.net_amount) AS total_spending\nFROM fact_sales_line f\nINNER JOIN dim_member m ON f.member_key = m.member_key\nWHERE m.is_current = true\n  AND f.sale_date >= '2026-05-04' \n  AND f.sale_date <= '2026-05-24'\n  AND m.member_id NOT IN (\n    SELECT member_id FROM campaign_holdout WHERE campaign_id = 19\n  )\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_spending\n540020.42\n(1 row)"
+  }
+ ]
+}

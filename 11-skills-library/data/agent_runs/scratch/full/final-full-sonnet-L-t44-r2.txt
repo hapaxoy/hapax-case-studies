@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), sales_dedup AS (SELECT * FROM fact_sales_line QUALIFY row_number() OVER (PARTITION BY receipt_id, line_no ORDER BY etl_loaded_at, sales_line_id) = 1), net_lines AS (SELECT CASE WHEN s.store_id=900 THEN w.dispatch_date ELSE f.sale_date END AS business_date, p.sku, f.net_amount AS net_sales, f.standard_cost AS cost FROM sales_dedup f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key LEFT JOIN web_dispatch w ON w.web_order_id=f.receipt_id WHERE s.store_id<>999 AND p.category<>'ZZ Test' UNION ALL SELECT r.return_date, p.sku, -r.refund_net, -r.standard_cost_returned FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key WHERE s.store_id<>999 AND p.category<>'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, cp.category, ROUND(SUM(n.net_sales),2) AS net_sales, ROUND(100.0*SUM(n.net_sales-n.cost)/SUM(n.net_sales),1) AS gross_margin_pct FROM net_lines n JOIN dim_date d ON d.calendar_date=n.business_date JOIN dim_product cp ON cp.sku=n.sku AND cp.is_current WHERE d.fiscal_year='FY2025/26' AND d.fiscal_period=6 AND cp.category IN ('Garden','Electrical') GROUP BY 1,2,3 ORDER BY 3",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "net_sales", "gross_margin_pct"],
+    "rows": [
+      ["FY2025/26", 6, "Electrical", 219493.00, 41.0],
+      ["FY2025/26", 6, "Garden", 114805.94, 40.2]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns, with returns dated on their return date",
+    "Gross margin: net sales minus standard cost, both after returns, with returned units credited back at standard_cost_returned",
+    "Gross margin %: gross margin divided by net sales",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "Staff purchases included",
+    "Web sales recognised on the Helsinki dispatch date, delivered and collected orders only (cancelled and processing excluded)",
+    "As-is category hierarchy: current product version, so outdoor lighting counts in Electrical",
+    "Fiscal period 6 taken from dim_date (FY2025/26 weeks 22-26, 22 Sep to 26 Oct 2025)",
+    "Web shop (store 900) included as part of company sales",
+    "Control total checked: all-category P6 net sales (1,293,219.69) match rpt_daily_store_sales exactly"
+  ],
+  "assumptions": [
+    "'Period 6 last year' is read as FY2025/26 P6. The request came in on 8 Oct 2026, which is in FY2026/27, so last year is FY2025/26. Accepted past requests read 'last year' the same way.",
+    "No basis (as-is or as-was) was specified, so the company default, as-is, was used, as in past category-margin requests.",
+    "Web sales are included, since net sales are a company figure and the request did not limit it to stores.",
+    "Margin is the company definition, after returns."
+  ],
+  "caveats": [
+    "Outdoor lighting moved from Garden to Electrical on 27 Oct 2025, the day after P6 ended. The figures are as-is, so outdoor lighting sits in Electrical. As it stood during P6 (as-was), the figures would be Electrical 185,711.09 at 41.65% and Garden 148,587.85 at 39.51%. Garden is therefore lower and Electrical higher than the categories as they were at the time.",
+    "Duplicate loads found in fact_sales_line: 418 receipt lines for 15-21 Sep 2025 appear twice, with identical content and a reload stamp of 23 Sep 2025. They fall in fiscal week 21 (P5), so they do not change P6 figures. The query removes them anyway by keeping one row per receipt_id and line_no.",
+    "Cancelled and processing web orders are excluded because they are not web sales. None of these orders had lines in the P6 window.",
+    "Returns are dated on the return date. P6 net sales therefore include refunds on goods sold earlier, and later returns of P6 sales will fall in later periods.",
+    "Net sales are excluding VAT, in EUR."
+  ]
+}
+```

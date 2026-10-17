@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH sales AS (SELECT d.fiscal_year, d.fiscal_period, f.net_amount AS amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_date d ON d.calendar_date = f.sale_date WHERE p.category = 'Garden' AND s.store_id &lt;&gt; 999 AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 7 AND 12), returns AS (SELECT d.fiscal_year, d.fiscal_period, -r.refund_net AS amount FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key JOIN dim_date d ON d.calendar_date = r.return_date WHERE p.category = 'Garden' AND s.store_id &lt;&gt; 999 AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 7 AND 12) SELECT fiscal_year, fiscal_period, 'Garden' AS category, round(sum(amount), 2) AS net_sales FROM (SELECT * FROM sales UNION ALL SELECT * FROM returns) GROUP BY fiscal_year, fiscal_period ORDER BY fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "category", "net_sales"],
+    "rows": [
+      ["FY2024/25", 7, "Garden", 56334.42],
+      ["FY2024/25", 8, "Garden", 56462.85],
+      ["FY2024/25", 9, "Garden", 63420.22],
+      ["FY2024/25", 10, "Garden", 59222.23],
+      ["FY2024/25", 11, "Garden", 109386.69],
+      ["FY2024/25", 12, "Garden", 310092.16]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = sales lines net of VAT (net_amount, after line discounts) minus refunds net of VAT (refund_net), in EUR, matching the rpt_daily_store_sales definition",
+    "Old category set-up = category as of the sale date: fact tables carry the product version valid at the sale date, so Outdoor Lighting stays in Garden. It moved to Electrical only on 2025-10-27.",
+    "Fiscal calendar from dim_date: FY2024/25 P07 to P12 run 2024-10-28 to 2025-04-27",
+    "Stores and web combined: physical stores plus the web shop (store 900), as in the daily sales report",
+    "Returns are booked in the period of the return date, not the original sale date, and use the product version valid at the return date",
+    "Staff purchases are included, as in the daily sales report"
+  ],
+  "assumptions": [
+    "Read 'the old way' as Garden including Outdoor Lighting, the category structure in force during FY2024/25, with no restatement to the current set-up",
+    "Read 'Garden net sales' as stores and web combined, with no channel split, since none was requested",
+    "Net sales means net of returns, as defined in rpt_daily_store_sales",
+    "Staff purchases are kept in, because the daily sales report keeps them in",
+    "Read P7 to P12 as the six fiscal periods FY2024/25 P07 to P12, one row per period"
+  ],
+  "caveats": [
+    "Correction: store 999 (Training store, head office) is excluded. It had 78 Garden sales lines worth 1,175.35 EUR net in P7 to P12, which are test transactions. The daily sales report also leaves this store out.",
+    "Outdoor Lighting is part of these figures (about 94,820 EUR net of VAT before returns across P7 to P12). Re-running the query against today's category set-up would move it to Electrical and lower Garden. The warehouse's current Outdoor Lighting products under Electrical start from 2025-10-27, so they do not appear in this period.",
+    "P12 (310,092 EUR) and P11 (109,387 EUR) are much higher than P7 to P10, which sit between 56,000 and 63,000 EUR. This looks like the spring season for garden products, but I did not investigate it further.",
+    "The warehouse's own web figures in rpt_daily_store_sales were about 2,000 EUR lower than the web lines in fact_sales_line for November 2024. I could not find the cause: there are no cancelled orders, no duplicate lines and no date-boundary difference. The answer is built from the fact tables.",
+    "Garden refunds are subtracted in the period they were made. A refund in P7 may relate to a sale from before P7, so a period's net figure can include refunds of earlier sales.",
+    "Backup, staging and old tables (bak_*, stg_*, tmp_*, *_old) were not used."
+  ]
+}
+```

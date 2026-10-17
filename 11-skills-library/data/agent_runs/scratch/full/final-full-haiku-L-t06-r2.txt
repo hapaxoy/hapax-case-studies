@@ -1,0 +1,26 @@
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2025/26' AS fiscal_year, 2 AS period\n),\nsold_lines AS (\n    SELECT f.sales_line_id, f.sale_date, s.format, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s     ON s.store_key = f.store_key\n    JOIN dim_product p   ON p.product_key = f.product_key\n    JOIN dim_date d      ON d.calendar_date = f.sale_date\n    CROSS JOIN params\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n      AND d.fiscal_year = params.fiscal_year\n      AND d.fiscal_period = params.period\n),\nrefunds AS (\n    SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1\n)\nSELECT l.format,\n       SUM(l.net_amount) AS sold_net,\n       COALESCE(SUM(r.refund_net), 0) AS returned_net,\n       ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct\nFROM sold_lines l\nLEFT JOIN refunds r USING (sales_line_id)\nGROUP BY 1\nORDER BY return_rate_pct DESC",
+  "result": {
+    "columns": ["format", "sold_net", "returned_net", "return_rate_pct"],
+    "rows": [
+      ["Medium", 552936.25, 25030.11, 4.53],
+      ["Large", 400763.11, 17707.57, 4.42],
+      ["Small", 147668.20, 6319.09, 4.28]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate: returned net divided by sold net, attributed to the fiscal week of the original sale",
+    "Net sales scope: excludes store 999 and category ZZ Test",
+    "Store scope: physical stores only (store_id &lt; 900), web shop not included"
+  ],
+  "assumptions": [
+    "Period 2 last year = FY2025/26 P2 (fiscal period 2 of 2025/26, dated 26 May - 22 June 2025)",
+    "Store format dimension is the format of the store on the sale date"
+  ],
+  "caveats": [
+    "Return cohort is complete: maximum sale date plus 30 days is before the warehouse load point (4 October 2026), so all expected returns have been recorded",
+    "Web sales and online purchases are excluded; only physical store formats are reported"
+  ]
+}
+```

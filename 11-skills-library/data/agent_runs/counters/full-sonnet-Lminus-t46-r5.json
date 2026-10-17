@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t46-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T46",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "e2dcc98c09bbbbd403321d42cf42e26daaaaa4927ec9d99b9ac3a464cf03ee4a",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:02:05",
+   "statement": "SELECT (SELECT max(sale_date) FROM fact_sales_line) AS max_sale,\n (SELECT max(CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)) FROM fact_web_order) AS max_dispatch,\n (SELECT max(CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE)) FROM fact_web_order) AS max_order,\n (SELECT max(return_date) FROM fact_return_line) AS max_return,\n (SELECT max(etl_loaded_at) FROM fact_sales_line) AS max_etl,\n (SELECT string_agg(fiscal_period_label || ':' || CAST(fully_loaded AS VARCHAR), ', ') FROM ref_fiscal_calendar WHERE NOT fully_loaded) AS not_loaded\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "max_sale | max_dispatch | max_order | max_return | max_etl | not_loaded\n2026-10-04 | 2026-10-04 | 2026-10-04 | 2026-10-04 | 2026-10-05T01:00:00 | FY2026/27 P06:false\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:02:12",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT p.sku, w.dispatch_date AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT p.sku, r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT cp.sku, cp.product_name, cp.category, ROUND(SUM(n.net_sales), 2) AS web_net_sales,\n       COUNT(*) AS n_rows\nFROM net_lines n\nJOIN dim_product cp ON cp.sku = n.sku AND cp.is_current\nWHERE n.business_date >= DATE '2025-11-03'\nGROUP BY 1, 2, 3\nORDER BY web_net_sales DESC\nLIMIT 15\n",
+   "n": 2,
+   "ok": true,
+   "rows": 15,
+   "output_preview": "sku | product_name | category | web_net_sales | n_rows\n100955 | Interior Paint Norvik 298 | Paint & Decorating | 14499.84 | 285\n103774 | Christmas Decorations Poutaranta Home 601 | Seasonal | 13300.74 | 464\n103390 | Bedroom Peltola 793 | Furniture | 10907.95 | 53\n100529 | Garden Furniture Raudikko 536 | Garden | 10052.48 | 55\n103747 | Christmas Decorations Mäntylä 402 | Seasonal | 9326.33 | 177\n103791 | Christmas Decorations Havu 430 | Seasonal | 9209.38 | 271\n100573 | Garden Furniture Ahvenisto 564 | Garden | 7495.15 | 63\n100528 | Garden Furniture Norvik 499 | Garden | 7411.38 | 48\n103928 | Sauna & Winter Havu 699 | Seasonal | 7130.21 | 118\n103415 | Home Office Peltola 918 | Furniture | 6889.60 | 79\n103861 | Christmas Decorations Kuusela 620 | Seasonal | 6679.65 | 186\n100624 | Barbecue & Grills Poutaranta Home 851 | Garden | 6526.14 | 32\n100607 | Barbecue & Grills Vesikko 222 | Garden | 6487.06 | 45\n101022 | Interior Paint Kultala 377 | Paint & Decorating | 6444.60 | 98\n103313 | Living Room Tuulikki 344 | Furniture | 6320.80 | 28\n(15 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:02:21",
+   "statement": "SELECT\n (SELECT count(*) - count(DISTINCT sales_line_id) FROM fact_sales_line WHERE sale_date >= DATE '2025-10-01') AS dup_line_ids,\n (SELECT count(*) - count(DISTINCT (receipt_id, line_no)) FROM fact_sales_line WHERE sale_date >= DATE '2025-10-01') AS dup_receipt_lines,\n (SELECT count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=900 AND f.sale_date >= DATE '2025-10-01') AS web_lines,\n (SELECT count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id=900 AND f.receipt_id NOT IN (SELECT web_order_id FROM fact_web_order)) AS web_lines_no_order,\n (SELECT count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id=900 AND o.status IN ('cancelled','processing')) AS web_lines_not_dispatched,\n (SELECT count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE s.store_id<>900 AND f.receipt_id IN (SELECT web_order_id FROM fact_web_order)) AS orders_lines_in_other_store,\n (SELECT count(*) - count(DISTINCT web_order_id) FROM fact_web_order) AS dup_orders,\n (SELECT count(*) FROM fact_web_order WHERE status IN ('delivered','collected') AND dispatch_ts_utc IS NULL) AS dispatched_no_ts,\n (SELECT count(*) FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key WHERE s.store_id=900 AND r.return_date >= DATE '2025-11-03') AS web_returns,\n (SELECT count(*) - count(DISTINCT return_line_id) FROM fact_return_line) AS dup_returns,\n (SELECT count(*) FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id JOIN dim_store s ON s.store_key=f.store_key JOIN dim_store rs ON rs.store_key=r.store_key WHERE s.store_id=900 AND rs.store_id<>900) AS web_sale_returned_in_store\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_line_ids | dup_receipt_lines | web_lines | web_lines_no_order | web_lines_not_dispatched | orders_lines_in_other_store | dup_orders | dispatched_no_ts | web_returns | dup_returns | web_sale_returned_in_store\n0 | 0 | 87769 | 0 | 0 | 0 | 0 | 0 | 4996 | 0 | 3411\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:02:28",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT p.sku, w.dispatch_date AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT p.sku, r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT\n (SELECT ROUND(SUM(net_sales),2) FROM net_lines WHERE business_date >= DATE '2025-11-03') AS my_total,\n (SELECT ROUND(SUM(net_sales),2) FROM rpt_daily_store_sales_dummy_placeholder_removed) AS x\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Catalog Error: Table with name rpt_daily_store_sales_dummy_placeholder_removed does not exist!\nDid you mean \"rpt_daily_store_sales\"?\n\nLINE 21:  (SELECT ROUND(SUM(net_sales),2) FROM rpt_daily_store_sales_dummy_placeholder_removed) AS x\n                                               ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:02:35",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT w.dispatch_date AS business_date, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT\n (SELECT ROUND(SUM(net_sales),2) FROM net_lines WHERE business_date >= DATE '2025-11-03') AS my_total,\n (SELECT ROUND(SUM(net_sales),2) FROM rpt_daily_store_sales WHERE store_id = 900 AND business_date >= DATE '2025-11-03') AS control_total,\n (SELECT min(business_date) FROM rpt_daily_store_sales WHERE store_id = 900) AS ctrl_min,\n (SELECT max(business_date) FROM rpt_daily_store_sales WHERE store_id = 900) AS ctrl_max\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "my_total | control_total | ctrl_min | ctrl_max\n2150090.07 | 2150090.07 | 2024-04-29 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:02:47",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nsold AS (\n    SELECT p.sku, f.net_amount AS v\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test' AND w.dispatch_date >= DATE '2025-11-03'\n),\nret_all AS (\n    -- all refunds on web-sold lines wherever processed, return date from migration\n    SELECT p.sku, -r.refund_net AS v\n    FROM fact_return_line r\n    JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\n    JOIN dim_store fs ON fs.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE fs.store_id = 900 AND p.category <> 'ZZ Test' AND r.return_date >= DATE '2025-11-03'\n),\nalt AS (\n    SELECT sku, SUM(v) AS alt_net FROM (SELECT * FROM sold UNION ALL SELECT * FROM ret_all) GROUP BY 1\n)\nSELECT cp.sku, cp.product_name, ROUND(alt_net,2) AS alt_net,\n  (SELECT ROUND(SUM(net_amount),2) FROM fact_sales_line f2 JOIN dim_product p2 ON p2.product_key=f2.product_key WHERE p2.category='ZZ Test' AND f2.sale_date >= DATE '2025-11-03' AND f2.store_key IN (SELECT store_key FROM dim_store WHERE store_id=900)) AS zz_test_web_net\nFROM alt JOIN dim_product cp ON cp.sku = alt.sku AND cp.is_current\nORDER BY alt_net DESC LIMIT 12\n",
+   "n": 6,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "sku | product_name | alt_net | zz_test_web_net\n100955 | Interior Paint Norvik 298 | 14289.79 | 25.50\n103774 | Christmas Decorations Poutaranta Home 601 | 13131.89 | 25.50\n100529 | Garden Furniture Raudikko 536 | 9844.41 | 25.50\n103390 | Bedroom Peltola 793 | 9751.63 | 25.50\n103747 | Christmas Decorations Mäntylä 402 | 9207.01 | 25.50\n103791 | Christmas Decorations Havu 430 | 9049.06 | 25.50\n100573 | Garden Furniture Ahvenisto 564 | 6957.22 | 25.50\n103928 | Sauna & Winter Havu 699 | 6957.04 | 25.50\n103861 | Christmas Decorations Kuusela 620 | 6679.65 | 25.50\n100528 | Garden Furniture Norvik 499 | 6610.15 | 25.50\n101022 | Interior Paint Kultala 377 | 6444.60 | 25.50\n100624 | Barbecue & Grills Poutaranta Home 851 | 6271.71 | 25.50\n(12 rows)"
+  }
+ ]
+}

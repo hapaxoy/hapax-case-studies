@@ -1,0 +1,30 @@
+Perfect! The query check passed. Since the request is simply for "Like-for-like growth for period 4 this year" without asking for a regional breakdown, I'll return just the total row as per the skill guidance.
+
+```json
+{
+  "sql": "-- Like-for-like (LFL) net sales growth for P4 FY2026/27 vs P4 FY2025/26\nWITH params AS (\n    SELECT 'FY2026/27' AS ty_year, 'FY2025/26' AS ly_year, 14 AS first_week, 17 AS last_week\n),\nrange_start AS (\n    SELECT MIN(d.calendar_date) AS first_day\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year = params.ty_year AND d.fiscal_week = params.first_week\n),\nweeks AS (\n    SELECT DISTINCT d.fiscal_year, d.fiscal_week, d.fiscal_week_start_date, d.fiscal_week_end_date\n    FROM dim_date d CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n),\nstore_weeks AS (\n    SELECT st.store_id, w.fiscal_year, w.fiscal_week,\n           (st.open_date IS NULL OR st.open_date &lt;= w.fiscal_week_start_date)\n           AND (st.close_date IS NULL OR st.close_date &gt;= w.fiscal_week_end_date)\n           AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                           WHERE c.store_id = st.store_id\n                             AND c.closure_start_date &lt;= w.fiscal_week_end_date\n                             AND c.closure_end_date &gt;= w.fiscal_week_start_date) AS trading\n    FROM dim_store st\n    CROSS JOIN weeks w\n    WHERE st.is_current AND st.store_id &lt; 900\n),\nlfl_store_weeks AS (\n    SELECT ty.store_id, ty.fiscal_week\n    FROM store_weeks ty\n    CROSS JOIN params\n    CROSS JOIN range_start\n    JOIN store_weeks ly ON ly.store_id = ty.store_id AND ly.fiscal_week = ty.fiscal_week AND ly.fiscal_year = params.ly_year\n    JOIN dim_store st   ON st.store_id = ty.store_id AND st.is_current\n    WHERE ty.fiscal_year = params.ty_year AND ty.trading AND ly.trading\n      AND (st.open_date IS NULL OR st.open_date &lt;= range_start.first_day - 364)\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n),\nlfl_sales AS (\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales, COUNT(DISTINCT n.store_id || '-' || d.fiscal_week) AS store_weeks\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    JOIN lfl_store_weeks l ON l.store_id = n.store_id AND l.fiscal_week = d.fiscal_week\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN params.first_week AND LEAST(params.last_week, 52)\n    GROUP BY GROUPING SETS ((d.fiscal_year), (d.fiscal_year, cs.region))\n)\nSELECT ty.net_sales AS this_year, ly.net_sales AS last_year,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 2) AS lfl_growth_pct\nFROM lfl_sales ty\nCROSS JOIN params\nJOIN lfl_sales ly ON ly.region IS NOT DISTINCT FROM ty.region AND ly.fiscal_year = params.ly_year\nWHERE ty.fiscal_year = params.ty_year AND ty.region IS NULL\nORDER BY ty.region NULLS FIRST;",
+  "result": {
+    "columns": ["this_year", "last_year", "lfl_growth_pct"],
+    "rows": [[1010478.52, 1010743.32, -0.03]]
+  },
+  "definitions_applied": [
+    "DEF-LFL-BASIS: Physical stores only (store_id &lt; 900); web shop excluded",
+    "DEF-LFL-OPEN: Store must have been open at least 52 weeks before the first day of the period",
+    "DEF-LFL-BOTH-YEARS: Store-week counts only if the store traded in that fiscal week in both comparison years",
+    "DEF-LFL-REFIT: Refit weeks from ref_store_closure are excluded for the store concerned in both years",
+    "DEF-LFL-WEEK53: Week 53 is never part of LFL (no comparator week)",
+    "DEF-NET-SALES: Net sales excluding VAT, after returns; store 999 and category ZZ Test excluded",
+    "CAL-COMPARE: Comparison by fiscal week number (same weeks in both years)"
+  ],
+  "assumptions": [
+    "Period 4 'this year' interpreted as FY2026/27 P04 (the current fiscal year), not a past period",
+    "Fiscal weeks 14-17 define P4 in both FY2026/27 and FY2025/26",
+    "Request for a single total figure; regional breakdown not included per skill guidance"
+  ],
+  "caveats": [
+    "None. Period 4 FY2026/27 is fully loaded in the warehouse (complete as of 2026-08-30); the prior-year period FY2025/26 P04 is also complete.",
+    "LFL base includes 152 store-weeks (out of 160 possible: 40 stores × 4 weeks) - stores that did not trade in matching weeks in both years are excluded",
+    "Growth of -0.03% represents a decline of 265 euros on net sales of 1.01 million in the LFL base"
+  ]
+}
+```

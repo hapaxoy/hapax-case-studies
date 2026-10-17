@@ -1,0 +1,40 @@
+{
+ "run_id": "full-haiku-L-t26-r5",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T26",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "d8fa76abd74f8d56a2e7af5b946737fc479ee2ecd9dfdc5fce38a4fa4c5257f1",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:59:09",
+   "statement": "fiscal-calendar/scripts/fiscal.py P2 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P2 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P02\n  fiscal_weeks                       5-8\n  start_date                         2026-06-01\n  end_date                           2026-06-28\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-06-28\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 5 AND 8)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:59:22",
+   "statement": "WITH params AS (\n    SELECT DATE '2026-06-01' AS start_date, DATE '2026-06-28' AS end_date\n),\nperiod_days AS (\n    SELECT d.calendar_date FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date BETWEEN params.start_date AND params.end_date AND d.is_trading_day\n),\ntrading_days AS (\n    SELECT cs.store_id, COUNT(*) AS trading_days\n    FROM dim_store cs\n    CROSS JOIN period_days pd\n    WHERE cs.is_current AND cs.store_id < 900\n      AND (cs.open_date IS NULL OR cs.open_date <= pd.calendar_date)\n      AND (cs.close_date IS NULL OR cs.close_date >= pd.calendar_date)\n      AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                      WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n    GROUP BY 1\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nstore_sales AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY ss.net_sales / td.trading_days DESC) AS rank, cs.store_id, cs.store_name, cs.format,\n       td.trading_days, ss.net_sales, ROUND(ss.net_sales / td.trading_days, 0) AS net_sales_per_trading_day\nFROM store_sales ss\nJOIN trading_days td ON td.store_id = ss.store_id\nJOIN dim_store cs    ON cs.store_id = ss.store_id AND cs.is_current\nORDER BY rank;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 38,
+   "output_preview": "rank | store_id | store_name | format | trading_days | net_sales | net_sales_per_trading_day\n1 | 115 | Tampere Hervanta | Large | 26 | 72687.05 | 2796.0\n2 | 102 | Helsinki Pitäjänmäki | Large | 26 | 55562.42 | 2137.0\n3 | 108 | Lahti | Large | 26 | 46899.91 | 1804.0\n4 | 104 | Vantaa Tammisto | Large | 26 | 46414.81 | 1785.0\n5 | 131 | Oulu Kaakkuri | Large | 26 | 46021.68 | 1770.0\n6 | 116 | Tampere Lielahti | Large | 26 | 45485.54 | 1749.0\n7 | 125 | Kuopio | Large | 14 | 23993.71 | 1714.0\n8 | 110 | Turku Kupittaa | Large | 26 | 44380.38 | 1707.0\n9 | 117 | Tampere Kaleva | Medium | 26 | 40769.32 | 1568.0\n10 | 118 | Nokia | Medium | 26 | 38036.56 | 1463.0\n11 | 119 | Pori | Medium | 26 | 37060.06 | 1425.0\n12 | 124 | Jyväskylä Palokka | Medium | 26 | 34403.16 | 1323.0\n13 | 101 | Helsinki Vuosaari | Medium | 26 | 34229.86 | 1317.0\n14 | 132 | Oulu Linnanmaa | Medium | 26 | 32347.31 | 1244.0\n15 | 121 | Vaasa | Medium | 26 | 31852.44 | 1225.0\n16 | 128 | Lappeenranta | Medium | 26 | 31703.61 | 1219.0\n17 | 126 | Joensuu | Medium | 26 | 31643.91 | 1217.0\n18 | 136 | Tampere Lamminpää | Medium | 26 | 30503.73 | 1173.0\n19 | 107 | Hyvinkää | Medium | 26 | 28716.89 | 1104.0\n20 | 109 | Hämeenlinna | Medium | 26 | 28110.63 | 1081.0\n21 | 114 | Kouvola | Medium | 26 | 26338.80 | 1013.0\n22 | 122 | Seinäjoki | Medium | 26 | 26034.82 | 1001.0\n23 | 127 | Mikkeli | Medium | 26 | 24615.83 | 947.0\n24 | 103 | Espoo Lommila | Medium | 26 | 24610.32 | 947.0\n25 | 111 | Turku Härmälä | Medium | 26 | 21796.60 "
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:59:33",
+   "statement": "query-check/scripts/query_check.py --file q.sql --control --control-stores physical --start 2026-06-01 --end 2026-06-28",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 38 rows, 7 columns: rank, store_id, store_name, format, trading_days, net_sales, net_sales_per_trading_day\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2026-06-01 to 2026-06-28 (28 days; fiscal: FY2026/27 P02).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 3 only in UTC; fact_sales_line.sale_ts_utc: 11 rows in the range only in Helsinki time, 6 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared net_sales with rpt_daily_store_sales.net_sales, 2026-06-01 to 2026-06-28, stores: physical, at level: store_id.\n  [INFO] Result total 1,063,916.20; control total 1,063,916.20; gap 0.00.\n  [PASS] No gap above 0.01 at level store_id.\n\n== Preview (first 10 rows) ==\n  rank | store_id | store_name | format | trading_days | net_sales | net_sales_per_trading_day\n  1 | 115 | Tampere Hervanta | Large | 26 | 72687.05 | 2796.0\n  2 | 102 | Helsinki Pit�j�nm�ki | Large | 26 | 55562.42 | 2137.0\n  3 | 108 | Lahti | Large | 26 "
+  }
+ ]
+}

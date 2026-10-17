@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t47-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T47",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "14496ac19807b2733fb8ccf71d034fdddd1d0d32c33ad3bbc0480e75e24a439b",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:18:53",
+   "statement": "SELECT tier, is_current, COUNT(*) AS n_rows, COUNT(DISTINCT member_id) AS n_members, MIN(valid_from) AS min_from, MAX(valid_to) AS max_to,\n SUM(CASE WHEN valid_to = DATE '9999-12-31' THEN 1 ELSE 0 END) AS open_ended\nFROM dim_member GROUP BY ALL ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "tier | is_current | n_rows | n_members | min_from | max_to | open_ended\nBasic | false | 19343 | 17903 | 2019-01-01 | 2026-10-02 | 0\nBasic | true | 31229 | 31229 | 2019-01-01 | 9999-12-31 | 31229\nGold | false | 2412 | 2233 | 2019-01-01 | 2026-10-02 | 0\nGold | true | 5791 | 5791 | 2019-01-02 | 9999-12-31 | 5791\nSilver | false | 7559 | 7068 | 2019-01-01 | 2026-10-02 | 0\nSilver | true | 22980 | 22980 | 2019-01-02 | 9999-12-31 | 22980\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:18:58",
+   "statement": "WITH per AS (\n SELECT member_id, COUNT(*) AS versions, SUM(CASE WHEN is_current THEN 1 ELSE 0 END) AS cur_rows,\n  SUM(CASE WHEN valid_to = DATE '9999-12-31' THEN 1 ELSE 0 END) AS open_rows,\n  SUM(CASE WHEN DATE '2026-10-08' BETWEEN valid_from AND valid_to THEN 1 ELSE 0 END) AS valid_today,\n  SUM(CASE WHEN DATE '2026-10-04' BETWEEN valid_from AND valid_to THEN 1 ELSE 0 END) AS valid_load\n FROM dim_member GROUP BY 1)\nSELECT cur_rows, open_rows, valid_today, valid_load, COUNT(*) AS members FROM per GROUP BY ALL ORDER BY 1,2,3,4\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "cur_rows | open_rows | valid_today | valid_load | members\n1 | 1 | 1 | 1 | 60000\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:00",
+   "statement": "SELECT COUNT(*) AS rows_total, COUNT(DISTINCT member_key) AS keys, COUNT(DISTINCT member_id) AS members,\n SUM(CASE WHEN member_id IN (SELECT member_id FROM dim_member GROUP BY 1 HAVING SUM(CASE WHEN is_current THEN 1 ELSE 0 END)=1) THEN 0 ELSE 1 END) AS odd_rows,\n MAX(valid_from) AS max_from, SUM(CASE WHEN valid_from > valid_to THEN 1 ELSE 0 END) AS inverted,\n SUM(CASE WHEN member_id IS NULL OR tier IS NULL THEN 1 ELSE 0 END) AS nulls\nFROM dim_member\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_total | keys | members | odd_rows | max_from | inverted | nulls\n89314 | 89314 | 60000 | 0 | 2026-10-04 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:19:04",
+   "statement": "SELECT COUNT(DISTINCT member_id) AS gold_members,\n SUM(CASE WHEN join_date > DATE '2026-10-08' THEN 1 ELSE 0 END) AS future_join,\n SUM(CASE WHEN home_store_id = 999 THEN 1 ELSE 0 END) AS home999,\n SUM(CASE WHEN home_store_id = 900 THEN 1 ELSE 0 END) AS online,\n SUM(CASE WHEN valid_from > DATE '2026-10-04' THEN 1 ELSE 0 END) AS from_after_load\nFROM dim_member WHERE is_current AND tier = 'Gold'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "gold_members | future_join | home999 | online | from_after_load\n5791 | 0 | 0 | 1161 | 0\n(1 row)"
+  }
+ ]
+}

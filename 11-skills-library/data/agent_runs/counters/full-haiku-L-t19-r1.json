@@ -1,0 +1,49 @@
+{
+ "run_id": "full-haiku-L-t19-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T19",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "34cea8b18d389be24ce5efc267dd3f00f4fc483b294116af9abb754cfdb899d1",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:39:43",
+   "statement": "fiscal-calendar/scripts/fiscal.py Q3 FY2025/26 --compare",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: Q3 FY2025/26    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2025/26\n  fiscal_periods                     FY2025/26 P07, FY2025/26 P08, FY2025/26 P09\n  fiscal_weeks                       27-39\n  start_date                         2025-10-27\n  end_date                           2026-01-25\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-01-25\n  sql_filter                         (d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 27 AND 39)\n  note: Q1 = P1-P3 (weeks 1-13), Q2 = P4-P6, Q3 = P7-P9, Q4 = P10-P12 (CAL-PERIODS).\n\nPrior-year comparator (same fiscal week numbers)\n------------------------------------------------\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P07, FY2024/25 P08, FY2024/25 P09\n  fiscal_weeks                       27-39\n  start_date                         2024-10-28\n  end_date                           2025-01-26\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-01-26\n  aligned_on                         fiscal week number (CAL-COMPARE)\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETW"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:00",
+   "statement": "WITH params AS (\n    SELECT 'FY2025/26' AS ty_year, 'FY2024/25' AS ly_year\n),\nweb_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: stores on the sale date, web on the Helsinki dispatch date\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nquarterly AS (\n    -- as-is: region from the current store version (Online = the web shop, its own line)\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    CROSS JOIN params\n    WHERE d.fiscal_year IN (params.ty_year, params.ly_year)\n      AND d.fiscal_week BETWEEN 27 AND 39\n    GROUP BY 1, 2\n)\nSELECT ty.region, ty.net_sales AS q3_fy2025_26, ly.net_sales AS q3_fy2024_25,\n       ROUND(100.0 * (ty.net_sales / ly.net_sales - 1), 1) AS growth_pct\nFROM quarterly ty\nCROSS JOIN params\nJOIN quarterly ly ON ly.region = ty.region AND ly.fiscal_year = params.ly_year\nWHERE ty.fiscal_year = params.ty_year\nORDER BY ty.region;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "region | q3_fy2025_26 | q3_fy2024_25 | growth_pct\nCapital Region | 527026.01 | 525151.30 | 0.4\nEast | 597583.01 | 588069.69 | 1.6\nNorth | 413618.24 | 387519.62 | 6.7\nOnline | 580450.93 | 447645.43 | 29.7\nSouth | 729021.20 | 710020.17 | 2.7\nWest | 997953.07 | 952479.50 | 4.8\n(6 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:40:08",
+   "statement": "query-check/scripts/query_check.py --file q.sql",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.3 s.\n\n== Row count ==\n  [PASS] 6 rows, 4 columns: region, q3_fy2025_26, q3_fy2024_25, growth_pct\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 6 rows) ==\n  region | q3_fy2025_26 | q3_fy2024_25 | growth_pct\n  Capital Region | 527026.01 | 525151.30 | 0.4\n  East | 597583.01 | 588069.69 | 1.6\n  North | 413618.24 | 387519.62 | 6.7\n  Online | 580450.93 | 447645.43 | 29.7\n  South | 729021.20 | 710020.17 | 2.7\n  West | 997953.07 | 952479.50 | 4.8\n\nResult: no failed checks\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:14",
+   "statement": "WITH params AS (\n    SELECT DATE '2025-10-27' AS ty_start, DATE '2026-01-25' AS ty_end,\n           DATE '2024-10-28' AS ly_start, DATE '2025-01-26' AS ly_end\n)\nSELECT 'FY2025/26 Q3' AS period, SUM(net_sales) AS total_net_sales\nFROM rpt_daily_store_sales\nCROSS JOIN params\nWHERE business_date BETWEEN params.ty_start AND params.ty_end\nUNION ALL\nSELECT 'FY2024/25 Q3' AS period, SUM(net_sales) AS total_net_sales\nFROM rpt_daily_store_sales\nCROSS JOIN params\nWHERE business_date BETWEEN params.ly_start AND params.ly_end;\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "period | total_net_sales\nFY2025/26 Q3 | 3845652.46\nFY2024/25 Q3 | 3610885.71\n(2 rows)"
+  }
+ ]
+}

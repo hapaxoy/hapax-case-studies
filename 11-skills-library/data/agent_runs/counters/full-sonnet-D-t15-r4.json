@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-D-t15-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T15",
+ "budget": 30,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "f141fb561329376928af57b3ce07bb3a5bf9b95b6e8a425a1bedfc5b95e5f844",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:27",
+   "statement": "SELECT CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) AS d, status,\n  COUNT(*) AS n, COUNT(DISTINCT web_order_id) AS n_distinct\nFROM fact_web_order\nWHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) BETWEEN DATE '2025-11-30' AND DATE '2025-12-02'\n   OR CAST(order_ts_utc AS DATE) = DATE '2025-12-01'\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "d | status | n | n_distinct\n2025-11-30 | cancelled | 4 | 4\n2025-11-30 | collected | 32 | 32\n2025-11-30 | delivered | 109 | 109\n2025-12-01 | cancelled | 19 | 19\n2025-12-01 | collected | 87 | 87\n2025-12-01 | delivered | 239 | 239\n2025-12-02 | cancelled | 6 | 6\n2025-12-02 | collected | 42 | 42\n2025-12-02 | delivered | 108 | 108\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:32",
+   "statement": "WITH o AS (\n  SELECT * FROM fact_web_order\n  WHERE status <> 'cancelled'\n    AND CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n),\nt AS (\n  SELECT o.web_order_id,\n    MAX(CASE WHEN p.category = 'ZZ Test' THEN 1 ELSE 0 END) AS has_test,\n    MIN(CASE WHEN p.category <> 'ZZ Test' THEN 1 ELSE 0 END) AS all_test_flag,\n    COUNT(f.sales_line_id) AS lines\n  FROM o LEFT JOIN fact_sales_line f ON f.receipt_id = o.web_order_id\n  LEFT JOIN dim_product p ON p.product_key = f.product_key\n  GROUP BY 1\n)\nSELECT COUNT(*) AS orders, SUM(has_test) AS with_test_lines, SUM(CASE WHEN lines=0 THEN 1 ELSE 0 END) AS no_lines,\n  (SELECT COUNT(*) FROM o WHERE order_total_gross <= 0 OR line_count = 0) AS odd_totals,\n  (SELECT COUNT(*) FROM o WHERE dispatch_ts_utc IS NULL) AS no_dispatch,\n  (SELECT MIN(order_ts_utc) FROM o) AS mn, (SELECT MAX(order_ts_utc) FROM o) AS mx\nFROM t\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | with_test_lines | no_lines | odd_totals | no_dispatch | mn | mx\n326 | 0 | 0 | 0 | 0 | 2025-11-30T22:03:10 | 2025-12-01T21:54:46\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:00:33",
+   "statement": "SELECT COUNT(*) AS rows_all, COUNT(DISTINCT web_order_id) AS distinct_ids FROM fact_web_order\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_all | distinct_ids\n94876 | 94876\n(1 row)"
+  }
+ ]
+}

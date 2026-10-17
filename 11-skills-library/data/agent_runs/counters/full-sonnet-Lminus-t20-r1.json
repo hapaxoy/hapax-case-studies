@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-Lminus-t20-r1",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T20",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "74f548db52727b6403d53843eb41968a24fb4d55458ec1cde487345d4b627967",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:27:29",
+   "statement": "SELECT region, format, count(*) AS n, count(DISTINCT store_id) AS stores, min(store_id), max(store_id), string_agg(DISTINCT CAST(close_date AS VARCHAR), ',') AS closes\nFROM dim_store WHERE is_current GROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 17,
+   "output_preview": "region | format | n | stores | min(store_id) | max(store_id) | closes\nCapital Region | Large | 2 | 2 | 102 | 104 | NULL\nCapital Region | Medium | 2 | 2 | 101 | 103 | NULL\nCapital Region | Small | 1 | 1 | 105 | 105 | NULL\nEast | Large | 1 | 1 | 125 | 125 | NULL\nEast | Medium | 4 | 4 | 124 | 128 | NULL\nEast | Small | 3 | 3 | 129 | 138 | 2026-01-25\nHead office | Training | 1 | 1 | 999 | 999 | NULL\nNorth | Large | 1 | 1 | 131 | 131 | NULL\nNorth | Medium | 2 | 2 | 132 | 134 | NULL\nNorth | Small | 3 | 3 | 133 | 139 | NULL\nOnline | Web | 1 | 1 | 900 | 900 | NULL\nSouth | Large | 2 | 2 | 108 | 110 | NULL\nSouth | Medium | 4 | 4 | 107 | 114 | NULL\nSouth | Small | 4 | 4 | 106 | 137 | NULL\nWest | Large | 2 | 2 | 115 | 116 | NULL\nWest | Medium | 6 | 6 | 117 | 136 | NULL\nWest | Small | 2 | 2 | 120 | 123 | NULL\n(17 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:27:30",
+   "statement": "SELECT fiscal_year, min(calendar_date) AS d0, max(calendar_date) AS d1, min(fiscal_week), max(fiscal_week), count(*) AS days\nFROM dim_date WHERE fiscal_year IN ('FY2026/27','FY2025/26') AND fiscal_week <= 22 GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | d0 | d1 | min(fiscal_week) | max(fiscal_week) | days\nFY2025/26 | 2025-04-28 | 2025-09-28 | 1 | 22 | 154\nFY2026/27 | 2026-05-04 | 2026-10-04 | 1 | 22 | 154\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:27:36",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nby_region AS (\n    SELECT d.fiscal_year, cs.region, SUM(n.net_sales) AS net_sales, count(DISTINCT n.store_id) AS stores\n    FROM net_lines n\n    JOIN dim_date d  ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    WHERE d.fiscal_year IN ('FY2026/27','FY2025/26') AND d.fiscal_week <= 22\n    GROUP BY 1, 2\n)\nSELECT region, fiscal_year, ROUND(net_sales,2) AS net_sales, stores FROM by_region ORDER BY fiscal_year DESC, net_sales DESC\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "region | fiscal_year | net_sales | stores\nWest | FY2026/27 | 1815139.47 | 10\nSouth | FY2026/27 | 1309213.51 | 10\nEast | FY2026/27 | 959424.31 | 7\nCapital Region | FY2026/27 | 948667.50 | 5\nNorth | FY2026/27 | 730386.24 | 6\nWest | FY2025/26 | 1768594.12 | 10\nSouth | FY2025/26 | 1282208.20 | 10\nEast | FY2025/26 | 1085462.56 | 8\nCapital Region | FY2025/26 | 923666.53 | 5\nNorth | FY2025/26 | 703641.62 | 6\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:27:38",
+   "statement": "SELECT d.fiscal_year, cs.region, ROUND(SUM(r.net_sales),2) AS control_net_sales, count(DISTINCT r.store_id) AS stores\nFROM rpt_daily_store_sales r\nJOIN dim_date d ON d.calendar_date = r.business_date\nJOIN dim_store cs ON cs.store_id = r.store_id AND cs.is_current\nWHERE d.fiscal_year IN ('FY2026/27','FY2025/26') AND d.fiscal_week <= 22 AND r.store_id < 900\nGROUP BY 1,2 ORDER BY 1 DESC, 3 DESC\n",
+   "n": 4,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "fiscal_year | region | control_net_sales | stores\nFY2026/27 | West | 1815139.47 | 10\nFY2026/27 | South | 1309213.51 | 10\nFY2026/27 | East | 959424.31 | 7\nFY2026/27 | Capital Region | 948667.50 | 5\nFY2026/27 | North | 730386.24 | 6\nFY2025/26 | West | 1758203.59 | 10\nFY2025/26 | South | 1282208.20 | 10\nFY2025/26 | East | 1085462.56 | 8\nFY2025/26 | Capital Region | 923666.53 | 5\nFY2025/26 | North | 703641.62 | 6\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:27:57",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n)\nSELECT cs.region, cs.store_id, cs.store_name,\n  ROUND(SUM(CASE WHEN d.fiscal_year='FY2026/27' THEN n.net_sales END),0) AS ty,\n  ROUND(SUM(CASE WHEN d.fiscal_year='FY2025/26' THEN n.net_sales END),0) AS ly\nFROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date\nJOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\nWHERE d.fiscal_year IN ('FY2026/27','FY2025/26') AND d.fiscal_week <= 22\nGROUP BY 1,2,3 ORDER BY 1,2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 39,
+   "output_preview": "region | store_id | store_name | ty | ly\nCapital Region | 101 | Helsinki Vuosaari | 180089 | 179160\nCapital Region | 102 | Helsinki Pitäjänmäki | 335012 | 309097\nCapital Region | 103 | Espoo Lommila | 132930 | 139481\nCapital Region | 104 | Vantaa Tammisto | 248473 | 239844\nCapital Region | 105 | Kerava | 52163 | 56085\nEast | 124 | Jyväskylä Palokka | 183258 | 168736\nEast | 125 | Kuopio | 176197 | 235273\nEast | 126 | Joensuu | 173686 | 176611\nEast | 127 | Mikkeli | 121289 | 137808\nEast | 128 | Lappeenranta | 173839 | 177951\nEast | 129 | Savonlinna | NULL | 57535\nEast | 130 | Kotka | 75563 | 71978\nEast | 138 | Iisalmi | 55592 | 59571\nNorth | 131 | Oulu Kaakkuri | 256863 | 243749\nNorth | 132 | Oulu Linnanmaa | 170739 | 161576\nNorth | 133 | Kemi | 63431 | 66564\nNorth | 134 | Rovaniemi | 112232 | 104294\nNorth | 135 | Kajaani | 53456 | 51438\nNorth | 139 | Raahe | 73666 | 76021\nSouth | 106 | Porvoo | 60515 | 63698\nSouth | 107 | Hyvinkää | 157267 | 155092\nSouth | 108 | Lahti | 261145 | 251215\nSouth | 109 | Hämeenlinna | 149888 | 144480\nSouth | 110 | Turku Kupittaa | 236069 | 242817\nSouth | 111 | Turku Härmälä | 116080 | 117978\nSouth | 112 | Raisio | 62312 | 62392\nSouth | 113 | Salo | 59449 | 57272\nSouth | 114 | Kouvola | 133103 | 128984\nSouth | 137 | Lohja | 73386 | 58281\nWest | 115 | Tampere Hervanta | 372968 | 360871\nWest | 116 | Tampere Lielahti | 235031 | 243119\nWest | 117 | Tampere Kaleva | 220658 | 213443\nWest | 118 | Nokia | 191201 | 186066\nWest | 119 | Pori | 188889 | 168240\n"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:28:03",
+   "statement": "WITH net_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nby_region AS (\n    SELECT d.fiscal_year, cs.region, ROUND(SUM(n.net_sales), 2) AS net_sales\n    FROM net_lines n\n    JOIN dim_date d   ON d.calendar_date = n.business_date\n    JOIN dim_store cs ON cs.store_id = n.store_id AND cs.is_current\n    WHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_week <= 22\n    GROUP BY 1, 2\n)\nSELECT RANK() OVER (ORDER BY net_sales DESC) AS rank, region, fiscal_year, net_sales\nFROM by_region\nORDER BY rank\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "rank | region | fiscal_year | net_sales\n1 | West | FY2026/27 | 1815139.47\n2 | South | FY2026/27 | 1309213.51\n3 | East | FY2026/27 | 959424.31\n4 | Capital Region | FY2026/27 | 948667.50\n5 | North | FY2026/27 | 730386.24\n(5 rows)"
+  }
+ ]
+}

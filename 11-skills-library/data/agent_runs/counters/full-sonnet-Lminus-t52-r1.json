@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-Lminus-t52-r1",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T52",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "d7690a8b1dc41ffd8d0794cb5f04dbbb90b64c634eb41a9d57d897820c76b408",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:27:30",
+   "statement": "SELECT 'store' k, CAST(store_key AS VARCHAR) a, CAST(store_id AS VARCHAR) b, store_name c, city d, region e, CAST(valid_from AS VARCHAR) f, CAST(valid_to AS VARCHAR) g FROM dim_store WHERE store_name ILIKE '%Pitäjänmäki%' OR city ILIKE '%Pitäjänmäki%' OR store_id=102\nUNION ALL\nSELECT 'period', fiscal_period_label, CAST(period_start_date AS VARCHAR), CAST(period_end_date AS VARCHAR), CAST(fully_loaded AS VARCHAR), CAST(weeks_in_period AS VARCHAR), '', '' FROM ref_fiscal_calendar WHERE fiscal_year='FY2026/27' AND fiscal_period=5\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "k | a | b | c | d | e | f | g\nstore | 3 | 102 | Helsinki Pitäjänmäki | Helsinki | South | 2000-01-01 | 2025-04-27\nstore | 4 | 102 | Helsinki Pitäjänmäki | Helsinki | Capital Region | 2025-04-28 | 9999-12-31\nperiod | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | true | 4 |  | \n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:27:35",
+   "statement": "SELECT count(*) n_lines, count(DISTINCT sales_line_id) d_id, count(DISTINCT (receipt_id, line_no)) d_rl, sum(quantity) units, min(sale_date) mn, max(sale_date) mx, min(etl_loaded_at) l1, max(etl_loaded_at) l2,\n sum(CASE WHEN quantity<=0 THEN 1 ELSE 0 END) nonpos, sum(CASE WHEN staff_purchase_flag THEN quantity ELSE 0 END) staff_units\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE s.store_id=102 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n_lines | d_id | d_rl | units | mn | mx | l1 | l2 | nonpos | staff_units\n2121 | 2121 | 2121 | 3740 | 2026-08-31 | 2026-09-27 | 2026-09-01T01:00:00 | 2026-09-28T01:00:00 | 0 | 55\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:27:40",
+   "statement": "WITH u AS (\n  SELECT p.sku, sum(f.quantity) units, count(*) n_lines, count(DISTINCT p.product_key) n_versions, sum(CASE WHEN f.staff_purchase_flag THEN f.quantity ELSE 0 END) staff_units\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product p ON p.product_key=f.product_key\n  WHERE s.store_id=102 AND p.category<>'ZZ Test' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n  GROUP BY p.sku)\nSELECT u.*, cp.product_name, cp.category, cp.subcategory, cp.brand\nFROM u JOIN dim_product cp ON cp.sku=u.sku AND cp.is_current\nORDER BY units DESC LIMIT 10\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "sku | units | n_lines | n_versions | staff_units | product_name | category | subcategory | brand\n101624 | 52 | 14 | 1 | 0 | Fixings & Fasteners Raudikko 251 | Tools & Hardware | Fixings & Fasteners | Raudikko\n101778 | 44 | 13 | 1 | 0 | Fixings & Fasteners Nordhem 349 | Tools & Hardware | Fixings & Fasteners | Nordhem\n102244 | 42 | 19 | 1 | 2 | Batteries & Bulbs Havu Pro 791 | Electrical | Batteries & Bulbs | Havu Pro\n102233 | 30 | 12 | 1 | 0 | Batteries & Bulbs Havu Pro 384 | Electrical | Batteries & Bulbs | Havu Pro\n103670 | 30 | 17 | 1 | 0 | Storage Boxes Vesikko 753 | Cleaning & Household | Storage Boxes | Vesikko\n102213 | 29 | 12 | 1 | 0 | Batteries & Bulbs Kuusela 444 | Electrical | Batteries & Bulbs | Kuusela\n103545 | 29 | 15 | 1 | 0 | Cleaning Products Poutaranta Home 928 | Cleaning & Household | Cleaning Products | Poutaranta Home\n102468 | 29 | 14 | 1 | 0 | Plumbing Parts Ahvenisto 279 | Bathroom & Plumbing | Plumbing Parts | Ahvenisto\n101680 | 28 | 7 | 1 | 0 | Fixings & Fasteners Havu 723 | Tools & Hardware | Fixings & Fasteners | Havu\n100727 | 27 | 12 | 1 | 0 | Soil & Fertiliser Havu 662 | Garden | Soil & Fertiliser | Havu\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:27:42",
+   "statement": "SELECT (SELECT sum(units_sold) FROM rpt_daily_store_sales WHERE store_id=102 AND business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') ctrl_units,\n (SELECT sum(f.quantity) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE s.store_id=102 AND p.category<>'ZZ Test' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') my_units,\n (SELECT sum(r.quantity_returned) FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key WHERE s.store_id=102 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27') returned_units\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "ctrl_units | my_units | returned_units\n3740 | 3740 | 79\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:27:47",
+   "statement": "SELECT p.sku, sum(r.quantity_returned) ret_units_booked_in_period\nFROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key\nWHERE s.store_id=102 AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' AND p.sku IN (101624,101778,102244,102233,103670)\nGROUP BY p.sku ORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "sku | ret_units_booked_in_period\n102244 | 1\n(1 row)"
+  }
+ ]
+}

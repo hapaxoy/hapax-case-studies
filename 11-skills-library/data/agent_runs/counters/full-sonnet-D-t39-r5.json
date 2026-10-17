@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t39-r5",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T39",
+ "budget": 30,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "38346cae73436b019a8e9fa6fea9d6a62bfe0f67d0e044757e0d3f68689cf6ba",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:37:19",
+   "statement": "SELECT status, fulfilment_type, login_state, COUNT(*) n, COUNT(DISTINCT web_order_id) dn\nFROM fact_web_order\nWHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 1,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "status | fulfilment_type | login_state | n | dn\ncancelled | click_and_collect | guest | 2 | 2\ncancelled | click_and_collect | logged_in | 4 | 4\ncancelled | home_delivery | guest | 3 | 3\ncancelled | home_delivery | logged_in | 10 | 10\ncollected | click_and_collect | guest | 26 | 26\ncollected | click_and_collect | logged_in | 61 | 61\ndelivered | home_delivery | guest | 77 | 77\ndelivered | home_delivery | logged_in | 162 | 162\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:37:21",
+   "statement": "SELECT CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) d, count(*) n, count(distinct o.web_order_id) dn,\n sum(CASE WHEN o.status<>'cancelled' THEN 1 ELSE 0 END) noncancel,\n sum(CASE WHEN o.status<>'cancelled' AND CAST(o.order_ts_utc AS DATE)=DATE '2025-12-01' THEN 1 ELSE 0 END) utc_noncancel\nFROM fact_web_order o\nWHERE o.order_ts_utc >= TIMESTAMP '2025-11-29' AND o.order_ts_utc < TIMESTAMP '2025-12-03'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "d | n | dn | noncancel | utc_noncancel\n2025-11-29 | 120 | 120 | 115 | 0\n2025-11-30 | 145 | 145 | 141 | 0\n2025-12-01 | 345 | 345 | 326 | 267\n2025-12-02 | 156 | 156 | 150 | 7\n2025-12-03 | 6 | 6 | 6 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:37:27",
+   "statement": "WITH o AS (\n SELECT * FROM fact_web_order\n WHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01' AND status<>'cancelled'\n)\nSELECT count(*) orders,\n count(DISTINCT o.web_order_id) dist_orders,\n sum(CASE WHEN EXISTS (SELECT 1 FROM fact_sales_line f JOIN dim_product p ON p.product_key=f.product_key WHERE f.receipt_id=o.web_order_id AND p.category='ZZ Test') THEN 1 ELSE 0 END) test_orders,\n sum(CASE WHEN NOT EXISTS (SELECT 1 FROM fact_sales_line f WHERE f.receipt_id=o.web_order_id) THEN 1 ELSE 0 END) no_lines,\n sum(CASE WHEN EXISTS (SELECT 1 FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE f.receipt_id=o.web_order_id AND s.store_id=999) THEN 1 ELSE 0 END) s999,\n sum(CASE WHEN EXISTS (SELECT 1 FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE f.receipt_id=o.web_order_id AND s.store_id<>900) THEN 1 ELSE 0 END) nonweb_store\nFROM o\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "orders | dist_orders | test_orders | no_lines | s999 | nonweb_store\n326 | 326 | 0 | 0 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:37:29",
+   "statement": "SELECT web_order_id, member_key, login_state, order_ts_utc, dispatch_ts_utc, status, order_total_gross, line_count, count(*) over (partition by member_key, order_ts_utc, order_total_gross) dup\nFROM fact_web_order\nWHERE CAST(timezone('Europe/Helsinki', order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\nQUALIFY dup>1 OR order_total_gross<=0 OR line_count<=0 OR order_ts_utc IS NULL\nLIMIT 50\n",
+   "n": 4,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "web_order_id | member_key | login_state | order_ts_utc | dispatch_ts_utc | status | order_total_gross | line_count | dup\n(0 rows)"
+  }
+ ]
+}

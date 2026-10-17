@@ -1,0 +1,76 @@
+{
+ "run_id": "full-haiku-L-t21-r2",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T21",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "3bce2b26308d9f03c9996b444f4eb8057dba767e13617a3b4cd8088aa0cd0d2f",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:54:33",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4-P6 FY2024/25",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4-P6 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P04, FY2024/25 P05, FY2024/25 P06\n  fiscal_weeks                       14-26\n  start_date                         2024-07-29\n  end_date                           2024-10-27\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2024-10-27\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 14 AND 26)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:54:54",
+   "statement": "WITH web_sales AS (\n  SELECT \n    d.fiscal_year,\n    d.fiscal_period,\n    SUM(f.gross_amount) AS gross_sales_incl_vat\n  FROM fact_sales_line f\n  JOIN fact_web_order w ON f.receipt_id = w.web_order_id\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_date d ON d.calendar_date = CAST(timezone('Europe/Helsinki', w.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)\n  WHERE s.store_id = 900\n    AND p.category != 'ZZ Test'\n    AND d.fiscal_year = 'FY2024/25'\n    AND d.fiscal_period IN (4, 5, 6)\n  GROUP BY d.fiscal_year, d.fiscal_period\n  ORDER BY d.fiscal_period\n)\nSELECT fiscal_year, fiscal_period, gross_sales_incl_vat FROM web_sales;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_year | fiscal_period | gross_sales_incl_vat\nFY2024/25 | 4 | 156427.22\nFY2024/25 | 5 | 153246.24\nFY2024/25 | 6 | 192906.29\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:55:00",
+   "statement": "query-check/scripts/query_check.py --file q.sql --period FY2024/25 P4 to P6 --control --control-stores web",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n[stderr]\n--period 'FY2024/25 P4 to P6' not found in ref_fiscal_calendar (format: 'FY2026/27 P05').\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:55:07",
+   "statement": "query-check/scripts/query_check.py --file q.sql --start 2024-07-29 --end 2024-10-27 --control --control-stores web",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 3 rows, 3 columns: fiscal_year, fiscal_period, gross_sales_incl_vat\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2024-07-29 to 2024-10-27 (91 days; fiscal: FY2024/25 P05, FY2024/25 P06, FY2024/25 P04).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 3 rows in the range only in Helsinki time, 5 only in UTC; fact_sales_line.sale_ts_utc: 7 rows in the range only in Helsinki time, 8 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [FAIL] Value column not found; give --value-col (columns: fiscal_year, fiscal_period, gross_sales_incl_vat).\n\n== Preview (first 3 rows) ==\n  fiscal_year | fiscal_period | gross_sales_incl_vat\n  FY2024/25 | 4 | 156427.22\n  FY2024/25 | 5 | 153246.24\n  FY2024/25 | 6 | 192906.29\n\nResult: FAILED - fix before sending\n\n[exit code 1]"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:55:14",
+   "statement": "query-check/scripts/query_check.py --file q.sql --start 2024-07-29 --end 2024-10-27 --control --control-stores web --value-col gross_sales_incl_vat",
+   "n": 5,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.1 s.\n\n== Row count ==\n  [PASS] 3 rows, 3 columns: fiscal_year, fiscal_period, gross_sales_incl_vat\n\n== Duplicate keys ==\n  [INFO] No grain declared (use --grain col1,col2).\n\n== Date coverage ==\n  [INFO] Requested 2024-07-29 to 2024-10-27 (91 days; fiscal: FY2024/25 P05, FY2024/25 P04, FY2024/25 P06).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 3 rows in the range only in Helsinki time, 5 only in UTC; fact_sales_line.sale_ts_utc: 7 rows in the range only in Helsinki time, 8 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Compared gross_sales_incl_vat with rpt_daily_store_sales.net_sales, 2024-07-29 to 2024-10-27, stores: web, at level: total.\n  [INFO] Result total 502,579.75; control total 366,691.33; gap 135,888.42.\n  [FAIL] 1 cells differ by more than 0.01. Largest: total: result 502,579.75 vs control 366,691.33 (gap 135,888.42). Find the cause before sending (TEAM-CONTROL-TOTALS); a stated difference in definition (e.g. gross, as-was, a store subset) is a reason, an unexplained gap is not.\n\n== Preview (first 3 rows) ==\n  fiscal_year | fiscal_pe"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:55:50",
+   "statement": "-- Verify web sales calculation by showing net and gross separately\nSELECT \n  d.fiscal_period,\n  COUNT(DISTINCT f.receipt_id) AS order_count,\n  SUM(f.net_amount) AS net_sales_ex_vat,\n  SUM(f.gross_amount) AS gross_sales_incl_vat,\n  ROUND(SUM(f.gross_amount) - SUM(f.net_amount), 2) AS vat_amount\nFROM fact_sales_line f\nJOIN fact_web_order w ON f.receipt_id = w.web_order_id\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d ON d.calendar_date = CAST(timezone('Europe/Helsinki', w.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)\nWHERE s.store_id = 900\n  AND p.category != 'ZZ Test'\n  AND d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_period IN (4, 5, 6)\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period;\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | order_count | net_sales_ex_vat | gross_sales_incl_vat | vat_amount\n4 | 1982 | 126242.65 | 156427.22 | 30184.57\n5 | 2038 | 122660.57 | 153246.24 | 30585.67\n6 | 2632 | 153786.32 | 192906.29 | 39119.97\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:55:56",
+   "statement": "-- Check web returns for the same period\nSELECT \n  d.fiscal_period,\n  COUNT(DISTINCT r.return_line_id) AS return_count,\n  SUM(r.refund_net) AS total_refund_net,\n  SUM(r.refund_gross) AS total_refund_gross\nFROM fact_return_line r\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key\nJOIN dim_date d ON d.calendar_date = r.return_date\nWHERE s.store_id = 900\n  AND p.category != 'ZZ Test'\n  AND d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_period IN (4, 5, 6)\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period;\n",
+   "n": 7,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "fiscal_period | return_count | total_refund_net | total_refund_gross\n4 | 238 | 11049.62 | 13700.14\n5 | 227 | 10780.91 | 13441.44\n6 | 326 | 14167.68 | 17777.59\n(3 rows)"
+  }
+ ]
+}

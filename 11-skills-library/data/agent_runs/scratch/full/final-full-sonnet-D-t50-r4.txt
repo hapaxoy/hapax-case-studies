@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, fulfilment_type, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), net_lines AS (SELECT w.dispatch_date AS business_date, w.fulfilment_type, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key JOIN web_dispatch w ON w.web_order_id=f.receipt_id WHERE s.store_id=900 AND p.category&lt;&gt;'ZZ Test' UNION ALL SELECT r.return_date, w.fulfilment_type, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key JOIN fact_sales_line f ON f.sales_line_id=r.sales_line_id JOIN web_dispatch w ON w.web_order_id=f.receipt_id WHERE s.store_id=900 AND p.category&lt;&gt;'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, ROUND(100.0*SUM(CASE WHEN n.fulfilment_type='click_and_collect' THEN n.net_sales ELSE 0 END)/SUM(n.net_sales),2) AS click_and_collect_share_pct FROM net_lines n JOIN dim_date d ON d.calendar_date=n.business_date WHERE d.fiscal_year='FY2025/26' AND d.fiscal_period BETWEEN 6 AND 8 GROUP BY 1,2 ORDER BY 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "click_and_collect_share_pct"],
+    "rows": [
+      ["FY2025/26", 6, 27.85],
+      ["FY2025/26", 7, 25.43],
+      ["FY2025/26", 8, 27.03]
+    ]
+  },
+  "definitions_applied": [
+    "Click-and-collect share = click-and-collect net sales divided by all web net sales (click-and-collect counts as web)",
+    "Net sales excluding VAT, after returns; returns reduce net sales on their own return date",
+    "Web sales recognised on the Helsinki dispatch date from fact_web_order (not sale_date, which is the order date)",
+    "Cancelled and processing orders excluded (no dispatch, no sales lines); only delivered and collected orders count",
+    "Web identified by store_id 900, not channel_code (channel_code is empty after the 3 November 2025 migration)",
+    "Click-and-collect identified by fact_web_order.fulfilment_type, not channel_id or channel_code",
+    "Store 999 and category ZZ Test excluded",
+    "Fiscal periods taken from dim_date: P6 22 Sep to 26 Oct 2025 (5 weeks), P7 27 Oct to 23 Nov 2025, P8 24 Nov to 21 Dec 2025"
+  ],
+  "assumptions": [
+    "'Last year' read as FY2025/26. The request was made on 9 October 2026, in FY2026/27, and past requests made in that fiscal year read 'last year' as FY2025/26. Periods 6 to 8 are therefore FY2025/26 P6 to P8, all fully loaded.",
+    "'Sales' read as net sales after returns, which is the company definition. Returns were attributed to click-and-collect or home delivery through the original line's order (sales_line_id to fact_web_order).",
+    "Only refunds booked to the web shop (store 900) were counted, following the company rule that returns are booked where they are processed. I did not use the control total in rpt_daily_store_sales, because it has no channel split.",
+    "One share per period was returned, with no breakdown and no total."
+  ],
+  "caveats": [
+    "No data defects were found for these periods. Web sales lines were unique per receipt_id and line_no. Every web line matched exactly one web order. Cancelled orders had no lines. All delivered and collected orders had a dispatch time.",
+    "The 3 November 2025 web-platform migration falls in P7. Neither channel column works across it, so I used store_id 900 and fulfilment_type, which are consistent across the migration. Using channel_code would have lost web sales from 3 November 2025.",
+    "rpt.v_daily_sales and rpt.v_weekly_store_sales were not used, because they silently omit web sales from 3 November 2025.",
+    "Some refunds on web orders were processed in physical stores, not booked to the web shop. These sit in those stores' sales and are not in the web figures. If refunds were instead followed back to the web order wherever they were processed, the shares would be about 27.51, 25.32 and 27.01 for P6, P7 and P8. Before returns, the shares would be 27.88, 25.99 and 27.13.",
+    "Returns can arrive up to 30 days after a sale, and these periods ended well over 30 days before the warehouse load date, so the figures are stable.",
+    "Net sales in this period (EUR ex VAT, after returns, booked-to-web basis): all web 175,589 in P6, 154,977 in P7 and 225,265 in P8; click-and-collect 48,901 in P6, 39,403 in P7 and 60,899 in P8."
+  ]
+}
+```

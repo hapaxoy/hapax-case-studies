@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "WITH period_dates AS (\n  SELECT period_start_date, period_end_date\n  FROM ref_fiscal_calendar\n  WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 2\n),\nsales_in_period AS (\n  SELECT \n    fsl.sales_line_id,\n    fsl.net_amount,\n    ds.format\n  FROM fact_sales_line fsl\n  INNER JOIN dim_store ds ON fsl.store_key = ds.store_key\n  INNER JOIN period_dates pd ON fsl.sale_date BETWEEN pd.period_start_date AND pd.period_end_date\n),\nsales_by_format AS (\n  SELECT \n    format,\n    SUM(net_amount) as total_sales_net\n  FROM sales_in_period\n  GROUP BY format\n),\nreturns_by_format AS (\n  SELECT \n    sip.format,\n    SUM(frl.refund_net) as total_refunds_net\n  FROM fact_return_line frl\n  INNER JOIN sales_in_period sip ON frl.sales_line_id = sip.sales_line_id\n  GROUP BY sip.format\n)\nSELECT \n  sbf.format,\n  CASE \n    WHEN sbf.total_sales_net &gt; 0 \n    THEN ROUND(100.0 * COALESCE(rbf.total_refunds_net, 0) / sbf.total_sales_net, 2)\n    ELSE 0\n  END as return_share_pct\nFROM sales_by_format sbf\nLEFT JOIN returns_by_format rbf ON sbf.format = rbf.format\nORDER BY sbf.format",
+  "result": {
+    "columns": ["format", "return_share_pct"],
+    "rows": [
+      ["Large", 4.42],
+      ["Medium", 4.53],
+      ["Small", 4.28],
+      ["Training", 0.0],
+      ["Web", 12.23]
+    ]
+  },
+  "definitions_applied": [
+    "Net amounts used for both sales and returns (excluding VAT, after discounts)",
+    "Return share calculated as total refund net amount divided by total sales net amount",
+    "Fiscal period P02 of FY2025/26 (2025-05-26 to 2025-06-22)",
+    "Returns tracked back to their original sales line to determine store format at sale point"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26, the most recent complete fiscal year",
+    "Period 2 interpreted as fiscal period 2 (P02), not calendar period",
+    "Share interpreted as return rate: percentage of sales value that was refunded",
+    "Returns linked to sales by sales_line_id to ensure we count returns from P02 sales regardless of return date",
+    "Store format determined by the store where the original sale occurred"
+  ],
+  "caveats": [
+    "Store format values in warehouse (Large, Medium, Small, Training, Web) do not match schema documentation which specifies Hyper, Standard, Express",
+    "Training format has zero returns despite sales activity; this may reflect operational policy or sample size (56 receipts)",
+    "Web format shows significantly higher return rate (12.23%) compared to physical stores (4.28-4.53%), which should be verified with business owners",
+    "Return data relies on sales_line_id matching; any orphaned return lines would not be included"
+  ]
+}
+```

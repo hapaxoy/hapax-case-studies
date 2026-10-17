@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-Lminus-t15-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T15",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "539ed26fd605951493378ca451b6534e09a7f166b0205c20b874edf0f67864d4",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:33:12",
+   "statement": "SELECT CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) AS helsinki_date,\n       COUNT(*) AS all_rows, COUNT(DISTINCT o.web_order_id) AS distinct_orders,\n       COUNT(*) FILTER (WHERE o.status <> 'cancelled') AS not_cancelled,\n       COUNT(DISTINCT o.web_order_id) FILTER (WHERE o.status <> 'cancelled') AS distinct_not_cancelled,\n       COUNT(*) FILTER (WHERE o.status = 'cancelled') AS cancelled,\n       COUNT(*) FILTER (WHERE o.status = 'processing') AS processing,\n       CAST(o.order_ts_utc AS DATE) AS utc_date_dummy\nFROM fact_web_order o\nWHERE o.order_ts_utc >= TIMESTAMP '2025-11-29' AND o.order_ts_utc < TIMESTAMP '2025-12-03'\nGROUP BY 1, 8 ORDER BY 1, 8\n",
+   "n": 1,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "helsinki_date | all_rows | distinct_orders | not_cancelled | distinct_not_cancelled | cancelled | processing | utc_date_dummy\n2025-11-29 | 120 | 120 | 115 | 115 | 5 | 0 | 2025-11-29\n2025-11-30 | 6 | 6 | 6 | 6 | 0 | 0 | 2025-11-29\n2025-11-30 | 139 | 139 | 135 | 135 | 4 | 0 | 2025-11-30\n2025-12-01 | 61 | 61 | 59 | 59 | 2 | 0 | 2025-11-30\n2025-12-01 | 284 | 284 | 267 | 267 | 17 | 0 | 2025-12-01\n2025-12-02 | 7 | 7 | 7 | 7 | 0 | 0 | 2025-12-01\n2025-12-02 | 149 | 149 | 143 | 143 | 6 | 0 | 2025-12-02\n2025-12-03 | 6 | 6 | 6 | 6 | 0 | 0 | 2025-12-02\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:33:19",
+   "statement": "WITH day_orders AS (\n  SELECT o.web_order_id, o.status, o.member_key, o.login_state\n  FROM fact_web_order o\n  WHERE CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n),\ntest_orders AS (\n  SELECT DISTINCT f.receipt_id\n  FROM fact_sales_line f JOIN dim_product p ON p.product_key = f.product_key\n  WHERE p.category = 'ZZ Test' AND f.receipt_id IN (SELECT web_order_id FROM day_orders)\n)\nSELECT (SELECT COUNT(*) FROM day_orders WHERE status <> 'cancelled') AS not_cancelled,\n       (SELECT COUNT(*) FROM day_orders WHERE status <> 'cancelled' AND web_order_id IN (SELECT receipt_id FROM test_orders)) AS test_orders_in_count,\n       (SELECT COUNT(*) FROM day_orders WHERE status = 'cancelled') AS cancelled,\n       (SELECT COUNT(*) FROM day_orders WHERE status = 'processing') AS processing,\n       (SELECT COUNT(*) FROM day_orders WHERE login_state='guest') AS guests,\n       (SELECT MAX(CAST(order_ts_utc AS DATE)) FROM fact_web_order) AS max_order_date\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "not_cancelled | test_orders_in_count | cancelled | processing | guests | max_order_date\n326 | 0 | 19 | 0 | 108 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:33:24",
+   "statement": "SELECT COUNT(*) AS web_orders\nFROM fact_web_order o\nWHERE CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) = DATE '2025-12-01'\n  AND o.status <> 'cancelled'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "web_orders\n326\n(1 row)"
+  }
+ ]
+}

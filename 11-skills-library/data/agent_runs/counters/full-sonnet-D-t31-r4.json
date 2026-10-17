@@ -1,0 +1,85 @@
+{
+ "run_id": "full-sonnet-D-t31-r4",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 12,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "961a0761986fafe90b20b3c78506e00539c05502b083c4c8beb05604c6a33147",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:31",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_period=8 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2024/25 | 8 | 2024-11-25 | 2024-12-22 | 4 | 31 | 34 | true\nFY2025/26 | 8 | 2025-11-24 | 2025-12-21 | 4 | 31 | 34 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:37",
+   "statement": "SELECT tier, count(*) versions, count(distinct member_id) members,\n sum(case when valid_from<=DATE '2025-12-21' and valid_to>=DATE '2025-12-21' then 1 else 0 end) valid_on_asof,\n min(valid_from), max(valid_to)\nFROM dim_member GROUP BY ROLLUP(tier) ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "tier | versions | members | valid_on_asof | min(valid_from) | max(valid_to)\nBasic | 50572 | 43649 | 29304 | 2019-01-01 | 9999-12-31\nGold | 8203 | 7210 | 4336 | 2019-01-01 | 9999-12-31\nSilver | 30539 | 27039 | 15035 | 2019-01-01 | 9999-12-31\nNULL | 89314 | 60000 | 48675 | 2019-01-01 | 9999-12-31\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:38",
+   "statement": "SELECT count(*) n_members_valid, count(distinct member_id) distinct_ids, count(distinct member_key) dk\nFROM dim_member WHERE valid_from<=DATE '2025-12-21' AND valid_to>=DATE '2025-12-21'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n_members_valid | distinct_ids | dk\n48675 | 48675 | 48675\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:42",
+   "statement": "SELECT count(*) n, count(distinct sales_line_id) ids, count(distinct (receipt_id, line_no)) rl,\n sum(case when member_key is not null then 1 else 0 end) with_member,\n sum(case when s.store_id=999 then 1 else 0 end) s999,\n sum(case when p.category='ZZ Test' then 1 else 0 end) zz,\n sum(case when s.store_id=900 then 1 else 0 end) web,\n sum(case when staff_purchase_flag then 1 else 0 end) staff,\n min(sale_date), max(sale_date), min(etl_loaded_at), max(etl_loaded_at)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\nWHERE f.sale_date > DATE '2024-12-21' AND f.sale_date <= DATE '2025-12-21'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "n | ids | rl | with_member | s999 | zz | web | staff | min(sale_date) | max(sale_date) | min(etl_loaded_at) | max(etl_loaded_at)\n619584 | 619584 | 619166 | 329341 | 1758 | 464 | 73882 | 9719 | 2024-12-22 | 2025-12-21 | 2024-12-23T01:00:00 | 2025-12-22T01:00:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:49",
+   "statement": "WITH d AS (SELECT receipt_id, line_no FROM fact_sales_line GROUP BY 1,2 HAVING count(*)>1)\nSELECT count(*) dup_keys, sum(case when x.nd>1 then 1 else 0 end) differing_date, sum(case when x.nm>1 then 1 else 0 end) differing_member, sum(case when x.nn>1 then 1 else 0 end) differing_net, sum(x.c) rows_total\nFROM (SELECT f.receipt_id, f.line_no, count(*) c, count(distinct sale_date) nd, count(distinct member_key) nm, count(distinct net_amount) nn\n FROM fact_sales_line f JOIN d ON d.receipt_id=f.receipt_id AND d.line_no=f.line_no GROUP BY 1,2) x\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "dup_keys | differing_date | differing_member | differing_net | rows_total\n418 | 0 | 0 | 0 | 836\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:50",
+   "statement": "SELECT cast(sale_date as varchar) sd, count(*) FROM fact_sales_line f WHERE (receipt_id,line_no) IN (SELECT receipt_id,line_no FROM fact_sales_line GROUP BY 1,2 HAVING count(*)>1) GROUP BY 1 ORDER BY 1 LIMIT 5\n",
+   "n": 6,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "sd | count_star()\n2025-09-15 | 116\n2025-09-16 | 100\n2025-09-17 | 94\n2025-09-18 | 114\n2025-09-19 | 166\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:55",
+   "statement": "WITH active AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\nall_active AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n)\nSELECT m.tier, count(distinct m.member_id) AS active_members,\n  (SELECT count(*) FROM all_active) AS unfiltered_total\nFROM active a\nJOIN dim_member m ON m.member_id = a.member_id AND m.valid_from <= DATE '2025-12-21' AND m.valid_to >= DATE '2025-12-21'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 7,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | active_members | unfiltered_total\nBasic | 14654 | 29526\nGold | 3901 | 29526\nSilver | 10971 | 29526\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:57",
+   "statement": "WITH active AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT count(*) active_total,\n  sum(case when exists (select 1 from dim_member m where m.member_id=a.member_id and m.valid_from <= DATE '2025-12-21' and m.valid_to >= DATE '2025-12-21') then 1 else 0 end) with_version_on_asof,\n  sum(case when exists (select 1 from dim_member m where m.member_id=a.member_id and m.join_date > DATE '2025-12-21') then 1 else 0 end) joined_after\nFROM active a\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "active_total | with_version_on_asof | joined_after\n29526 | 29526 | 0\n(1 row)"
+  }
+ ]
+}

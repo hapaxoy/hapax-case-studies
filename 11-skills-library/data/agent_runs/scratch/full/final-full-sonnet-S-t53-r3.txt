@@ -1,0 +1,36 @@
+```json
+{
+  "sql": "WITH per AS (SELECT 'LY' AS p, period_start_date AS s, period_end_date AS e FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2025/26' AND fiscal_period = 1 UNION ALL SELECT 'TY', period_start_date, period_end_date FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2026/27' AND fiscal_period = 1), sales AS (SELECT per.p, st.store_id, f.net_amount AS amt FROM fact_sales_line f JOIN dim_store st USING (store_key) JOIN per ON f.sale_date BETWEEN per.s AND per.e WHERE st.store_id &lt; 900 UNION ALL SELECT per.p, st.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store st USING (store_key) JOIN per ON r.return_date BETWEEN per.s AND per.e WHERE st.store_id &lt; 900), ok AS (SELECT store_id FROM sales GROUP BY store_id HAVING count(DISTINCT p) = 2), res AS (SELECT p, sum(amt) AS net_sales FROM sales WHERE store_id IN (SELECT store_id FROM ok) GROUP BY p) SELECT 'FY2026/27' AS fiscal_year, 1 AS fiscal_period, round((t.net_sales / l.net_sales - 1) * 100, 2) AS lfl_net_sales_growth_pct FROM res t JOIN res l ON t.p = 'TY' AND l.p = 'LY'",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "lfl_net_sales_growth_pct"],
+    "rows": [["FY2026/27", 1, 6.7]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period 1 of FY2026/27 is 4 May to 31 May 2026. It is compared with period 1 of FY2025/26, 28 April to 25 May 2025, the same 4 fiscal weeks, using ref_fiscal_calendar dates",
+    "Like-for-like store set: physical stores (store_id below 900) that traded in both periods. This gives 38 stores",
+    "Net sales: line net_amount (EUR excluding VAT, after line discounts) minus refund_net on returns booked in the period, which matches the net_sales logic of rpt_daily_store_sales",
+    "Stores identified by stable store_id, not by store_key (stores have several versions with region changes), so the 2025 region re-mapping does not affect the comparison",
+    "Web shop (store_id 900) and the training store (999) excluded from the store like-for-like base",
+    "Staff purchases included, as in the Data &amp; Analytics daily sales report"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year FY2026/27, because the request is dated 9 October 2026 and FY2026/27 started on 4 May 2026. 'Period 1' means fiscal period P01.",
+    "'Like-for-like growth' means the percentage change in net sales (EUR excluding VAT, after returns) for comparable stores, current P01 against last year's P01, with no trading-day adjustment.",
+    "The base is physical stores only. Online sales are excluded because the web channel has no like-for-like store base, and it was recoded to channel_id 2 and 3 after the web-platform migration. Say if Finance wants a version that includes online.",
+    "Stores 136 Tampere Lamminpää (opened 2 September 2024) and 137 Lohja (opened 4 November 2024) are included. Both traded for the whole of both periods and were open more than 12 months at the start of the current period.",
+    "Returns are taken on the date the return was booked, in the store that booked it, as the daily sales report does. A return of an earlier sale counts against the period in which it is refunded.",
+    "I did not use the tmp_lfl_store_list_2024 and tmp_lfl_store_list_2025 tables. They are undocumented temporary lists. The 2025 list still contains the closed Savonlinna and omits stores 136 and 137. I built the store set from actual trading in the two periods."
+  ],
+  "caveats": [
+    "Corrections: Savonlinna (store 129) closed on 25 January 2026. It traded in last year's P01 (about 12.5k EUR net sales) but has no sales this year, so it is excluded as non-comparable. Including it would understate growth.",
+    "Corrections: Web and training-store lines are excluded. The training store (999) has small test sales in both periods, about 2.2k EUR last year and 1.7k this year. Web sales are about 183.5k EUR last year and 229.3k this year, and are not in the store base.",
+    "Trading-day difference: last year's P01 had 27 trading days because May Day (Thursday 1 May 2025) was a non-trading day. This year's P01 has 28 trading days, because 1 May 2026 fell before the period started. The headline 6.7% is therefore flattered by about one extra trading day. Adjusted per trading day, growth is about 2.9%. The reported figure is unadjusted; Finance should decide which basis to use.",
+    "Staff purchases are included in the headline. Excluding them gives 6.64%.",
+    "Net sales for the 38 like-for-like stores are 1,103,969.88 EUR last year and 1,177,925.94 EUR this year.",
+    "The sales table had 418 duplicated receipt lines, all in the week of 15 to 21 September 2025. They are outside both periods used here, so they do not affect this answer. Anyone building a full-year like-for-like figure from this table would need to remove them.",
+    "From the start of FY2026/27, fact_sales_line.channel_code is null and the channel is held only in channel_id. The existing view rpt.v_daily_sales filters on channel_code = 'WB', so it would miss this year's web sales. I did not use the view.",
+    "Column comments in dim_store and dim_member do not match the data. For example, store format holds Small, Medium and Large where the comment says Hyper, Standard and Express. This does not affect the answer.",
+    "Store regions changed on 28 April 2025 for stores 101 to 105 (South to Capital Region) and store 114 (East to South). Any like-for-like breakdown by region would have to use one region mapping for both years. No breakdown is given here."
+  ]
+}
+```

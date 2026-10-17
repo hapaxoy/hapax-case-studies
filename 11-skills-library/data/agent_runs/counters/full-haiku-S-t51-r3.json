@@ -1,0 +1,85 @@
+{
+ "run_id": "full-haiku-S-t51-r3",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T51",
+ "budget": 30,
+ "used": 8,
+ "refused": 0,
+ "packet_sha256": "a76e8f5ef3624a42b8b8bd0b3ac519483e1eba712b88d3a6b436c96e2e485697",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:36",
+   "statement": "SELECT campaign_id, campaign_name, start_date, end_date, mailing_list_size, holdout_size, holdout_pct\nFROM dim_campaign\nWHERE campaign_name LIKE '%Black Week%' OR campaign_name LIKE '%BW%'\nORDER BY start_date DESC\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "campaign_id | campaign_name | start_date | end_date | mailing_list_size | holdout_size | holdout_pct\n15 | Black Week 2025 | 2025-11-24 | 2025-11-30 | 26573 | 2747 | 0.100\n5 | Black Week 2024 | 2024-11-25 | 2024-12-01 | 18693 | 1928 | 0.100\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:39",
+   "statement": "SELECT COUNT(*) as holdout_count\nFROM campaign_holdout\nWHERE campaign_id = 15\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "holdout_count\n2747\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:44",
+   "statement": "-- Check the date range of sales during Black Week 2025\nSELECT MIN(sale_date) as min_date, MAX(sale_date) as max_date, COUNT(*) as line_count\nFROM fact_sales_line\nWHERE sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min_date | max_date | line_count\n2025-11-24 | 2025-11-30 | 15185\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:49",
+   "statement": "-- Calculate total spend and unique member counts for targeted vs holdout during campaign\nWITH campaign_members AS (\n  SELECT \n    member_id,\n    CASE WHEN member_id IN (SELECT member_id FROM campaign_holdout WHERE campaign_id = 15) \n         THEN 'holdout' \n         ELSE 'targeted' \n    END as member_group\n  FROM dim_member\n  WHERE member_key IN (\n    SELECT DISTINCT member_key FROM fact_sales_line\n    WHERE sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n  )\n)\nSELECT member_group, COUNT(*) as member_count\nFROM campaign_members\nGROUP BY member_group\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "member_group | member_count\ntargeted | 3272\nholdout | 181\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:04:54",
+   "statement": "-- Calculate total spend per group during Black Week 2025 campaign\nWITH sales_with_groups AS (\n  SELECT \n    f.net_amount,\n    d.member_id,\n    CASE WHEN d.member_id IN (SELECT member_id FROM campaign_holdout WHERE campaign_id = 15) \n         THEN 'holdout' \n         ELSE 'targeted' \n    END as member_group\n  FROM fact_sales_line f\n  INNER JOIN dim_member d ON f.member_key = d.member_key\n  WHERE f.sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND d.member_id IS NOT NULL  -- exclude non-members if any\n)\nSELECT \n  member_group,\n  ROUND(SUM(net_amount), 2) as total_net_amount,\n  COUNT(DISTINCT member_id) as unique_members\nFROM sales_with_groups\nGROUP BY member_group\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "member_group | total_net_amount | unique_members\ntargeted | 190059.75 | 3272\nholdout | 11147.48 | 181\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:03",
+   "statement": "-- Final calculation: Average spend per member and uplift\nWITH campaign_data AS (\n  SELECT 23826 as targeted_members, 2747 as holdout_members\n),\nspend_data AS (\n  SELECT \n    CASE WHEN d.member_id IN (SELECT member_id FROM campaign_holdout WHERE campaign_id = 15) \n         THEN 'holdout' \n         ELSE 'targeted' \n    END as member_group,\n    SUM(f.net_amount) as total_net_amount\n  FROM fact_sales_line f\n  INNER JOIN dim_member d ON f.member_key = d.member_key\n  WHERE f.sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND d.member_id IS NOT NULL\n  GROUP BY member_group\n)\nSELECT \n  'Targeted' as group_name,\n  ROUND((SELECT total_net_amount FROM spend_data WHERE member_group = 'targeted') / 23826, 2) as avg_spend_per_member\nUNION ALL\nSELECT \n  'Held-out' as group_name,\n  ROUND((SELECT total_net_amount FROM spend_data WHERE member_group = 'holdout') / 2747, 2) as avg_spend_per_member\nUNION ALL\nSELECT\n  'Uplift (€)' as group_name,\n  ROUND((SELECT total_net_amount FROM spend_data WHERE member_group = 'targeted') / 23826 \n         - (SELECT total_net_amount FROM spend_data WHERE member_group = 'holdout') / 2747, 2) as avg_spend_per_member\n",
+   "n": 6,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "group_name | avg_spend_per_member\nTargeted | 7.98\nHeld-out | 4.06\nUplift (€) | 3.92\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:13",
+   "statement": "-- Verification: detailed breakdown of the uplift calculation\nWITH spend_breakdown AS (\n  SELECT \n    CASE WHEN d.member_id IN (SELECT member_id FROM campaign_holdout WHERE campaign_id = 15) \n         THEN 'holdout' \n         ELSE 'targeted' \n    END as member_group,\n    SUM(f.net_amount) as total_net_amount,\n    COUNT(DISTINCT d.member_id) as members_with_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_member d ON f.member_key = d.member_key\n  WHERE f.sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND d.member_id IS NOT NULL\n  GROUP BY member_group\n)\nSELECT \n  'Targeted members: total mailing list' as metric,\n  23826 as value_numeric,\n  NULL as value_text\nUNION ALL\nSELECT 'Targeted members: made purchases', 3272, NULL\nUNION ALL\nSELECT 'Targeted members: total spend (€)', NULL, '190059.75'\nUNION ALL\nSELECT 'Targeted members: avg spend per member', 7.98, NULL\nUNION ALL\nSELECT 'Held-out members: total mailing list', 2747, NULL\nUNION ALL\nSELECT 'Held-out members: made purchases', 181, NULL\nUNION ALL\nSELECT 'Held-out members: total spend (€)', NULL, '11147.48'\nUNION ALL\nSELECT 'Held-out members: avg spend per member', 4.06, NULL\nUNION ALL\nSELECT 'Uplift per member (€)', 3.92, NULL\n",
+   "n": 7,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "metric | value_numeric | value_text\nTargeted members: total mailing list | 23826.00 | NULL\nTargeted members: made purchases | 3272.00 | NULL\nTargeted members: total spend (€) | NULL | 190059.75\nTargeted members: avg spend per member | 7.98 | NULL\nHeld-out members: total mailing list | 2747.00 | NULL\nHeld-out members: made purchases | 181.00 | NULL\nHeld-out members: total spend (€) | NULL | 11147.48\nHeld-out members: avg spend per member | 4.06 | NULL\nUplift per member (€) | 3.92 | NULL\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:19",
+   "statement": "-- Final query: Black Week 2025 campaign uplift analysis\nWITH campaign_targets AS (\n  SELECT \n    CASE WHEN member_id IN (SELECT member_id FROM campaign_holdout WHERE campaign_id = 15) \n         THEN 'holdout' \n         ELSE 'targeted' \n    END as member_group,\n    SUM(f.net_amount) as total_net_amount\n  FROM fact_sales_line f\n  INNER JOIN dim_member d ON f.member_key = d.member_key\n  WHERE f.sale_date BETWEEN '2025-11-24' AND '2025-11-30'\n    AND d.member_id IS NOT NULL\n  GROUP BY member_group\n)\nSELECT \n  'Average spend per targeted member' as metric,\n  ROUND((SELECT total_net_amount FROM campaign_targets WHERE member_group = 'targeted') / 23826, 2) as amount_eur\nUNION ALL\nSELECT \n  'Average spend per held-out member' as metric,\n  ROUND((SELECT total_net_amount FROM campaign_targets WHERE member_group = 'holdout') / 2747, 2) as amount_eur\nUNION ALL\nSELECT\n  'Uplift in euros per member' as metric,\n  ROUND((SELECT total_net_amount FROM campaign_targets WHERE member_group = 'targeted') / 23826 \n         - (SELECT total_net_amount FROM campaign_targets WHERE member_group = 'holdout') / 2747, 2) as amount_eur\n",
+   "n": 8,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "metric | amount_eur\nAverage spend per targeted member | 7.98\nAverage spend per held-out member | 4.06\nUplift in euros per member | 3.92\n(3 rows)"
+  }
+ ]
+}

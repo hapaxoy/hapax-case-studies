@@ -1,0 +1,66 @@
+Perfect! The query is verified. Now let me prepare the final response in JSON format:
+
+```json
+{
+  "sql": "-- Store league table: physical stores ranked by net sales per trading day.\n-- FY2026/27 Period 2 (June 1-28, 2026)\nWITH params AS (\n    SELECT DATE '2026-06-01' AS start_date, DATE '2026-06-28' AS end_date\n),\nperiod_days AS (\n    SELECT d.calendar_date FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date BETWEEN params.start_date AND params.end_date AND d.is_trading_day\n),\ntrading_days AS (\n    SELECT cs.store_id, COUNT(*) AS trading_days\n    FROM dim_store cs\n    CROSS JOIN period_days pd\n    WHERE cs.is_current AND cs.store_id &lt; 900\n      AND (cs.open_date IS NULL OR cs.open_date &lt;= pd.calendar_date)\n      AND (cs.close_date IS NULL OR cs.close_date &gt;= pd.calendar_date)\n      AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                      WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n    GROUP BY 1\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test'\n),\nstore_sales AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY ss.net_sales / td.trading_days DESC) AS rank, cs.store_id, cs.store_name,\n       td.trading_days, ss.net_sales, ROUND(ss.net_sales / td.trading_days, 0) AS net_sales_per_trading_day\nFROM store_sales ss\nJOIN trading_days td ON td.store_id = ss.store_id\nJOIN dim_store cs    ON cs.store_id = ss.store_id AND cs.is_current\nORDER BY rank;",
+  "result": {
+    "columns": ["rank", "store_id", "store_name", "trading_days", "net_sales", "net_sales_per_trading_day"],
+    "rows": [
+      [1, 115, "Tampere Hervanta", 26, 72687.05, 2796.0],
+      [2, 102, "Helsinki Pitäjänmäki", 26, 55562.42, 2137.0],
+      [3, 108, "Lahti", 26, 46899.91, 1804.0],
+      [4, 104, "Vantaa Tammisto", 26, 46414.81, 1785.0],
+      [5, 131, "Oulu Kaakkuri", 26, 46021.68, 1770.0],
+      [6, 116, "Tampere Lielahti", 26, 45485.54, 1749.0],
+      [7, 125, "Kuopio", 14, 23993.71, 1714.0],
+      [8, 110, "Turku Kupittaa", 26, 44380.38, 1707.0],
+      [9, 117, "Tampere Kaleva", 26, 40769.32, 1568.0],
+      [10, 118, "Nokia", 26, 38036.56, 1463.0],
+      [11, 119, "Pori", 26, 37060.06, 1425.0],
+      [12, 124, "Jyväskylä Palokka", 26, 34403.16, 1323.0],
+      [13, 101, "Helsinki Vuosaari", 26, 34229.86, 1317.0],
+      [14, 132, "Oulu Linnanmaa", 26, 32347.31, 1244.0],
+      [15, 121, "Vaasa", 26, 31852.44, 1225.0],
+      [16, 128, "Lappeenranta", 26, 31703.61, 1219.0],
+      [17, 126, "Joensuu", 26, 31643.91, 1217.0],
+      [18, 136, "Tampere Lamminpää", 26, 30503.73, 1173.0],
+      [19, 107, "Hyvinkää", 26, 28716.89, 1104.0],
+      [20, 109, "Hämeenlinna", 26, 28110.63, 1081.0],
+      [21, 114, "Kouvola", 26, 26338.80, 1013.0],
+      [22, 122, "Seinäjoki", 26, 26034.82, 1001.0],
+      [23, 127, "Mikkeli", 26, 24615.83, 947.0],
+      [24, 103, "Espoo Lommila", 26, 24610.32, 947.0],
+      [25, 111, "Turku Härmälä", 26, 21796.60, 838.0],
+      [26, 134, "Rovaniemi", 26, 20895.20, 804.0],
+      [27, 137, "Lohja", 26, 15917.24, 612.0],
+      [28, 130, "Kotka", 26, 14730.87, 567.0],
+      [29, 133, "Kemi", 26, 13279.13, 511.0],
+      [30, 139, "Raahe", 26, 12908.75, 496.0],
+      [31, 106, "Porvoo", 26, 11141.96, 429.0],
+      [32, 112, "Raisio", 26, 11024.52, 424.0],
+      [33, 123, "Kokkola", 26, 11011.25, 424.0],
+      [34, 105, "Kerava", 26, 10480.14, 403.0],
+      [35, 138, "Iisalmi", 26, 10396.29, 400.0],
+      [36, 135, "Kajaani", 26, 9615.26, 370.0],
+      [37, 120, "Rauma", 26, 9429.48, 363.0],
+      [38, 113, "Salo", 26, 8866.76, 341.0]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns, excluding test articles (category ZZ Test) and web channel",
+    "Store league table: stores ranked by net sales per trading day",
+    "Trading days: days the store was open (after opening, before closure, outside refits, excluding public holidays when stores are closed)",
+    "Physical stores only: store_id &lt; 900, excluding web shop and training store",
+    "Staff purchases included in net sales"
+  ],
+  "assumptions": [
+    "Period 2 this year interpreted as FY2026/27 P02 (the most recent completed period), running 1-28 June 2026, as accepted requests have read relative period references (REQ-D03, REQ-D06, REQ-D12)",
+    "Store ranking metric is net sales per trading day, the standard store league table metric"
+  ],
+  "caveats": [
+    "Kuopio (store 125) has 14 trading days instead of 26, owing to a scheduled refit closure from 15 June to 26 July 2026; the store is ranked on the days it traded",
+    "Net sales total for the period (all stores): EUR 1,063,916.20, verified against rpt_daily_store_sales control (gap 0.00)",
+    "Date range is complete in the warehouse as of 4 October 2026"
+  ]
+}
+```

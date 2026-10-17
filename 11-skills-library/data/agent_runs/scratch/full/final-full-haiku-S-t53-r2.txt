@@ -1,0 +1,30 @@
+```json
+{
+  "sql": "WITH sales_by_period AS (SELECT d.fiscal_year, d.fiscal_period, s.store_id, SUM(f.net_amount) AS net_sales FROM fact_sales_line f INNER JOIN dim_store s ON f.store_key = s.store_key INNER JOIN dim_date d ON f.sale_date = d.calendar_date WHERE d.fiscal_period = 1 AND s.store_id < 900 AND d.fiscal_year IN ('FY2025/26', 'FY2026/27') GROUP BY d.fiscal_year, d.fiscal_period, s.store_id), lfl_stores AS (SELECT store_id FROM sales_by_period GROUP BY store_id HAVING COUNT(DISTINCT fiscal_year) = 2), lfl_sales AS (SELECT fiscal_year, SUM(net_sales) AS total_net_sales FROM sales_by_period WHERE store_id IN (SELECT store_id FROM lfl_stores) GROUP BY fiscal_year ORDER BY fiscal_year) SELECT fiscal_year, total_net_sales, LAG(total_net_sales) OVER (ORDER BY fiscal_year) AS prior_year_sales, ROUND(((total_net_sales - LAG(total_net_sales) OVER (ORDER BY fiscal_year)) / LAG(total_net_sales) OVER (ORDER BY fiscal_year)) * 100, 2) AS lfl_growth_pct FROM lfl_sales",
+  "result": {
+    "columns": ["fiscal_year", "prior_year_sales", "current_year_sales", "lfl_growth_pct"],
+    "rows": [
+      ["FY2025/26", null, 1152894.74, null],
+      ["FY2026/27", 1152894.74, 1229285.56, 6.63]
+    ]
+  },
+  "definitions_applied": [
+    "Like-for-like stores: stores with net sales transactions in the same fiscal period in both comparison years",
+    "Net sales: total net_amount from fact_sales_line, excluding VAT and after line discounts",
+    "Fiscal period 1: standard fiscal calendar periods as defined in ref_fiscal_calendar; FY2025/26 P01 = 2025-04-28 to 2025-05-25; FY2026/27 P01 = 2026-05-04 to 2026-05-31",
+    "Store scope: physical stores only (store_id < 900), excluding web/online channel"
+  ],
+  "assumptions": [
+    "This year interpreted as FY2026/27 (current fiscal year as of 2026-10-15)",
+    "Period 1 means fiscal period 1, not calendar period 1",
+    "Like-for-like growth calculated by including only stores with sales activity in both FY2025/26 P01 and FY2026/27 P01",
+    "Growth calculated as percentage change in total net sales (EUR, excluding VAT) between the two periods"
+  ],
+  "caveats": [
+    "One store excluded from like-for-like comparison: Store 129 (Savonlinna) closed 2026-01-25, before FY2026/27 P01 began. FY2025/26 P01 sales for this store were 12,480.97 EUR. Like-for-like includes 38 stores common to both periods.",
+    "Data is fully loaded for both periods (fully_loaded = true in ref_fiscal_calendar), so no missing data corrections needed",
+    "Growth of 6.63% is based on net sales (net_amount field), which excludes VAT and reflects discounts; does not include returns",
+    "The request did not specify whether to break down by store, region or channel; result presented as company-wide like-for-like figure"
+  ]
+}
+```

@@ -1,0 +1,46 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered', 'collected')), net_lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, p.sku, f.net_amount AS net_sales FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test' AND (s.store_id &lt;&gt; 900 OR w.web_order_id IS NOT NULL) UNION ALL SELECT r.return_date, p.sku, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key JOIN dim_product p ON p.product_key = r.product_key WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test') SELECT ROW_NUMBER() OVER (ORDER BY SUM(n.net_sales) DESC) AS rank, cp.sku, cp.product_name, SUM(n.net_sales) AS net_sales FROM net_lines n JOIN dim_product cp ON cp.sku = n.sku AND cp.is_current WHERE n.business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27' GROUP BY cp.sku, cp.product_name ORDER BY net_sales DESC LIMIT 10",
+  "result": {
+    "columns": ["rank", "sku", "product_name", "net_sales"],
+    "rows": [
+      [1, 100955, "Interior Paint Norvik 298", 9488.00],
+      [2, 100927, "Outdoor Lighting Kultala 862", 7364.26],
+      [3, 103415, "Home Office Peltola 918", 7250.06],
+      [4, 103434, "Home Office Tuulikki 821", 5435.35],
+      [5, 102116, "Smart Home Tuulikki 855", 5409.16],
+      [6, 101398, "Power Tools Havu Pro 689", 5166.87],
+      [7, 103329, "Living Room Havu Pro 936", 5056.70],
+      [8, 101411, "Power Tools Nordhem 370", 4924.03],
+      [9, 101022, "Interior Paint Kultala 377", 4633.36],
+      [10, 101375, "Power Tools Selkämaa 638", 4477.73]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Returns reduce net sales on their own return date",
+    "Web sales recognised on the Helsinki dispatch date (delivered and collected orders only)",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Last period = last completed fiscal period: FY2026/27 P05, 31 Aug to 27 Sep 2026 (4 whole weeks)",
+    "Products counted by stable sku, named from the current product version (as-is)",
+    "Web shop (store 900) included as part of the company total",
+    "Control-total check against rpt_daily_store_sales"
+  ],
+  "assumptions": [
+    "'Last period' read as FY2026/27 P05 (31 Aug to 27 Sep 2026), the last completed fiscal period at the request date of 8 Oct 2026. P06 is only partly loaded and was not used.",
+    "'Best-selling' read as highest net sales in EUR excluding VAT on the company definition, because the metric dictionary has no best-seller measure. It was not read as units sold.",
+    "A product is one sku, across all its versions. The name and category shown are from the current version (as-is). Only the paint, power tools, furniture and smart home articles are unaffected by the category changes, and outdoor lighting (sku 100927) is shown under its current Electrical category.",
+    "All channels are included: physical stores and the web shop.",
+    "Net sales is shown to the cent, in EUR excluding VAT."
+  ],
+  "caveats": [
+    "Ranking by units sold would give a very different top 10. For example, Fixings &amp; Fasteners Nordhem 594 (sku 101763) is 2nd by units (474) but 11th by net sales, and Interior Paint Norvik 298 is 24th by units but 1st by net sales. If Pekka means units, the query needs re-running with units as the ranking measure.",
+    "Corrections applied: store 999 (training store) and ZZ Test articles were removed, and web order lines not delivered or collected (processing or cancelled) were left out. In this period the web exclusion had no effect on the totals, and store 999 had no sales in the control table for the period.",
+    "Reconciliation: before the ranking, the same lines summed over all articles to 1,179,527.42 in sales and 69,980.90 in returns, so net sales of 1,109,546.52. That equals the rpt_daily_store_sales control total for 31 Aug to 27 Sep 2026 exactly.",
+    "Returns are deducted on their return date, so a product's figure can include refunds on goods sold before the period and exclude refunds that arrive later for goods sold in it.",
+    "Sales lines have no duplicate keys in the range, and the period is fully loaded (warehouse loaded through 4 Oct 2026).",
+    "The gaps between ranks 1 to 10 are small in places. Ranks 4 and 5 differ by about 26 EUR, and 7 and 8 by about 133 EUR."
+  ]
+}
+```

@@ -1,0 +1,44 @@
+```json
+{
+  "sql": "WITH params AS (SELECT DATE '2026-09-27' AS week_ending), closing AS (SELECT cp.category, SUM(fs.closing_units) AS closing_units FROM fact_stock_week fs JOIN dim_store s ON s.store_key = fs.store_key JOIN dim_product p ON p.product_key = fs.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current CROSS JOIN params WHERE fs.week_ending_date = params.week_ending AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' GROUP BY 1), sold AS (SELECT cp.category, SUM(f.quantity) AS units_sold_4w FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current CROSS JOIN params WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7 AND s.store_id &lt; 900 AND p.category &lt;&gt; 'ZZ Test' GROUP BY 1) SELECT c.category, c.closing_units, ROUND(s.units_sold_4w / 4.0, 1) AS avg_weekly_units_sold, ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) AS weeks_of_cover FROM closing c LEFT JOIN sold s USING (category) ORDER BY c.category",
+  "result": {
+    "columns": ["category", "closing_units", "avg_weekly_units_sold", "weeks_of_cover"],
+    "rows": [
+      ["Bathroom &amp; Plumbing", 12237, 1057.8, 11.6],
+      ["Cleaning &amp; Household", 18212, 2393.5, 7.6],
+      ["Electrical", 23887, 2601.3, 9.2],
+      ["Furniture", 4963, 168.0, 29.5],
+      ["Garden", 45196, 2751.3, 16.4],
+      ["Home Textiles &amp; Decor", 18354, 1504.3, 12.2],
+      ["Kitchen &amp; Dining", 14037, 961.8, 14.6],
+      ["Paint &amp; Decorating", 18302, 1453.8, 12.6],
+      ["Seasonal", 25570, 524.3, 48.8],
+      ["Tools &amp; Hardware", 30399, 3943.8, 7.7]
+    ]
+  },
+  "definitions_applied": [
+    "Last period = last completed fiscal period, FY2026/27 P05 (fiscal weeks 18-21, 31 Aug to 27 Sep 2026)",
+    "Weeks of cover = closing stock units at the end of the fiscal week / average weekly units sold over the prior four fiscal weeks, for the same grouping (metric dictionary)",
+    "Closing stock is a weekly snapshot, summed across stores and articles for the single week-ending date 2026-09-27 (never summed across weeks)",
+    "Units sold = quantity on sales lines by sale_date",
+    "Store scope: physical stores only (store_id &lt; 900); web shop 900 and training store 999 excluded; web stock is not in fact_stock_week",
+    "Category ZZ Test excluded",
+    "Categories as-is (current dim_product version), so outdoor lighting sits in Electrical",
+    "Table choice: fact_stock_week and fact_sales_line only; no deprecated, staging, backup or tmp tables, and no rpt.v_ views"
+  ],
+  "assumptions": [
+    "'End of last period' is read as the closing snapshot on Sunday 27 September 2026, the last day of FY2026/27 P05; the request was received on 7 October 2026",
+    "'Prior four fiscal weeks' is read literally, as the four weeks before the snapshot week: 24 Aug to 20 Sep 2026 (fiscal weeks 17-20). The snapshot week 21 is not in the denominator",
+    "'By category' is read as company-wide per category (all physical stores combined), not per store and category",
+    "Category is as-is (current hierarchy), the company default; as-was would give the same answer here because the outdoor lighting move to Electrical happened in October 2025",
+    "Demand is store sales only. Web units are left out of the denominator because the stock table holds store stock only and web orders are picked from the central warehouse"
+  ],
+  "caveats": [
+    "No data problems found, so no corrections were made. The week-ending 27 Sep 2026 snapshot has 27,143 rows at 27,143 distinct store/article keys, with no duplicates and a single load. The sales lines in the four-week window have no duplicate line IDs and no zero or negative quantities. The category totals add up to the full snapshot of 211,157 units, which means no test-article rows were present",
+    "Reading the four weeks as the weeks ending on the snapshot date (31 Aug to 27 Sep) gives different cover for the seasonal categories: Seasonal 42.0 weeks (vs 48.8), Garden 18.5 (vs 16.4), Electrical 8.5 (vs 9.2), Paint &amp; Decorating 13.5 (vs 12.6). The other categories change by less than one week",
+    "Furniture (29.5 weeks) and Seasonal (48.8 weeks) have low weekly sales, 168 and 524 units a week across all stores, so their cover is sensitive to small changes in demand. Seasonal and Garden demand is also changing quickly at this time of year, so cover based on the past four weeks may not reflect coming demand",
+    "Weeks of cover is rounded to one decimal; the average weekly units sold column is shown to explain the figure and is not separately requested",
+    "No control total against rpt_daily_store_sales applies, because that table holds sales, not stock"
+  ]
+}
+```

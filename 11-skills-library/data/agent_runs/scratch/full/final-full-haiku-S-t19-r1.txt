@@ -1,0 +1,40 @@
+Based on my analysis of the warehouse data, I've identified some important data quality issues and completed the analysis. Here is the final query and answer:
+
+```json
+{
+  "sql": "WITH fy2025_sales AS (SELECT CASE WHEN f.channel_code = 'WB' THEN 'Web' WHEN s.region = 'Online' THEN 'Web' WHEN s.region IS NULL THEN 'Unclassified' ELSE s.region END as region, SUM(f.net_amount) as net_sales FROM fact_sales_line f JOIN dim_date d ON f.sale_date = d.calendar_date LEFT JOIN dim_store s ON f.store_key = s.store_key AND s.is_current = TRUE WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_quarter = 3 GROUP BY CASE WHEN f.channel_code = 'WB' THEN 'Web' WHEN s.region = 'Online' THEN 'Web' WHEN s.region IS NULL THEN 'Unclassified' ELSE s.region END), fy2024_sales AS (SELECT CASE WHEN f.channel_code = 'WB' THEN 'Web' WHEN s.region = 'Online' THEN 'Web' WHEN s.region IS NULL THEN 'Unclassified' ELSE s.region END as region, SUM(f.net_amount) as net_sales FROM fact_sales_line f JOIN dim_date d ON f.sale_date = d.calendar_date LEFT JOIN dim_store s ON f.store_key = s.store_key AND s.is_current = TRUE WHERE d.fiscal_year = 'FY2024/25' AND d.fiscal_quarter = 3 GROUP BY CASE WHEN f.channel_code = 'WB' THEN 'Web' WHEN s.region = 'Online' THEN 'Web' WHEN s.region IS NULL THEN 'Unclassified' ELSE s.region END) SELECT COALESCE(fy25.region, fy24.region) as region, ROUND(COALESCE(fy25.net_sales, 0), 2) as net_sales_fy2025, ROUND(COALESCE(fy24.net_sales, 0), 2) as net_sales_fy2024, CASE WHEN COALESCE(fy24.net_sales, 0) &gt; 0 THEN ROUND(((COALESCE(fy25.net_sales, 0) - COALESCE(fy24.net_sales, 0)) / COALESCE(fy24.net_sales, 0) * 100), 2) ELSE NULL END as growth_pct FROM fy2025_sales fy25 FULL OUTER JOIN fy2024_sales fy24 ON fy25.region = fy24.region WHERE COALESCE(fy25.region, fy24.region) NOT IN ('Head office', 'Unclassified') ORDER BY CASE WHEN COALESCE(fy25.region, fy24.region) = 'Web' THEN 0 ELSE 1 END, COALESCE(fy25.region, fy24.region)",
+  "result": {
+    "columns": ["region", "net_sales_fy2025", "net_sales_fy2024", "growth_pct"],
+    "rows": [
+      ["Web", 626744.66, 487738.80, 28.5],
+      ["Capital Region", 552189.71, 0.00, null],
+      ["East", 623413.38, 614095.24, 1.52],
+      ["North", 430390.67, 403062.74, 6.78],
+      ["South", 765378.74, 667927.61, 14.59],
+      ["West", 1044244.67, 994191.81, 5.03]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal quarter definition (fiscal_quarter = 3)",
+    "Net sales excluding VAT and after line discounts (fact_sales_line.net_amount)",
+    "Current store dimension version (dim_store.is_current = TRUE)",
+    "Web shop identified by channel_code = 'WB' or region = 'Online'",
+    "Fiscal year labels as FY2024/25 and FY2025/26"
+  ],
+  "assumptions": [
+    "Last year refers to fiscal year FY2025/26; earlier year refers to FY2024/25",
+    "Regions are the named store regions: North, South, East, West, Capital Region, plus Web",
+    "Growth percentage calculated as ((FY2025/26 - FY2024/25) / FY2024/25 * 100)",
+    "Web sales consolidated from channel_code = 'WB' and region = 'Online'",
+    "Null growth percentages shown for regions with zero or missing prior-year sales",
+    "Head office and unclassified sales excluded as they are not sales regions"
+  ],
+  "caveats": [
+    "Capital Region appears to be new in FY2025/26 with no comparable FY2024/25 data—this may represent a new organizational structure or reclassification of stores",
+    "FY2024/25 had 621,002 EUR in store-channel sales that could not be assigned to a region (store_key linked to NULL region); this represents 7.8% of FY2024/25 store sales and explains the discontinuity between years in store attribution",
+    "The store dimension structure changed between fiscal years: FY2024/25 stores that now belong to Capital Region were previously unassigned in the fact tables",
+    "Web sales include online orders tracked through the web channel and web fulfillment; Channel structure may have evolved (FY2024/25 shows Online region, FY2025/26 shows consistent WB coding)",
+    "Growth percentages are not meaningful for Capital Region due to zero prior-year sales; this should be presented as a new regional segment rather than growth"
+  ]
+}
+```

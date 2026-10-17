@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t13-r3",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T13",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "ac8eb39d8cadf2dce390c92aa39b8807d8d23cc50e00c05bd17d092236e42716",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:32",
+   "statement": "SELECT r.fiscal_period_label, r.period_start_date, r.period_end_date, r.fully_loaded, (SELECT string_agg(DISTINCT format, ',') FROM dim_store) AS formats, (SELECT count(*) FROM (SELECT receipt_id, line_no FROM fact_sales_line f JOIN dim_date d ON d.calendar_date=f.sale_date WHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 GROUP BY 1,2 HAVING count(*)>1)) AS dup_lines\nFROM ref_fiscal_calendar r WHERE r.fiscal_year='FY2026/27' AND r.fiscal_period=4\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_period_label | period_start_date | period_end_date | fully_loaded | formats | dup_lines\nFY2026/27 P04 | 2026-08-03 | 2026-08-30 | true | Medium,Small,Large,Web,Training | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:37",
+   "statement": "SELECT s.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       COUNT(*) AS line_count,\n       COUNT(DISTINCT (f.receipt_id, f.store_key)) AS receipt_store_pairs,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nWHERE s.store_id < 900\n  AND NOT f.staff_purchase_flag\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4\nGROUP BY 1\nORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | receipts | line_count | receipt_store_pairs | net_sales_before_returns | atv\nLarge | 6508 | 14957 | 6508 | 394865.46 | 60.67\nMedium | 8641 | 19987 | 8641 | 520763.45 | 60.27\nSmall | 2598 | 5911 | 2598 | 131841.05 | 50.75\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:43",
+   "statement": "WITH mine AS (\n  SELECT s.store_id, COUNT(DISTINCT f.receipt_id) AS receipts, SUM(f.net_amount) AS net_before\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    AND d.fiscal_year='FY2026/27' AND d.fiscal_period=4\n  GROUP BY 1),\nctl AS (\n  SELECT store_id, SUM(receipts) AS receipts, SUM(net_sales_before_returns) AS net_before\n  FROM rpt_daily_store_sales\n  WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id < 900\n  GROUP BY 1)\nSELECT COUNT(*) AS stores, SUM(m.receipts) AS my_receipts, SUM(c.receipts) AS ctl_receipts,\n       SUM(m.net_before) AS my_net, SUM(c.net_before) AS ctl_net,\n       SUM(CASE WHEN m.receipts<>c.receipts OR abs(m.net_before-c.net_before)>0.5 THEN 1 ELSE 0 END) AS stores_differing\nFROM mine m FULL JOIN ctl c USING (store_id)\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "stores | my_receipts | ctl_receipts | my_net | ctl_net | stores_differing\n38 | 18027 | 18027 | 1062266.72 | 1062266.72 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:57:48",
+   "statement": "SELECT s.store_id, s.store_name, s.format, count(DISTINCT s.store_key) AS versions, count(DISTINCT cs.format) AS formats_over_time,\n  sum(CASE WHEN f.staff_purchase_flag THEN 1 ELSE 0 END) AS staff_lines, sum(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END) AS test_lines\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key=f.store_key\nJOIN dim_store cs ON cs.store_id=s.store_id\nJOIN dim_product p ON p.product_key=f.product_key\nJOIN dim_date d ON d.calendar_date=f.sale_date\nWHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 AND s.store_id<900\nGROUP BY 1,2,3\nHAVING count(DISTINCT cs.format)>1 OR sum(CASE WHEN p.category='ZZ Test' THEN 1 ELSE 0 END)>0\n",
+   "n": 4,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "store_id | store_name | format | versions | formats_over_time | staff_lines | test_lines\n(0 rows)"
+  }
+ ]
+}

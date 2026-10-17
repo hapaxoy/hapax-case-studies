@@ -1,0 +1,32 @@
+```json
+{
+  "sql": "WITH stores_both_periods AS (\n  SELECT a.store_id, a.region\n  FROM (\n    SELECT DISTINCT f.store_key, s.store_id, s.region\n    FROM fact_sales_line f\n    JOIN dim_store s ON f.store_key = s.store_key\n    JOIN dim_date d ON f.sale_date = d.calendar_date\n    WHERE d.calendar_year = 2024 AND d.calendar_month IN (7, 8, 9)\n      AND f.channel_code = 'ST' AND s.store_id &lt; 900\n  ) a\n  INNER JOIN (\n    SELECT DISTINCT f.store_key, s.store_id, s.region\n    FROM fact_sales_line f\n    JOIN dim_store s ON f.store_key = s.store_key\n    JOIN dim_date d ON f.sale_date = d.calendar_date\n    WHERE d.calendar_year = 2025 AND d.calendar_month IN (7, 8, 9)\n      AND f.channel_code = 'ST' AND s.store_id &lt; 900\n  ) b ON a.store_id = b.store_id\n  WHERE a.region = b.region\n),\nregional_summary AS (\n  SELECT \n    s.region,\n    SUM(CASE WHEN d.calendar_year = 2024 THEN f.net_amount ELSE 0 END) as sales_2024,\n    SUM(CASE WHEN d.calendar_year = 2025 THEN f.net_amount ELSE 0 END) as sales_2025\n  FROM fact_sales_line f\n  JOIN dim_store s ON f.store_key = s.store_key\n  JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE (d.calendar_year = 2024 OR d.calendar_year = 2025)\n    AND d.calendar_month IN (7, 8, 9)\n    AND f.channel_code = 'ST'\n    AND s.store_id IN (SELECT store_id FROM stores_both_periods)\n  GROUP BY s.region\n)\nSELECT \n  region,\n  ROUND(((sales_2025 - sales_2024) / sales_2024 * 100), 2) as like_for_like_growth_pct\nFROM regional_summary\nORDER BY region",
+  "result": {
+    "columns": ["region", "like_for_like_growth_pct"],
+    "rows": [
+      ["East", 5.83],
+      ["North", 4.88],
+      ["South", 0.54],
+      ["West", 11.41]
+    ]
+  },
+  "definitions_applied": [
+    "Like-for-like stores: stores with sales activity in both Q3 2024 and Q3 2025, and assigned to the same region in both periods",
+    "Net sales: net amount (EUR excluding VAT) from fact_sales_line",
+    "Store channel only: channel_code = 'ST' (physical stores, excluding web sales)",
+    "Growth percentage: (Q3 2025 sales - Q3 2024 sales) / Q3 2024 sales × 100"
+  ],
+  "assumptions": [
+    "Q3 last year interpreted as calendar Q3 2025 compared to Q3 2024 (current date October 2026)",
+    "Like-for-like comparison requires stores to maintain their regional classification across both comparison periods",
+    "Only stores with reported sales in both periods are included; stores without sales in either period are excluded"
+  ],
+  "caveats": [
+    "Capital Region was reorganised on 2025-04-28 when 5 stores (101-105: Helsinki Vuosaari, Helsinki Pitäjänmäki, Espoo Lommila, Vantaa Tammisto, Kerava) transferred from South. These stores excluded from both regions' LFL calculation.",
+    "Store 114 (Kouvola) transferred from East to South between the periods; excluded from LFL due to regional change.",
+    "Store 137 (Lohja) opened 2024-11-04 and is new; no Q3 2024 sales; excluded from LFL.",
+    "LFL analysis covers 32 of 39 stores: East (8), North (6), South (8), West (10). Seven stores excluded due to regional changes or new status.",
+    "West region showed strongest like-for-like growth at 11.41%; South region showed minimal growth at 0.54%."
+  ]
+}
+```

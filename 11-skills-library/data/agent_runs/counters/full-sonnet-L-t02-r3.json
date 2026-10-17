@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t02-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T02",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "dec5195de6ac802d01b0c09ae3688292123e4119bc0ed240a32e6ae2779f245e",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T19:18:38",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4 FY2026/27 --as-of 2026-10-05",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4 FY2026/27    as of: 2026-10-05    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:43",
+   "statement": "SELECT category, subcategory, count(*) versions, count(distinct sku) skus, sum(is_current::int) cur\nFROM dim_product\nWHERE category ILIKE '%garden%' OR subcategory ILIKE '%furniture%' OR category ILIKE '%furniture%' OR category ILIKE 'ZZ%'\nGROUP BY 1,2 ORDER BY 1,2\n",
+   "n": 2,
+   "ok": true,
+   "rows": 14,
+   "output_preview": "category | subcategory | versions | skus | cur\nBathroom & Plumbing | Bathroom Furniture | 62 | 62 | 62\nFurniture | Bedroom | 55 | 54 | 54\nFurniture | Home Office | 46 | 46 | 46\nFurniture | Living Room | 54 | 54 | 54\nFurniture | Storage Furniture | 86 | 85 | 85\nGarden | Barbecue & Grills | 70 | 69 | 69\nGarden | Edible Plants & Seeds | 124 | 123 | 123\nGarden | Garden Furniture | 87 | 85 | 85\nGarden | Garden Tools | 139 | 139 | 139\nGarden | Outdoor Lighting | 70 | 70 | 5\nGarden | Plants & Flowers | 250 | 246 | 246\nGarden | Pots & Planters | 117 | 116 | 116\nGarden | Soil & Fertiliser | 85 | 85 | 85\nZZ Test | Test Articles | 12 | 12 | 12\n(14 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:47",
+   "statement": "SELECT cp.category, cp.subcategory, s.store_id = 900 AS is_web, s.store_id=999 AS is_train,\n  count(*) AS lines, count(distinct r.return_line_id) AS distinct_ids, count(distinct r.sales_line_id) AS distinct_sales_lines,\n  sum(r.quantity_returned) AS units, min(r.return_date) mn, max(r.return_date) mx\nFROM fact_return_line r\nJOIN dim_product p ON p.product_key = r.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_date d ON d.calendar_date = r.return_date\nWHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 AND (cp.subcategory='Garden Furniture' OR p.subcategory='Garden Furniture')\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "category | subcategory | is_web | is_train | lines | distinct_ids | distinct_sales_lines | units | mn | mx\nGarden | Garden Furniture | false | false | 58 | 58 | 58 | 58 | 2026-08-03 | 2026-08-30\nGarden | Garden Furniture | true | false | 34 | 34 | 34 | 34 | 2026-08-03 | 2026-08-30\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:53",
+   "statement": "SELECT r.reason_code, count(*) lines, sum(r.quantity_returned) units, sum(r.refund_net) refund_net,\n  min(r.quantity_returned) minq, max(r.quantity_returned) maxq,\n  sum((CAST(timezone('Europe/Helsinki', r.return_ts_utc AT TIME ZONE 'UTC') AS DATE) <> r.return_date)::int) AS date_mismatch,\n  sum((r.quantity_returned > f.quantity)::int) AS over_returned,\n  sum((r.refund_net <= 0)::int) AS nonpos_refund,\n  sum((r.return_date < f.sale_date)::int) AS before_sale\nFROM fact_return_line r\nJOIN dim_product p ON p.product_key = r.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nLEFT JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id\nJOIN dim_date d ON d.calendar_date = r.return_date\nWHERE d.fiscal_year='FY2026/27' AND d.fiscal_period=4 AND cp.subcategory='Garden Furniture'\nGROUP BY ALL ORDER BY ALL\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "reason_code | lines | units | refund_net | minq | maxq | date_mismatch | over_returned | nonpos_refund | before_sale\nchanged_mind | 37 | 37 | 5240.41 | 1 | 1 | 0 | 0 | 0 | 0\ndamaged_in_transit | 7 | 7 | 971.99 | 1 | 1 | 0 | 0 | 0 | 0\ndefective | 20 | 20 | 3244.64 | 1 | 1 | 0 | 0 | 0 | 0\nnot_as_described | 14 | 14 | 1862.78 | 1 | 1 | 0 | 0 | 0 | 0\nwrong_size_or_fit | 14 | 14 | 1860.46 | 1 | 1 | 0 | 0 | 0 | 0\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:18:59",
+   "statement": "SELECT d.fiscal_year, d.fiscal_period AS period, 'Garden' AS category, 'Garden Furniture' AS subcategory,\n       SUM(r.quantity_returned) AS units_returned,\n       SUM((p.subcategory='Garden Furniture')::int * r.quantity_returned) AS units_as_was\nFROM fact_return_line r\nJOIN dim_product p ON p.product_key = r.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_date d ON d.calendar_date = r.return_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4\n  AND cp.category = 'Garden' AND cp.subcategory = 'Garden Furniture'\n  AND s.store_id <> 999 AND p.category <> 'ZZ Test'\nGROUP BY 1, 2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | period | category | subcategory | units_returned | units_as_was\nFY2026/27 | 4 | Garden | Garden Furniture | 92 | 92\n(1 row)"
+  }
+ ]
+}

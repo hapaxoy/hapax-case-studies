@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t25-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T25",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "0e247b47558e823a28681ce3e9d16b93acc8580136f92012a2ba9cf81a6d4519",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:06:59",
+   "statement": "WITH fv AS (\n  SELECT member_id, member_key, join_date, home_store_id, valid_from, valid_to,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS vn,\n         COUNT(*) OVER (PARTITION BY member_id) AS nver\n  FROM dim_member)\nSELECT 'members' AS k, COUNT(DISTINCT member_id) AS a, COUNT(*) AS b, MIN(join_date) AS c, MAX(join_date) AS d FROM dim_member\nUNION ALL SELECT 'fy2526 first versions', COUNT(*), COUNT(DISTINCT member_id), MIN(join_date), MAX(join_date) FROM fv WHERE vn=1 AND join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03'\nUNION ALL SELECT 'first-version valid_from != join_date', COUNT(*), COUNT(DISTINCT member_id), MIN(join_date), MAX(join_date) FROM fv WHERE vn=1 AND valid_from<>join_date\nUNION ALL SELECT 'join_date differs across versions', COUNT(DISTINCT member_id), 0, NULL, NULL FROM (SELECT member_id FROM dim_member GROUP BY 1 HAVING COUNT(DISTINCT join_date)>1)\nUNION ALL SELECT 'dup member_key', COUNT(*), 0, NULL, NULL FROM (SELECT member_key FROM dim_member GROUP BY 1 HAVING COUNT(*)>1)\nUNION ALL SELECT 'cal2025 first versions', COUNT(*), 0, NULL, NULL FROM fv WHERE vn=1 AND year(join_date)=2025\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "k | a | b | c | d\nmembers | 60000 | 89314 | 2019-01-01 | 2026-10-04\nfy2526 first versions | 14854 | 14854 | 2025-04-28 | 2026-05-03\nfirst-version valid_from != join_date | 0 | 0 | NULL | NULL\njoin_date differs across versions | 0 | 0 | NULL | NULL\ndup member_key | 0 | 0 | NULL | NULL\ncal2025 first versions | 14629 | 0 | NULL | NULL\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:04",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS vn\n  FROM dim_member),\nnm AS (SELECT * FROM fv WHERE vn=1 AND join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03')\nSELECT nm.home_store_id, cs.store_name, cs.city, cs.region, cs.format, cs.open_date, cs.close_date, COUNT(*) AS new_members,\n       (SELECT COUNT(*) FROM dim_store x WHERE x.store_id=nm.home_store_id) AS nversions\nFROM nm LEFT JOIN dim_store cs ON cs.store_id=nm.home_store_id AND cs.is_current\nGROUP BY ALL ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 40,
+   "output_preview": "home_store_id | store_name | city | region | format | open_date | close_date | new_members | nversions\n101 | Helsinki Vuosaari | Helsinki | Capital Region | Medium | NULL | NULL | 351 | 2\n102 | Helsinki Pitäjänmäki | Helsinki | Capital Region | Large | NULL | NULL | 597 | 2\n103 | Espoo Lommila | Espoo | Capital Region | Medium | NULL | NULL | 281 | 2\n104 | Vantaa Tammisto | Vantaa | Capital Region | Large | NULL | NULL | 485 | 2\n105 | Kerava | Kerava | Capital Region | Small | NULL | NULL | 147 | 2\n106 | Porvoo | Porvoo | South | Small | NULL | NULL | 171 | 1\n107 | Hyvinkää | Hyvinkää | South | Medium | NULL | NULL | 287 | 1\n108 | Lahti | Lahti | South | Large | NULL | NULL | 500 | 1\n109 | Hämeenlinna | Hämeenlinna | South | Medium | NULL | NULL | 295 | 1\n110 | Turku Kupittaa | Turku | South | Large | NULL | NULL | 500 | 1\n111 | Turku Härmälä | Turku | South | Medium | NULL | NULL | 261 | 1\n112 | Raisio | Raisio | South | Small | NULL | NULL | 156 | 1\n113 | Salo | Salo | South | Small | NULL | NULL | 133 | 1\n114 | Kouvola | Kouvola | South | Medium | NULL | NULL | 249 | 2\n115 | Tampere Hervanta | Tampere | West | Large | NULL | NULL | 696 | 1\n116 | Tampere Lielahti | Tampere | West | Large | NULL | NULL | 459 | 1\n117 | Tampere Kaleva | Tampere | West | Medium | NULL | NULL | 447 | 1\n118 | Nokia | Nokia | West | Medium | NULL | NULL | 373 | 1\n119 | Pori | Pori | West | Medium | NULL | NULL | 342 | 1\n120 | Rauma | Rauma | West | Small | NULL | NULL | 144 | 1\n121 | Vaasa | Vaasa"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:07:09",
+   "statement": "WITH fv AS (\n  SELECT member_id, join_date, home_store_id,\n         ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY valid_from, member_key) AS vn\n  FROM dim_member)\nSELECT home_store_id, MIN(join_date), MAX(join_date), COUNT(*), COUNT(*) FILTER (WHERE join_date>DATE '2026-01-25') AS after_close,\n COUNT(*) FILTER (WHERE d.is_trading_day IS NOT TRUE) AS nontrading\nFROM fv LEFT JOIN dim_date d ON d.calendar_date=fv.join_date\nWHERE vn=1 AND home_store_id IN (129,900,105) AND join_date BETWEEN DATE '2025-04-28' AND DATE '2026-05-03'\nGROUP BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "home_store_id | min(join_date) | max(join_date) | count_star() | after_close | nontrading\n105 | 2025-05-08 | 2026-05-01 | 147 | 40 | 4\n129 | 2025-04-28 | 2026-01-24 | 113 | 0 | 2\n900 | 2025-04-28 | 2026-05-03 | 2932 | 704 | 97\n(3 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:07:15",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain home_store_id",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 40 rows, 3 columns: home_store_id, store_name, new_members\n\n== Duplicate keys ==\n  [PASS] Unique at grain (home_store_id): 40 keys.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  home_store_id | store_name | new_members\n  101 | Helsinki Vuosaari | 351\n  102 | Helsinki Pit�j�nm�ki | 597\n  103 | Espoo Lommila | 281\n  104 | Vantaa Tammisto | 485\n  105 | Kerava | 147\n  106 | Porvoo | 171\n  107 | Hyvink�� | 287\n  108 | Lahti | 500\n  109 | H�meenlinna | 295\n  110 | Turku Kupittaa | 500\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

@@ -1,0 +1,36 @@
+Based on my analysis of the Tuomimetsä warehouse, here is the answer to Marjatta Salonen's VAT filing request:
+
+```json
+{
+  "sql": "SELECT\n  region,\n  SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 8 THEN f.gross_amount ELSE 0 END) AS gross_sales_august_2024,\n  SUM(CASE WHEN EXTRACT(MONTH FROM f.sale_date) = 9 THEN f.gross_amount ELSE 0 END) AS gross_sales_september_2024\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date &gt;= '2024-08-01'\n  AND f.sale_date &lt;= '2024-09-30'\n  AND s.store_id &lt; 900\n  AND p.category != 'ZZ Test'\nGROUP BY s.region\nORDER BY s.region",
+  "result": {
+    "columns": [
+      "region",
+      "gross_sales_august_2024",
+      "gross_sales_september_2024"
+    ],
+    "rows": [
+      ["East", 296762.31, 249751.64],
+      ["North", 175960.85, 149625.27],
+      ["South", 489776.38, 445837.96],
+      ["West", 402582.35, 363697.29]
+    ]
+  },
+  "definitions_applied": [
+    "Gross sales including VAT: sum of gross_amount from fact_sales_line, which includes all applicable VAT rates (10%, 14%, 24% in August; 10%, 14%, 25.5% from 1 September 2024)",
+    "Before returns: based on fact_sales_line only, excluding fact_return_line",
+    "As-was regions: using the store region from the dim_store version valid on each sale date (August and September 2024 used the four original regions: North, South, East, West; the Capital Region reorganization occurred 28 April 2025)",
+    "Store exclusions: training store 999 and test articles (category ZZ Test) excluded per house rules"
+  ],
+  "assumptions": [
+    "Request for gross sales (including VAT) interpreted as requesting sum of gross_amount column, which reflects actual mixed VAT rates by product and date",
+    "Calendar months (August and September 2024) used rather than fiscal periods",
+    "As-was reporting applied: regions and hierarchies as they existed on each transaction date"
+  ],
+  "caveats": [
+    "VAT rates varied by product category (standard 24% in August, 25.5% from 1 September 2024; reduced rates 14% and 10% throughout)",
+    "The request spans two calendar months but crosses three fiscal periods (FY2024/25 P04, P05, P06) and is not aligned to fiscal week boundaries",
+    "Web sales (store 900) are excluded; these figures cover physical store sales only"
+  ]
+}
+```

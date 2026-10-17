@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-Lminus-t58-r5",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T58",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "05aa5fb3692e8b9918a4e98901e9c5b1120d4e3754014e7656e4ca4e035bd964",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:28:42",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_period IN (1,2) AND fiscal_year IN ('FY2026/27','FY2025/26') ORDER BY 1,2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2025/26 | 1 | 2025-04-28 | 2025-05-25 | 4 | 1 | 4 | true\nFY2025/26 | 2 | 2025-05-26 | 2025-06-22 | 4 | 5 | 8 | true\nFY2026/27 | 1 | 2026-05-04 | 2026-05-31 | 4 | 1 | 4 | true\nFY2026/27 | 2 | 2026-06-01 | 2026-06-28 | 4 | 5 | 8 | true\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:28:43",
+   "statement": "SELECT store_id, store_key, store_name, format, region, open_date, close_date, valid_from, valid_to, is_current FROM dim_store WHERE store_id >= 900 OR open_date IS NOT NULL OR close_date IS NOT NULL OR store_id IN (104,119,125) ORDER BY store_id, valid_from\n",
+   "n": 2,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "store_id | store_key | store_name | format | region | open_date | close_date | valid_from | valid_to | is_current\n104 | 7 | Vantaa Tammisto | Large | South | NULL | NULL | 2000-01-01 | 2025-04-27 | false\n104 | 8 | Vantaa Tammisto | Large | Capital Region | NULL | NULL | 2025-04-28 | 9999-12-31 | true\n119 | 25 | Pori | Medium | West | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n125 | 31 | Kuopio | Large | East | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n129 | 35 | Savonlinna | Small | East | NULL | 2026-01-25 | 2000-01-01 | 9999-12-31 | true\n136 | 42 | Tampere Lamminpää | Medium | West | 2024-09-02 | NULL | 2024-09-02 | 9999-12-31 | true\n137 | 43 | Lohja | Small | South | 2024-11-04 | NULL | 2024-11-04 | 9999-12-31 | true\n900 | 46 | Tuomimetsä web shop | Web | Online | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n999 | 47 | Training store | Training | Head office | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:28:52",
+   "statement": "WITH params AS (\n    SELECT DATE '2026-06-01' AS start_date, DATE '2026-06-28' AS end_date\n),\nperiod_days AS (\n    SELECT d.calendar_date FROM dim_date d CROSS JOIN params\n    WHERE d.calendar_date BETWEEN params.start_date AND params.end_date AND d.is_trading_day\n),\ntrading_days AS (\n    SELECT cs.store_id, COUNT(*) AS trading_days\n    FROM dim_store cs\n    CROSS JOIN period_days pd\n    WHERE cs.is_current AND cs.store_id < 900\n      AND (cs.open_date IS NULL OR cs.open_date <= pd.calendar_date)\n      AND (cs.close_date IS NULL OR cs.close_date >= pd.calendar_date)\n      AND NOT EXISTS (SELECT 1 FROM ref_store_closure c\n                      WHERE c.store_id = cs.store_id AND pd.calendar_date BETWEEN c.closure_start_date AND c.closure_end_date)\n    GROUP BY 1\n),\nnet_lines AS (\n    SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id < 900 AND p.category <> 'ZZ Test'\n),\nstore_sales AS (\n    SELECT n.store_id, SUM(n.net_sales) AS net_sales\n    FROM net_lines n CROSS JOIN params\n    WHERE n.business_date BETWEEN params.start_date AND params.end_date\n    GROUP BY 1\n),\nctrl AS (\n    SELECT r.store_id, SUM(r.net_sales) AS ctrl_net, COUNT(DISTINCT CASE WHEN r.net_sales_before_returns <> 0 THEN r.business_date END) AS days_with_sales\n    FROM rpt_daily_store_sales r CROSS JOIN params\n    WHERE r.business_date BETWEEN params.start_date AND params.end_date AND r.store_id < 900\n    GROUP BY 1\n)\nSELECT RANK() OVER (ORDER BY ss.net_sales / td.trading_days DESC) AS rank, cs.store_id, cs.store_name, cs.format,\n       td.trading_days, ctrl.days_with_sales, ss.net_sales, ctrl.ctrl_net, ROUND(ss.net_sales / td.trading_days, 2) AS per_day\nFROM store_sales ss\nJOIN trading_days td ON td.store_id = ss.store_id\nJOIN dim_store cs    ON cs.store_id = ss.store_id AND cs.is_current\nLEFT JOIN ctrl ON ctrl.store_id = ss.store_id\nORDER BY rank\n",
+   "n": 3,
+   "ok": true,
+   "rows": 38,
+   "output_preview": "rank | store_id | store_name | format | trading_days | days_with_sales | net_sales | ctrl_net | per_day\n1 | 115 | Tampere Hervanta | Large | 26 | 26 | 72687.05 | 72687.05 | 2795.66\n2 | 102 | Helsinki Pitäjänmäki | Large | 26 | 26 | 55562.42 | 55562.42 | 2137.02\n3 | 108 | Lahti | Large | 26 | 26 | 46899.91 | 46899.91 | 1803.84\n4 | 104 | Vantaa Tammisto | Large | 26 | 26 | 46414.81 | 46414.81 | 1785.19\n5 | 131 | Oulu Kaakkuri | Large | 26 | 26 | 46021.68 | 46021.68 | 1770.06\n6 | 116 | Tampere Lielahti | Large | 26 | 26 | 45485.54 | 45485.54 | 1749.44\n7 | 125 | Kuopio | Large | 14 | 14 | 23993.71 | 23993.71 | 1713.84\n8 | 110 | Turku Kupittaa | Large | 26 | 26 | 44380.38 | 44380.38 | 1706.94\n9 | 117 | Tampere Kaleva | Medium | 26 | 26 | 40769.32 | 40769.32 | 1568.05\n10 | 118 | Nokia | Medium | 26 | 26 | 38036.56 | 38036.56 | 1462.94\n11 | 119 | Pori | Medium | 26 | 26 | 37060.06 | 37060.06 | 1425.39\n12 | 124 | Jyväskylä Palokka | Medium | 26 | 26 | 34403.16 | 34403.16 | 1323.2\n13 | 101 | Helsinki Vuosaari | Medium | 26 | 26 | 34229.86 | 34229.86 | 1316.53\n14 | 132 | Oulu Linnanmaa | Medium | 26 | 26 | 32347.31 | 32347.31 | 1244.13\n15 | 121 | Vaasa | Medium | 26 | 26 | 31852.44 | 31852.44 | 1225.09\n16 | 128 | Lappeenranta | Medium | 26 | 26 | 31703.61 | 31703.61 | 1219.37\n17 | 126 | Joensuu | Medium | 26 | 26 | 31643.91 | 31643.91 | 1217.07\n18 | 136 | Tampere Lamminpää | Medium | 26 | 26 | 30503.73 | 30503.73 | 1173.22\n19 | 107 | Hyvinkää | Medium | 26 | 26 | 28716.89 | 28716.89 | "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:29:00",
+   "statement": "SELECT (SELECT COUNT(*) FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28') AS lines,\n (SELECT COUNT(*) FROM (SELECT receipt_id, line_no FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1,2 HAVING COUNT(*)>1)) AS dup_keys,\n (SELECT COUNT(*) FROM (SELECT sales_line_id FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1 HAVING COUNT(*)>1)) AS dup_ids,\n (SELECT COUNT(*) FROM (SELECT return_line_id FROM fact_return_line WHERE return_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' GROUP BY 1 HAVING COUNT(*)>1)) AS dup_returns,\n (SELECT COUNT(*) FROM dim_date WHERE calendar_date BETWEEN DATE '2026-06-01' AND DATE '2026-06-28' AND NOT is_trading_day) AS closed_days,\n (SELECT COUNT(*) FROM ref_store_closure WHERE closure_end_date >= DATE '2026-06-01' AND closure_start_date <= DATE '2026-06-28') AS closures_in_period\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | dup_keys | dup_ids | dup_returns | closed_days | closures_in_period\n55084 | 0 | 0 | 0 | 2 | 1\n(1 row)"
+  }
+ ]
+}

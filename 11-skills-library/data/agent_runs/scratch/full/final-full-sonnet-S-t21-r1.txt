@@ -1,0 +1,34 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, d.fiscal_period, SUM(f.gross_amount) AS web_sales_incl_vat_eur FROM fact_sales_line f JOIN dim_date d ON d.calendar_date = f.sale_date WHERE f.channel_code = 'WB' AND d.fiscal_year = 'FY2024/25' AND d.fiscal_period BETWEEN 4 AND 6 GROUP BY d.fiscal_year, d.fiscal_period ORDER BY d.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_sales_incl_vat_eur"],
+    "rows": [
+      ["FY2024/25", 4, 156217.19],
+      ["FY2024/25", 5, 153878.42],
+      ["FY2024/25", 6, 189483.12]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales = fact_sales_line rows with channel_code = 'WB'. Before the Nov 2025 web-platform migration, web lines carry channel_code and a null channel_id.",
+    "Sales including VAT = gross_amount",
+    "Before returns: fact_return_line not netted off",
+    "Company fiscal calendar: FY2024/25 periods 4 to 6 (Q2) run 29 Jul 2024 to 27 Oct 2024; assigned through dim_date on sale_date",
+    "Cancelled web orders carry no sales lines, so they are excluded"
+  ],
+  "assumptions": [
+    "Read 'Q2 of FY24/25' as fiscal year FY2024/25, fiscal quarter 2, which is periods 4, 5 and 6 as the request states",
+    "Read 'web sales' as all web lines, home delivery and click-and-collect together, since both carry channel_code WB in this period",
+    "Read 'including VAT' as the gross_amount on each line (each line's net_amount plus its own VAT rate)",
+    "Assigned each line to a period by sale_date, which matches the Helsinki-time date of sale_ts_utc on every line in scope",
+    "Figures are in EUR"
+  ],
+  "caveats": [
+    "No corrections were needed. In scope there are no duplicate lines, no staff purchases on web lines, no null channel codes, and gross_amount equals net_amount times (1 + vat_rate) on every line. All three periods are marked fully_loaded.",
+    "Cancelled web orders are in fact_web_order but have no lines in fact_sales_line (cancelled value in the order table: P4 4,715.64, P5 6,512.99, P6 6,975.83 EUR). Order totals less cancelled orders reconcile exactly to the line totals above.",
+    "Returns are not deducted, as requested. Net web sales after returns will be lower.",
+    "P6 has 5 weeks (23 Sep to 27 Oct 2024), P4 and P5 have 4 weeks each, so P6 is higher partly because it is longer.",
+    "After the Nov 2025 migration, web lines are identified by channel_id 2 and 3 instead of channel_code WB. The query above would need changing for any period from FY2025/26 P08 onwards."
+  ]
+}
+```

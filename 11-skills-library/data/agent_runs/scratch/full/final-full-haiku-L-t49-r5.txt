@@ -1,0 +1,29 @@
+Perfect! The query now passes all validation checks with a zero control-total gap. Let me create the final JSON response:
+
+```json
+{
+  "sql": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS first_period, 4 AS last_period\n)\nSELECT s.format,\n       COUNT(DISTINCT CASE WHEN NOT f.staff_purchase_flag THEN f.receipt_id END) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT CASE WHEN NOT f.staff_purchase_flag THEN f.receipt_id END), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900                         -- stores only: no web, no training store\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period BETWEEN params.first_period AND params.last_period\nGROUP BY 1\nORDER BY format;",
+  "result": {
+    "columns": ["format", "atv"],
+    "rows": [
+      ["Large", 61.53],
+      ["Medium", 61.11],
+      ["Small", 51.51]
+    ]
+  },
+  "definitions_applied": [
+    "ATV (average transaction value): net sales before returns divided by the number of sales receipts, excluding staff purchases from receipt count",
+    "Store scope: physical stores only (store_id below 900)",
+    "Exclusions: test articles (category ZZ Test), web shop (store 900), training store (999), staff purchase flag"
+  ],
+  "assumptions": [
+    "Period 4 of FY2026/27 interpreted as fiscal weeks 14-17 (2026-08-03 to 2026-08-30) per fiscal-calendar definition",
+    "Store format is stable across store versions and reflects current category mapping (Large, Medium, Small)"
+  ],
+  "caveats": [
+    "Staff purchases included in net sales but excluded from receipt count per ATV definition",
+    "Control total validation (rpt_daily_store_sales) confirms zero gap for net_sales_before_returns",
+    "Period 4 is complete as of warehouse load date (2026-10-04)"
+  ]
+}
+```

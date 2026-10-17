@@ -1,0 +1,33 @@
+```json
+{
+  "sql": "WITH targeted AS (SELECT DISTINCT m.member_id FROM fact_campaign_exposure e JOIN dim_member m ON m.member_key = e.member_key WHERE e.campaign_id = 19), web_dispatch AS (SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_web_order WHERE status IN ('delivered','collected')), lines AS (SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, m.member_id, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_member m ON m.member_key = f.member_key LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test') SELECT (SELECT count(*) FROM targeted) AS members_contacted, ROUND(SUM(l.net_amount), 2) AS net_sales_before_returns_eur FROM targeted t JOIN lines l ON l.member_id = t.member_id WHERE l.business_date BETWEEN DATE '2026-05-04' AND DATE '2026-05-24'",
+  "result": {
+    "columns": ["campaign_id", "campaign_name", "members_contacted", "net_sales_before_returns_eur"],
+    "rows": [[19, "Spring Garden Launch 2026", 15001, 190687.59]]
+  },
+  "definitions_applied": [
+    "Targeted member: at least one exposure row in the campaign, counted as distinct member_id through dim_member",
+    "Net sales before returns, EUR excluding VAT, on lines linked to the member, as in the campaign uplift definition",
+    "Web lines dated on the Helsinki dispatch date (delivered or collected orders only)",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included, since they count in net sales",
+    "Member lines matched to people through member_id, not member_key, so every member version is picked up",
+    "Holdout members checked against the contacted group, by member_id"
+  ],
+  "assumptions": [
+    "The campaign is Spring Garden Launch 2026 (campaign_id 19), window 4 to 24 May 2026. That is the same range Sanna asked for, so no extra days were added. The uplift definition adds 7 days, but I followed the stated dates.",
+    "'Contacted' means at least one row in fact_campaign_exposure, whether or not it was delivered or opened. Counting only delivered contacts would give 14,814 members.",
+    "'Spend' means net sales before returns, excluding VAT, matching the campaign convention. Returns are not deducted and VAT is not included.",
+    "Spend covers only the contacted members, all channels (stores and web). It is not an uplift figure against the holdout.",
+    "Members with no purchases in the window add nothing to the spend. The count of members contacted is not limited to buyers."
+  ],
+  "caveats": [
+    "Counting rows or member_key would overstate the contacted members. The exposure table has 31,685 rows and 15,063 member_keys for this campaign, but only 15,001 distinct members, because contacts are one row each and some members have several versions in dim_member. I reduced to distinct member_id.",
+    "Of the 15,001 contacted members, 2,605 made at least one purchase in the window (8,080 lines). Of the 190,687.59 EUR, 155,518.67 is from stores and 35,168.92 from the web shop. These two figures are not in the result table.",
+    "Web purchases are counted on their dispatch date, not the order date. Web orders placed before 4 May but dispatched in the window are included. Orders placed in the window but dispatched after 24 May are excluded.",
+    "I checked that no contacted member is also in the campaign_holdout list (0 overlap, 1,597 holdout members). No contact was made to a member without marketing consent, or outside the campaign window, or before the member's join date.",
+    "The campaign record says the mailing list had 16,624 members including 1,597 held out. The contacted count (15,001) is lower than the roughly 15,027 you would get by subtracting. I could not trace the difference of about 26 from the warehouse alone, because the stated mailing list cannot be rebuilt from the current consent flags. The 15,001 comes from the actual contact records.",
+    "The control total against rpt_daily_store_sales does not apply here, since this is a member subset."
+  ]
+}
+```

@@ -1,0 +1,33 @@
+Perfect! The verification confirms my query is correct. The web shop net sales for periods 5-8 of FY2025/26 are:
+- P5: 145,626.90
+- P6: 175,588.62
+- P7: 154,977.27
+- P8: 225,265.08
+
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, s.store_id, p.sku,\n           f.net_amount AS net_sales, f.standard_cost AS cost\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, s.store_id, p.sku, -r.refund_net, -r.standard_cost_returned\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_period, SUM(n.net_sales) AS net_sales\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY 1\nORDER BY 1;",
+  "result": {
+    "columns": ["fiscal_period", "net_sales"],
+    "rows": [
+      [5, 145626.90],
+      [6, 175588.62],
+      [7, 154977.27],
+      [8, 225265.08]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales: net amount excluding VAT, after returns",
+    "Web sales on dispatch date in Helsinki time",
+    "Returns booked on their return date, not the sale date",
+    "Store 999 and ZZ Test category excluded"
+  ],
+  "assumptions": [
+    "Last year interpreted as FY2025/26 (the prior completed fiscal year as of the request date 2026-10-06)",
+    "Web shop is store_id 900"
+  ],
+  "caveats": [
+    "Returns can arrive up to 30 days after sale, but periods 5-8 of FY2025/26 are fully loaded and complete in the warehouse"
+  ]
+}
+```

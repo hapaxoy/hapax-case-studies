@@ -1,0 +1,58 @@
+{
+ "run_id": "full-sonnet-L-t49-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T49",
+ "budget": 30,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "d2320bab96199822f4a98ce45bb4778996874f51cff57570768e3efbb3808820",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:14:19",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4 FY2026/27",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:25",
+   "statement": "SELECT s.format, COUNT(*) AS line_rows, COUNT(DISTINCT (f.receipt_id, f.line_no)) AS distinct_lines, COUNT(DISTINCT f.sales_line_id) AS distinct_ids,\n  COUNT(DISTINCT f.receipt_id) AS receipts, SUM(f.net_amount) AS net, COUNT(DISTINCT s.store_id) AS stores,\n  MIN(f.sale_date) AS mind, MAX(f.sale_date) AS maxd,\n  SUM(CASE WHEN f.staff_purchase_flag THEN 1 ELSE 0 END) AS staff_lines\nFROM fact_sales_line f\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id < 999\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "format | line_rows | distinct_lines | distinct_ids | receipts | net | stores | mind | maxd | staff_lines\nLarge | 15193 | 15193 | 15193 | 6607 | 400409.69 | 8 | 2026-08-03 | 2026-08-30 | 236\nMedium | 20317 | 20317 | 20317 | 8779 | 528036.85 | 18 | 2026-08-03 | 2026-08-30 | 330\nSmall | 6011 | 6011 | 6011 | 2641 | 133820.18 | 12 | 2026-08-03 | 2026-08-30 | 100\nWeb | 6459 | 6459 | 6459 | 3229 | 209105.59 | 1 | 2026-08-03 | 2026-08-30 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:32",
+   "statement": "WITH base AS (\n  SELECT f.receipt_id, f.store_key, s.store_id, f.staff_purchase_flag, p.category, f.net_amount, f.sale_date, f.channel_code\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id < 900\n)\nSELECT\n (SELECT COUNT(DISTINCT receipt_id) FROM base) AS receipts_all,\n (SELECT COUNT(*) FROM (SELECT receipt_id FROM base GROUP BY 1 HAVING COUNT(DISTINCT store_id) > 1)) AS receipts_multi_store,\n (SELECT COUNT(*) FROM (SELECT receipt_id FROM base GROUP BY 1 HAVING COUNT(DISTINCT staff_purchase_flag) > 1)) AS receipts_mixed_staff,\n (SELECT COUNT(*) FROM (SELECT receipt_id FROM base GROUP BY 1 HAVING COUNT(DISTINCT sale_date) > 1)) AS receipts_multi_date,\n (SELECT COUNT(*) FROM base WHERE category='ZZ Test') AS test_lines,\n (SELECT COUNT(*) FROM base WHERE net_amount <= 0) AS nonpos_lines,\n (SELECT COUNT(*) FROM base WHERE channel_code <> 'ST' OR channel_code IS NULL) AS nonST_lines,\n (SELECT COUNT(*) FROM (SELECT receipt_id FROM base WHERE category <> 'ZZ Test' AND NOT staff_purchase_flag GROUP BY 1 HAVING SUM(net_amount) <= 0)) AS nonpos_receipts\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "receipts_all | receipts_multi_store | receipts_mixed_staff | receipts_multi_date | test_lines | nonpos_lines | nonST_lines | nonpos_receipts\n18027 | 0 | 0 | 0 | 0 | 0 | 41521 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:36",
+   "statement": "SELECT cs.format AS store_format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_store cs  ON cs.store_id = s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nWHERE s.store_id < 900\n  AND NOT f.staff_purchase_flag\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4\nGROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "store_format | receipts | net_sales_before_returns | atv\nLarge | 6508 | 394865.46 | 60.67\nMedium | 8641 | 520763.45 | 60.27\nSmall | 2598 | 131841.05 | 50.75\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:14:40",
+   "statement": "WITH mine AS (\n  SELECT s.store_id, SUM(f.net_amount) AS net, COUNT(DISTINCT f.receipt_id) AS rc\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id < 900 AND p.category <> 'ZZ Test'\n  GROUP BY 1),\nctl AS (SELECT store_id, SUM(net_sales_before_returns) AS net, SUM(receipts) AS rc FROM rpt_daily_store_sales\n  WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id < 900 GROUP BY 1)\nSELECT COUNT(*) AS stores, SUM(m.net) AS mine_net, SUM(c.net) AS ctl_net, SUM(m.rc) AS mine_rc, SUM(c.rc) AS ctl_rc,\n  SUM(CASE WHEN abs(m.net-c.net)>0.5 THEN 1 ELSE 0 END) AS stores_net_diff, SUM(CASE WHEN m.rc<>c.rc THEN 1 ELSE 0 END) AS stores_rc_diff\nFROM mine m FULL JOIN ctl c USING (store_id)\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "stores | mine_net | ctl_net | mine_rc | ctl_rc | stores_net_diff | stores_rc_diff\n38 | 1062266.72 | 1062266.72 | 18027 | 18027 | 0 | 0\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH web_sales AS (SELECT d.fiscal_year, d.fiscal_period, sum(f.net_amount) sales_net FROM fact_sales_line f JOIN dim_date d ON d.calendar_date = f.sale_date WHERE (f.channel_code = 'WB' OR f.channel_id IN (2, 3)) AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY ALL), web_returns AS (SELECT d.fiscal_year, d.fiscal_period, sum(r.refund_net) refunds_net FROM fact_return_line r JOIN fact_sales_line f ON f.sales_line_id = r.sales_line_id JOIN dim_date d ON d.calendar_date = r.return_date WHERE (f.channel_code = 'WB' OR f.channel_id IN (2, 3)) AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8 GROUP BY ALL) SELECT s.fiscal_year, s.fiscal_period, s.sales_net - r.refunds_net AS web_net_sales FROM web_sales s JOIN web_returns r USING (fiscal_year, fiscal_period) ORDER BY s.fiscal_period",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "web_net_sales"],
+    "rows": [
+      ["FY2025/26", 5, 139538.50],
+      ["FY2025/26", 6, 171790.72],
+      ["FY2025/26", 7, 149464.88],
+      ["FY2025/26", 8, 226718.44]
+    ]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: period dates from dim_date, which agrees with ref_fiscal_calendar. FY2025/26 periods 5 to 8 run 2025-08-25 to 2025-12-21 (P5 4 weeks, P6 5 weeks, P7 4 weeks, P8 4 weeks).",
+    "Net sales: EUR excluding VAT, after line discounts and after returns. This follows the rpt_daily_store_sales definition: net sales before returns minus refunds booked on the day, using net_amount and refund_net.",
+    "Web channel: channel_code = 'WB' or channel_id in (2, 3). Home delivery and click-and-collect both count as web. The channel coding changed at the web-platform migration on 2025-11-03: sales lines dated before it carry channel_code and no channel_id, and lines from that date on carry channel_id and no channel_code. Periods 7 and 8 cross the change.",
+    "Sales are assigned to a period by sale_date. Refunds are assigned by return_date, so they are booked in the period of the refund, not the period of the original sale.",
+    "Refunds counted are those on lines that were originally web sales, whether the refund was booked at the web shop (store 900) or at a physical store."
+  ],
+  "assumptions": [
+    "'Last year' is read as the last completed fiscal year, FY2025/26. The request is dated 2026-10-09, in FY2026/27. Calendar 2025 would give the same four periods.",
+    "'Web net sales' is read as net of returns, in line with the company's net sales definition, and excluding VAT. The figures before returns are in the caveats.",
+    "Refunds on web-origin lines booked at physical stores are deducted from web, because the refund belongs to a web sale. About a quarter of web refunds are booked that way.",
+    "Cancelled web orders have no sales lines in the sales fact, so nothing needed removing. There are no staff purchases on web lines.",
+    "Web sales are taken from fact_sales_line, not from the reporting table."
+  ],
+  "caveats": [
+    "Channel-code change: filtering on channel_code = 'WB' alone loses all web sales from 2025-11-03 onward, which is the end of period 7 and all of period 8. Both the old and new coding were included. Using only channel_id 2 or 3 would lose everything before that date.",
+    "rpt_daily_store_sales for store 900 (the web shop) is not reliable and was not used. Its daily sales do not match the sales fact: Sundays are near zero and the following Mondays are inflated. Its total for the 17 weeks is 762,115.32, against 767,895.38 in the fact table. Net sales taken from it would be wrong.",
+    "Net sales before returns, from the fact table: P5 158,124.35, P6 194,176.17, P7 166,510.02, P8 249,084.84. These total 767,895.38. Refunds deducted: P5 18,585.85, P6 22,385.45, P7 17,045.14, P8 22,366.40. These total 80,383.84.",
+    "If only refunds booked at the web shop (store 900) are deducted, the 17-week total is 707,237.93 instead of 687,512.54. That is a difference of about 19,700, or 2.9%. Web-origin refunds booked at physical stores are included in the figures above.",
+    "Refunds are booked on the return date, so refunds in these periods can relate to sales from before 2025-08-25. Refunds on P8 sales made after 2025-12-21 are not included.",
+    "Periods 5 to 8 are fully loaded. Every day in the window has web sales, and the staging tables hold no sales or refund lines that are missing from the fact tables.",
+    "Period 8 includes the Black Friday and pre-Christmas peak, which is why it is the highest period."
+  ]
+}
+```

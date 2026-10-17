@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-D-t48-r3",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T48",
+ "budget": 12,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "add5aaf08a308ba8042667df24ddfe6df4f12a1688c3af156231828e007d5341",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:33",
+   "statement": "SELECT r.period_start_date, r.period_end_date, r.weeks_in_period, r.first_fiscal_week, r.last_fiscal_week, r.fully_loaded,\n  (SELECT COUNT(*) FROM fact_stock_week w WHERE w.week_ending_date BETWEEN r.period_start_date AND r.period_end_date) AS stock_rows,\n  (SELECT COUNT(*) FROM (SELECT store_key, product_key, week_ending_date FROM fact_stock_week w WHERE w.week_ending_date BETWEEN r.period_start_date AND r.period_end_date GROUP BY 1,2,3 HAVING COUNT(*)>1)) AS dup_groups\nFROM ref_fiscal_calendar r WHERE fiscal_year='FY2026/27' AND fiscal_period=3\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded | stock_rows | dup_groups\n2026-06-29 | 2026-08-02 | 5 | 9 | 13 | true | 136376 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:38",
+   "statement": "WITH x AS (\n SELECT w.week_ending_date, s.store_id, p.sku, p.category, w.closing_units, w.closing_value, p.standard_unit_cost, w.etl_loaded_at, w.store_key, w.product_key\n FROM fact_stock_week w\n JOIN dim_store s ON s.store_key=w.store_key\n JOIN dim_product p ON p.product_key=w.product_key\n WHERE w.week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02'\n)\nSELECT week_ending_date, COUNT(*) AS n_rows, COUNT(DISTINCT (store_id, sku)) AS n_nat, COUNT(DISTINCT store_id) AS stores,\n  SUM(CASE WHEN store_id>=900 THEN 1 ELSE 0 END) AS rows_900plus, SUM(CASE WHEN category='ZZ Test' THEN 1 ELSE 0 END) AS test_rows,\n  SUM(CASE WHEN category='Paint & Decorating' THEN 1 ELSE 0 END) AS pd_rows,\n  MIN(etl_loaded_at), MAX(etl_loaded_at), COUNT(DISTINCT etl_loaded_at) AS loads\nFROM x GROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | n_rows | n_nat | stores | rows_900plus | test_rows | pd_rows | min(etl_loaded_at) | max(etl_loaded_at) | loads\n2026-07-05 | 27324 | 27324 | 38 | 0 | 0 | 2699 | 2026-07-06T01:00:00 | 2026-07-06T01:00:00 | 1\n2026-07-12 | 27263 | 27263 | 38 | 0 | 0 | 2674 | 2026-07-13T01:00:00 | 2026-07-13T01:00:00 | 1\n2026-07-19 | 27263 | 27263 | 38 | 0 | 0 | 2674 | 2026-07-20T01:00:00 | 2026-07-20T01:00:00 | 1\n2026-07-26 | 27263 | 27263 | 38 | 0 | 0 | 2674 | 2026-07-27T01:00:00 | 2026-07-27T01:00:00 | 1\n2026-08-02 | 27263 | 27263 | 38 | 0 | 0 | 2674 | 2026-08-03T01:00:00 | 2026-08-03T01:00:00 | 1\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:40",
+   "statement": "SELECT category, COUNT(*) FROM dim_product GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "category | count_star()\nBathroom & Plumbing | 279\nCleaning & Household | 288\nElectrical | 480\nFurniture | 241\nGarden | 942\nHome Textiles & Decor | 375\nKitchen & Dining | 321\nPaint & Decorating | 388\nSeasonal | 259\nTools & Hardware | 520\nZZ Test | 12\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:40:50",
+   "statement": "WITH x AS (\n SELECT w.week_ending_date, s.store_id, p.sku, p.category AS cat_asof, cp.category AS cat_current, w.closing_units, w.closing_value, p.standard_unit_cost, cp.standard_unit_cost AS cur_cost\n FROM fact_stock_week w\n JOIN dim_store s ON s.store_key=w.store_key\n JOIN dim_product p ON p.product_key=w.product_key\n JOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\n WHERE w.week_ending_date BETWEEN DATE '2026-06-29' AND DATE '2026-08-02' AND s.store_id<900 AND cp.category<>'ZZ Test'\n)\nSELECT week_ending_date,\n SUM(CASE WHEN cat_current='Paint & Decorating' THEN closing_value END) AS pd_value,\n SUM(CASE WHEN cat_asof='Paint & Decorating' THEN closing_value END) AS pd_value_aswas,\n SUM(CASE WHEN cat_current='Paint & Decorating' THEN closing_units END) AS pd_units,\n SUM(CASE WHEN cat_current='Paint & Decorating' THEN closing_units*standard_unit_cost END) AS pd_units_x_cost,\n SUM(CASE WHEN cat_current='Paint & Decorating' AND closing_units<0 THEN 1 ELSE 0 END) AS neg_rows,\n SUM(CASE WHEN cat_current='Paint & Decorating' AND closing_value IS NULL THEN 1 ELSE 0 END) AS null_val,\n SUM(CASE WHEN cat_current='Paint & Decorating' AND abs(closing_value-closing_units*standard_unit_cost)>0.02 THEN 1 ELSE 0 END) AS mismatch_rows,\n COUNT(DISTINCT CASE WHEN cat_current='Paint & Decorating' THEN store_id END) AS stores\nFROM x GROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "week_ending_date | pd_value | pd_value_aswas | pd_units | pd_units_x_cost | neg_rows | null_val | mismatch_rows | stores\n2026-07-05 | 341138.89 | 341138.89 | 18829 | 341138.89 | 0 | 0 | 0 | 38\n2026-07-12 | 341742.53 | 341742.53 | 18891 | 341742.53 | 0 | 0 | 0 | 38\n2026-07-19 | 344245.91 | 344245.91 | 18907 | 344245.91 | 0 | 0 | 0 | 38\n2026-07-26 | 349160.39 | 349160.39 | 19048 | 349160.39 | 0 | 0 | 0 | 38\n2026-08-02 | 346046.42 | 346046.42 | 18910 | 346046.42 | 0 | 0 | 0 | 38\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:41:00",
+   "statement": "WITH x AS (\n SELECT w.week_ending_date, s.store_id, p.sku, p.category, p.delisted_on, w.closing_units, w.closing_value\n FROM fact_stock_week w\n JOIN dim_store s ON s.store_key=w.store_key\n JOIN dim_product p ON p.product_key=w.product_key\n WHERE w.week_ending_date BETWEEN DATE '2026-07-05' AND DATE '2026-07-12' AND s.store_id<900\n)\nSELECT a.store_id, a.sku, a.category, a.delisted_on, a.closing_units, a.closing_value\nFROM x a WHERE a.week_ending_date='2026-07-05'\n AND NOT EXISTS (SELECT 1 FROM x b WHERE b.week_ending_date='2026-07-12' AND b.store_id=a.store_id AND b.sku=a.sku)\nORDER BY a.category, a.sku, a.store_id LIMIT 70\n",
+   "n": 5,
+   "ok": true,
+   "rows": 61,
+   "output_preview": "store_id | sku | category | delisted_on | closing_units | closing_value\n126 | 102193 | Electrical | 2026-07-01 | 0 | 0.00\n131 | 102193 | Electrical | 2026-07-01 | 0 | 0.00\n134 | 102193 | Electrical | 2026-07-01 | 0 | 0.00\n102 | 103341 | Furniture | 2026-07-01 | 0 | 0.00\n125 | 103341 | Furniture | 2026-07-01 | 0 | 0.00\n130 | 103341 | Furniture | 2026-07-01 | 0 | 0.00\n134 | 103341 | Furniture | 2026-07-01 | 0 | 0.00\n102 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n109 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n111 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n112 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n114 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n118 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n124 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n126 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n127 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n131 | 100455 | Garden | 2026-07-01 | 0 | 0.00\n101 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n102 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n104 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n105 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n107 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n112 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n118 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n119 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n121 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n122 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n130 | 102763 | Kitchen & Dining | 2026-07-01 | 0 | 0.00\n139 | "
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:41:11",
+   "statement": "WITH weekly AS (\n  SELECT w.week_ending_date, SUM(w.closing_value) AS closing_value\n  FROM fact_stock_week w\n  JOIN dim_store s ON s.store_key = w.store_key\n  JOIN dim_product p ON p.product_key = w.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  JOIN dim_date d ON d.calendar_date = w.week_ending_date\n  WHERE s.store_id < 900 AND s.store_id <> 999\n    AND cp.category = 'Paint & Decorating'\n    AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3\n  GROUP BY 1\n)\nSELECT 'FY2026/27' AS fiscal_year, 3 AS fiscal_period, 'Paint & Decorating' AS category,\n       ROUND(AVG(closing_value), 2) AS average_closing_stock_value_at_cost_eur, COUNT(*) AS weeks\nFROM weekly\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | category | average_closing_stock_value_at_cost_eur | weeks\nFY2026/27 | 3 | Paint & Decorating | 344466.83 | 5\n(1 row)"
+  }
+ ]
+}

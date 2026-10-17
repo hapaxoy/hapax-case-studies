@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH web AS (SELECT f.net_amount, o.member_key AS order_member_key, CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key AND s.store_id = 900 JOIN dim_product p ON p.product_key = f.product_key JOIN fact_web_order o ON o.web_order_id = f.receipt_id WHERE o.status IN ('delivered','collected') AND p.category &lt;&gt; 'ZZ Test') SELECT d.fiscal_year, d.fiscal_period, ROUND(100.0 * SUM(CASE WHEN w.order_member_key IS NOT NULL THEN w.net_amount ELSE 0 END) / SUM(w.net_amount), 1) AS member_share_of_web_sales_pct FROM web w JOIN dim_date d ON d.calendar_date = w.dispatch_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 9 AND 11 GROUP BY 1, 2 ORDER BY 1, 2",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "member_share_of_web_sales_pct"],
+    "rows": [
+      ["FY2025/26", 9, 68.0],
+      ["FY2025/26", 10, 67.5],
+      ["FY2025/26", 11, 66.7]
+    ]
+  },
+  "definitions_applied": [
+    "Member share of sales: net sales before returns on member-linked lines divided by all net sales before returns",
+    "Web sales recognised on the Helsinki dispatch date, not the order date",
+    "Web identified by store_id 900, not channel_code (platform migration 3 Nov 2025)",
+    "Cancelled and processing web orders excluded (only delivered and collected orders have dispatched sales)",
+    "Guest web orders count as non-member",
+    "Click-and-collect counted as web",
+    "Store 999 and category ZZ Test excluded",
+    "Staff purchases included",
+    "Net sales excluding VAT",
+    "Fiscal periods from dim_date (4-4-5 pattern, fiscal weeks 35-47 of FY2025/26)",
+    "Deprecated objects (rpt.v_daily_sales and others) not used"
+  ],
+  "assumptions": [
+    "Read 'last year' as FY2025/26. The request is dated 9 Oct 2026, in FY2026/27, and past requests asked in FY2026/27 took last year as FY2025/26. So periods 9 to 11 are FY2025/26 P9 to P11, 22 Dec 2025 to 22 Mar 2026. P9 has 5 weeks, P10 and P11 have 4 weeks each.",
+    "Read 'share of web sales that came from loyalty members' as the company member-share definition: net sales before returns on member-linked lines divided by all web net sales before returns. It is not after returns.",
+    "Treated an order as a member order when fact_web_order.member_key is not null. That is the same as login_state = 'logged_in'.",
+    "Gave one share per fiscal period, as asked, with no total row for P9 to P11."
+  ],
+  "caveats": [
+    "Data problem corrected: on logged-in web orders placed 9 Feb to 1 Mar 2026 (655 orders, 1,309 lines), fact_sales_line.member_key is null even though fact_web_order.member_key is filled. This hits P10 (706 lines) and P11 (603 lines); P9 is unaffected. Reading member_key from the sales lines would give about 51.8% for P10 and 55.8% for P11 instead of 67.5% and 66.7%. I took the member from fact_web_order.member_key instead. Source ETL should be fixed. Any other member-share figure that uses fact_sales_line.member_key on web lines for that window will be understated.",
+    "Web net sales before returns for each period (P9 219,929.50; P10 137,569.07; P11 149,798.62 EUR) matched the web shop (store 900) in rpt_daily_store_sales exactly, so the denominators are on the company definition.",
+    "The shares are before returns, as the member-share definition says. Returns are not split by member in this figure. Web returns in the control table were roughly 9 to 10% of web sales in each period.",
+    "Orders still processing or cancelled have no dispatch and are not in web sales. Orders dispatched in these periods but placed in an earlier period are included, because web sales follow the dispatch date.",
+    "The dim_store join in the query is on store_key (the version key), so there is no row multiplication. The query-check lint about the store join is a false alarm. The check's only failure was an option I passed (--date-col naming a column the result does not have), not a data problem."
+  ]
+}
+```

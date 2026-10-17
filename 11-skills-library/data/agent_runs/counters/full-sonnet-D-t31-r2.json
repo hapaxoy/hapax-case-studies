@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-D-t31-r2",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T31",
+ "budget": 30,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "318f61095a17839992187fdc574419d7e4a0ee7fd13e1ee9f851d4da2950de4b",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:26",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, weeks_in_period, first_fiscal_week, last_fiscal_week, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_period=8 ORDER BY period_start_date\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | weeks_in_period | first_fiscal_week | last_fiscal_week | fully_loaded\nFY2024/25 | 8 | FY2024/25 P08 | 2024-11-25 | 2024-12-22 | 4 | 31 | 34 | true\nFY2025/26 | 8 | FY2025/26 P08 | 2025-11-24 | 2025-12-21 | 4 | 31 | 34 | true\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:32",
+   "statement": "WITH act AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f\n  JOIN dim_member m ON m.member_key = f.member_key\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n    AND s.store_id <> 999 AND p.category <> 'ZZ Test'\n),\ntier AS (\n  SELECT m.member_id, m.tier, m.join_date FROM dim_member m\n  WHERE m.valid_from <= DATE '2025-12-21' AND m.valid_to >= DATE '2025-12-21'\n)\nSELECT t.tier, COUNT(DISTINCT a.member_id) AS n, COUNT(*) AS rows_, (SELECT COUNT(*) FROM act) AS total_act,\n  SUM(CASE WHEN t.join_date > DATE '2025-12-21' THEN 1 ELSE 0 END) AS joined_after\nFROM act a LEFT JOIN tier t ON t.member_id = a.member_id\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | n | rows_ | total_act | joined_after\nBasic | 14654 | 14654 | 29526 | 0\nGold | 3901 | 3901 | 29526 | 0\nSilver | 10971 | 10971 | 29526 | 0\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:33",
+   "statement": "SELECT tier, COUNT(*), COUNT(DISTINCT member_id), MIN(valid_from), MAX(valid_to) FROM dim_member GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | count_star() | count(DISTINCT member_id) | min(valid_from) | max(valid_to)\nBasic | 50572 | 43649 | 2019-01-01 | 9999-12-31\nGold | 8203 | 7210 | 2019-01-01 | 9999-12-31\nSilver | 30539 | 27039 | 2019-01-01 | 9999-12-31\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:56:39",
+   "statement": "SELECT COUNT(DISTINCT m.member_id) AS unfiltered,\n COUNT(DISTINCT CASE WHEN s.store_id<>999 AND p.category<>'ZZ Test' THEN m.member_id END) AS filtered,\n COUNT(DISTINCT CASE WHEN s.store_id=999 THEN m.member_id END) AS in999,\n COUNT(DISTINCT CASE WHEN p.category='ZZ Test' THEN m.member_id END) AS inzz,\n COUNT(*) AS lines, COUNT(DISTINCT f.sales_line_id) AS dist_lines,\n COUNT(DISTINCT CASE WHEN m.member_id IS NULL THEN f.sales_line_id END) AS unmatched_member_key\nFROM fact_sales_line f\nLEFT JOIN dim_member m ON m.member_key = f.member_key\nJOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nWHERE f.member_key IS NOT NULL AND f.sale_date > DATE '2025-12-21' - 364 AND f.sale_date <= DATE '2025-12-21'\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "unfiltered | filtered | in999 | inzz | lines | dist_lines | unmatched_member_key\n29526 | 29526 | 0 | 0 | 328182 | 328182 | 0\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,44 @@
+```json
+{
+  "sql": "WITH sold_lines AS (SELECT f.sales_line_id, cp.subcategory, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id <> 999 AND p.category <> 'ZZ Test' AND cp.category = 'Garden' AND d.fiscal_year = 'FY2025/26' AND d.fiscal_week BETWEEN 1 AND 13), refunds AS (SELECT sales_line_id, SUM(refund_net) AS refund_net FROM fact_return_line GROUP BY 1) SELECT 'FY2025/26' AS fiscal_year, 1 AS fiscal_quarter, l.subcategory, ROUND(100.0 * COALESCE(SUM(r.refund_net), 0) / SUM(l.net_amount), 2) AS return_rate_pct FROM sold_lines l LEFT JOIN refunds r USING (sales_line_id) GROUP BY l.subcategory ORDER BY l.subcategory",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_quarter", "subcategory", "return_rate_pct"],
+    "rows": [
+      ["FY2025/26", 1, "Barbecue & Grills", 7.26],
+      ["FY2025/26", 1, "Edible Plants & Seeds", 0.96],
+      ["FY2025/26", 1, "Garden Furniture", 12.87],
+      ["FY2025/26", 1, "Garden Tools", 5.35],
+      ["FY2025/26", 1, "Outdoor Lighting", 0.0],
+      ["FY2025/26", 1, "Plants & Flowers", 2.74],
+      ["FY2025/26", 1, "Pots & Planters", 3.86],
+      ["FY2025/26", 1, "Soil & Fertiliser", 1.58]
+    ]
+  },
+  "definitions_applied": [
+    "Return rate = returned net (refund_net) divided by sold net, in percent",
+    "Sale-week cohort: lines selected by the fiscal period of the original sale date, with refunds matched through sales_line_id whenever and wherever they were booked",
+    "Fiscal calendar: Q1 = P1-P3 = fiscal weeks 1-13 of FY2025/26 (28 Apr 2025 to 27 Jul 2025), taken from dim_date",
+    "Store 999 (training store) and category ZZ Test excluded",
+    "As-is hierarchy: current product version (is_current) for category and subcategory",
+    "Web lines (store 900) included, dated by the sale (order) date, as in the accepted REQ-D14 and REQ-D16 readings",
+    "Net amounts excluding VAT"
+  ],
+  "assumptions": [
+    "'Last year' was read as FY2025/26, the fiscal year just completed (the request was received 6 Oct 2026, in FY2026/27). This matches how REQ-D14 and REQ-D16 were read.",
+    "'Q1' was read as the fiscal Q1 (P1-P3, weeks 1-13), not calendar Q1.",
+    "'Garden subcategory' was read on the current (as-is) hierarchy, because no as-was reading was requested.",
+    "Physical stores and the web shop (store 900) are both included, because the request names no channel scope.",
+    "Staff purchases are included, as they are in sales figures.",
+    "Subcategories are shown at the natural grain of the question, with no total row."
+  ],
+  "caveats": [
+    "Outdoor lighting moved from Garden to Electrical on 27 Oct 2025. As-is, 68 outdoor lighting articles are in Electrical for all history, so their Q1 FY2025/26 sales (1,448 lines that were Garden at the time) are not in this Garden table. An as-was view would add them back as a Garden subcategory.",
+    "Five outdoor lighting articles (SKUs 100870, 100877, 100879, 100916, 100917) were delisted before the move. They have no Electrical version and are still Garden / Outdoor Lighting in the current product version. They appear as the 'Outdoor Lighting' row: 19 lines, EUR 375 net sold, no returns, so 0.0%. The row is tiny and not meaningful. Drop it if you want Garden to mean only the articles still ranged.",
+    "Return cohort is complete. The last sale in the cohort was 27 Jul 2025, the latest matched return was booked on 22 Aug 2025, and the warehouse is loaded to 4 Oct 2026, well past the 30-day return window.",
+    "Checks found no duplicate sales or return lines, no returns without a matching sale, no refunds above the sold amount, no cancelled web orders in the cohort, and no sales lines lost in the dimension joins.",
+    "Store 999 test sales were excluded: 136 lines in the Garden-related cohort. No ZZ Test lines fell in the Garden scope.",
+    "The 8 rows (before rounding) have sold net of EUR 176,074.46 (Barbecue & Grills), 74,584.72 (Edible Plants & Seeds), 406,939.18 (Garden Furniture), 276,601.44 (Garden Tools), 375.00 (Outdoor Lighting), 441,427.45 (Plants & Flowers), 144,538.28 (Pots & Planters) and 147,290.55 (Soil & Fertiliser).",
+    "I did not run the query_check script or the rpt_daily_store_sales control. That control total is net sales per store per day with no product dimension, so it does not apply to a return rate by subcategory."
+  ]
+}
+```

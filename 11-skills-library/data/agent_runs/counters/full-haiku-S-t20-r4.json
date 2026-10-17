@@ -1,0 +1,94 @@
+{
+ "run_id": "full-haiku-S-t20-r4",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T20",
+ "budget": 12,
+ "used": 9,
+ "refused": 0,
+ "packet_sha256": "68ff7c199434f82a06e799dabad74638696f50a5c5157a31a7d7b142fa74d741",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:23",
+   "statement": "SELECT DISTINCT fiscal_year, calendar_year\nFROM dim_date\nWHERE calendar_date >= '2026-01-01'\nORDER BY fiscal_year DESC, calendar_year DESC\nLIMIT 10\n",
+   "n": 1,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | calendar_year\nFY2026/27 | 2026\nFY2025/26 | 2026\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:26",
+   "statement": "SELECT DISTINCT region\nFROM dim_store\nWHERE is_current = TRUE\nORDER BY region\n",
+   "n": 2,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "region\nCapital Region\nEast\nHead office\nNorth\nOnline\nSouth\nWest\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:30",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_year_start_date, MIN(calendar_date) as earliest_date, MAX(calendar_date) as latest_date\nFROM dim_date\nWHERE calendar_date >= '2026-01-01'\nGROUP BY fiscal_year, fiscal_year_start_date\nORDER BY fiscal_year\n",
+   "n": 3,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "fiscal_year | fiscal_year_start_date | earliest_date | latest_date\nFY2025/26 | 2025-04-28 | 2026-01-01 | 2026-05-03\nFY2026/27 | 2026-05-04 | 2026-05-04 | 2026-10-04\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:36",
+   "statement": "SELECT \n  d.region,\n  SUM(f.net_amount) as net_sales,\n  SUM(f.quantity) as units_sold,\n  COUNT(DISTINCT f.receipt_id) as receipts\nFROM fact_sales_line f\nINNER JOIN dim_date dd ON f.sale_date = dd.calendar_date\nINNER JOIN dim_store d ON f.store_key = d.store_key\nWHERE dd.fiscal_year = 'FY2026/27'\n  AND f.channel_code = 'ST'\n  AND d.region NOT IN ('Online', 'Head office')\nGROUP BY d.region\nORDER BY net_sales DESC\n",
+   "n": 4,
+   "ok": true,
+   "rows": 0,
+   "output_preview": "region | net_sales | units_sold | receipts\n(0 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:39",
+   "statement": "SELECT DISTINCT dd.fiscal_year, f.channel_code, COUNT(*) as count\nFROM fact_sales_line f\nINNER JOIN dim_date dd ON f.sale_date = dd.calendar_date\nWHERE dd.fiscal_year IN ('FY2026/27', 'FY2025/26')\nGROUP BY dd.fiscal_year, f.channel_code\nORDER BY dd.fiscal_year, f.channel_code\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | channel_code | count\nFY2025/26 | ST | 298160\nFY2025/26 | WB | 39071\nFY2025/26 | NULL | 302058\nFY2026/27 | NULL | 288434\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:43",
+   "statement": "SELECT MIN(business_date) as min_date, MAX(business_date) as max_date, COUNT(*) as row_count\nFROM rpt_daily_store_sales\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min_date | max_date | row_count\n2024-04-29 | 2026-10-04 | 33913\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:48",
+   "statement": "SELECT \n  d.region,\n  SUM(r.net_sales) as net_sales,\n  SUM(r.units_sold) as units_sold,\n  SUM(r.receipts) as receipts,\n  ROW_NUMBER() OVER (ORDER BY SUM(r.net_sales) DESC) as rank\nFROM rpt_daily_store_sales r\nINNER JOIN dim_store d ON r.store_id = d.store_id\nINNER JOIN dim_date dd ON r.business_date = dd.calendar_date\nWHERE dd.fiscal_year = 'FY2026/27'\n  AND d.is_current = TRUE\n  AND d.region NOT IN ('Online', 'Head office')\nGROUP BY d.region\nORDER BY net_sales DESC\n",
+   "n": 7,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | net_sales | units_sold | receipts | rank\nWest | 1815139.47 | 129408 | 33510 | 1\nSouth | 1309213.51 | 94783 | 24549 | 2\nEast | 959424.31 | 68552 | 17961 | 3\nCapital Region | 948667.50 | 67795 | 17619 | 4\nNorth | 730386.24 | 54518 | 14161 | 5\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:53",
+   "statement": "SELECT \n  d.region,\n  COUNT(DISTINCT d.store_id) as num_stores,\n  COUNT(DISTINCT CASE WHEN dd.fiscal_year = 'FY2026/27' THEN r.business_date END) as days_with_sales\nFROM dim_store d\nLEFT JOIN rpt_daily_store_sales r ON d.store_id = r.store_id\nLEFT JOIN dim_date dd ON r.business_date = dd.calendar_date AND dd.fiscal_year = 'FY2026/27'\nWHERE d.is_current = TRUE\n  AND d.region NOT IN ('Online', 'Head office')\nGROUP BY d.region\nORDER BY d.region\n",
+   "n": 8,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "region | num_stores | days_with_sales\nCapital Region | 5 | 152\nEast | 8 | 152\nNorth | 6 | 152\nSouth | 10 | 152\nWest | 10 | 152\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:46:58",
+   "statement": "-- Final ranking of store regions by net sales for FY2026/27\nSELECT \n  ROW_NUMBER() OVER (ORDER BY SUM(r.net_sales) DESC) as rank,\n  d.region,\n  SUM(r.net_sales) as net_sales\nFROM rpt_daily_store_sales r\nINNER JOIN dim_store d ON r.store_id = d.store_id\nINNER JOIN dim_date dd ON r.business_date = dd.calendar_date\nWHERE dd.fiscal_year = 'FY2026/27'\n  AND d.is_current = TRUE\n  AND d.region NOT IN ('Online', 'Head office')\nGROUP BY d.region\nORDER BY rank\n",
+   "n": 9,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "rank | region | net_sales\n1 | West | 1815139.47\n2 | South | 1309213.51\n3 | East | 959424.31\n4 | Capital Region | 948667.50\n5 | North | 730386.24\n(5 rows)"
+  }
+ ]
+}

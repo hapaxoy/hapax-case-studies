@@ -1,0 +1,103 @@
+{
+ "run_id": "full-sonnet-L-t03-r1",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T03",
+ "budget": 30,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "bd3a80f3e82000e0cdd0da571aba4caaaa53a5855e7eb972e6e9d016d254bb5c",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:01:26",
+   "statement": "fiscal-calendar/scripts/fiscal.py P1-P3 --as-of 2026-10-05",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P1-P3    as of: 2026-10-05    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P01, FY2026/27 P02, FY2026/27 P03\n  fiscal_weeks                       1-13\n  start_date                         2026-05-04\n  end_date                           2026-08-02\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-02\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 1 AND 13)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:01:30",
+   "statement": "SELECT s.store_id, (s.store_id<900) AS is_store, f.staff_purchase_flag,\n COUNT(*) AS line_rows, COUNT(DISTINCT f.sales_line_id) AS distinct_lines, COUNT(DISTINCT f.receipt_id) AS receipts,\n SUM(f.net_amount) AS net\nFROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key\nWHERE f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND s.store_id IN (900,999)\nGROUP BY ALL ORDER BY 1,3\n",
+   "n": 2,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "store_id | is_store | staff_purchase_flag | line_rows | distinct_lines | receipts | net\n900 | false | false | 25881 | 25881 | 12962 | 771031.31\n999 | false | false | 120 | 120 | 54 | 451.55\n999 | false | true | 281 | 281 | 132 | 7354.71\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:01:32",
+   "statement": "SELECT 'all' AS grp, COUNT(*) AS line_rows, COUNT(DISTINCT sales_line_id) AS distinct_lines, COUNT(DISTINCT (receipt_id, line_no)) AS distinct_receipt_line\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'\nUNION ALL\nSELECT 'etl_dates', COUNT(DISTINCT etl_loaded_at), MIN(etl_loaded_at)::DATE::INT, MAX(etl_loaded_at)::DATE::INT FROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'\n",
+   "n": 3,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Conversion Error: Unimplemented type for cast (DATE -> INTEGER)\n\nLINE 4: ...', COUNT(DISTINCT etl_loaded_at), MIN(etl_loaded_at)::DATE::INT, MAX(etl_loaded_at)::DATE::INT FROM fact_sales_line...\n                                                                     ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:01:39",
+   "statement": "WITH w AS (\n  SELECT o.web_order_id, o.status, o.fulfilment_type, o.line_count,\n    CAST(timezone('Europe/Helsinki', o.order_ts_utc AT TIME ZONE 'UTC') AS DATE) AS order_date_hki,\n    CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date_hki\n  FROM fact_web_order o\n)\nSELECT status,\n  COUNT(*) AS orders, COUNT(DISTINCT web_order_id) AS distinct_orders,\n  SUM(CASE WHEN order_date_hki BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' THEN 1 ELSE 0 END) AS ordered_in_range,\n  SUM(CASE WHEN dispatch_date_hki BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' THEN 1 ELSE 0 END) AS dispatched_in_range,\n  SUM(CASE WHEN order_date_hki BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND dispatch_date_hki IS NULL THEN 1 ELSE 0 END) AS ordered_no_dispatch\nFROM w GROUP BY ALL\n",
+   "n": 4,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "status | orders | distinct_orders | ordered_in_range | dispatched_in_range | ordered_no_dispatch\ncancelled | 3828 | 3828 | 519 | 0 | 519\ncollected | 24514 | 24514 | 3925 | 3943 | 0\nprocessing | 296 | 296 | 0 | 0 | 0\ndelivered | 66238 | 66238 | 9037 | 9064 | 0\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:01:40",
+   "statement": "SELECT COUNT(*) AS rows_, COUNT(DISTINCT sales_line_id) AS d_lines, COUNT(DISTINCT (receipt_id, line_no)) AS d_receipt_line,\n COUNT(DISTINCT etl_loaded_at) AS etl_stamps, MIN(etl_loaded_at) AS min_etl, MAX(etl_loaded_at) AS max_etl, MAX(sale_date) AS max_sale_date\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rows_ | d_lines | d_receipt_line | etl_stamps | min_etl | max_etl | max_sale_date\n182507 | 182507 | 182507 | 91 | 2026-05-05T01:00:00 | 2026-08-03T01:00:00 | 2026-08-02\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:01:48",
+   "statement": "WITH lines AS (\n  SELECT f.receipt_id, f.net_amount, f.staff_purchase_flag, s.store_id, p.category,\n    CASE WHEN s.store_id = 900 THEN CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) ELSE f.sale_date END AS recog_date,\n    (s.store_id=900) AS is_web,\n    CAST(timezone('Europe/Helsinki', f.sale_ts_utc AT TIME ZONE 'UTC') AS DATE) AS ts_date, f.sale_date\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key=f.store_key\n  JOIN dim_product p ON p.product_key=f.product_key\n  LEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id AND s.store_id=900\n)\nSELECT is_web, staff_purchase_flag, (category='ZZ Test') AS test_art, (store_id=999) AS training,\n  COUNT(*) AS n_lines, COUNT(DISTINCT receipt_id) AS receipts, SUM(net_amount) AS net,\n  SUM(CASE WHEN ts_date<>sale_date THEN 1 ELSE 0 END) AS date_mismatch,\n  SUM(CASE WHEN recog_date IS NULL THEN 1 ELSE 0 END) AS null_recog\nFROM lines\nWHERE recog_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'\nGROUP BY ALL ORDER BY 1,2,3,4\n",
+   "n": 6,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "is_web | staff_purchase_flag | test_art | training | n_lines | receipts | net | date_mismatch | null_recog\nfalse | false | false | false | 153856 | 66984 | 3719186.33 | 0 | 0\nfalse | false | true | true | 120 | 54 | 451.55 | 0 | 0\nfalse | true | false | false | 2369 | 1037 | 48734.94 | 0 | 0\nfalse | true | false | true | 281 | 132 | 7354.71 | 0 | 0\ntrue | false | false | false | 25986 | 13004 | 771530.75 | 0 | 0\ntrue | false | true | false | 3 | 3 | 6.00 | 0 | 0\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:09",
+   "statement": "WITH l AS (\n  SELECT f.receipt_id, s.store_id, f.net_amount, f.staff_purchase_flag, p.category\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n  WHERE f.sale_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND s.store_id<900\n),\nr AS (\n  SELECT SUM(receipts) AS rpt_receipts, SUM(net_sales_before_returns) AS rpt_net_before_returns\n  FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND store_id<900\n)\nSELECT COUNT(DISTINCT receipt_id) AS receipts_by_id, COUNT(DISTINCT (store_id, receipt_id)) AS receipts_by_store_id,\n  SUM(net_amount) AS net_all_incl_staff, r.rpt_receipts, r.rpt_net_before_returns,\n  COUNT(DISTINCT CASE WHEN staff_purchase_flag THEN receipt_id END) AS staff_receipts,\n  COUNT(DISTINCT CASE WHEN category='ZZ Test' THEN receipt_id END) AS test_receipts_in_stores\nFROM l CROSS JOIN r GROUP BY r.rpt_receipts, r.rpt_net_before_returns\n",
+   "n": 7,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "receipts_by_id | receipts_by_store_id | net_all_incl_staff | rpt_receipts | rpt_net_before_returns | staff_receipts | test_receipts_in_stores\n68021 | 68021 | 3767921.27 | 68021 | 3767921.27 | 1037 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:12",
+   "statement": "SELECT SUM(receipts) AS rpt_web_receipts, SUM(net_sales_before_returns) AS rpt_web_net_before_returns\nFROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02' AND store_id=900\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "rpt_web_receipts | rpt_web_net_before_returns\n13004 | 771530.75\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:03:16",
+   "statement": "WITH lines AS (\n  SELECT f.receipt_id, f.net_amount,\n    CASE WHEN s.store_id = 900\n         THEN CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)\n         ELSE f.sale_date END AS recognition_date\n  FROM fact_sales_line f\n  JOIN dim_store s   ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  LEFT JOIN fact_web_order o ON o.web_order_id = f.receipt_id AND s.store_id = 900\n  WHERE s.store_id <> 999\n    AND p.category <> 'ZZ Test'\n    AND NOT f.staff_purchase_flag\n)\nSELECT 'FY2026/27' AS fiscal_year,\n       ROUND(SUM(net_amount) / COUNT(DISTINCT receipt_id), 2) AS atv\nFROM lines\nWHERE recognition_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'\n",
+   "n": 9,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: INTERRUPT Error: Interrupted!"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:05:25",
+   "statement": "WITH lines AS (\n  SELECT f.receipt_id, f.net_amount, (s.store_id = 900) AS is_web,\n    CASE WHEN s.store_id = 900\n         THEN CAST(timezone('Europe/Helsinki', o.dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE)\n         ELSE f.sale_date END AS recognition_date\n  FROM fact_sales_line f\n  JOIN dim_store s   ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  LEFT JOIN fact_web_order o ON o.web_order_id = f.receipt_id AND s.store_id = 900\n  WHERE f.sale_date BETWEEN DATE '2026-04-01' AND DATE '2026-08-02'\n    AND s.store_id <> 999\n    AND p.category <> 'ZZ Test'\n    AND NOT f.staff_purchase_flag\n)\nSELECT 'FY2026/27' AS fiscal_year,\n       ROUND(SUM(net_amount) / COUNT(DISTINCT receipt_id), 2) AS atv,\n       SUM(net_amount) AS net, COUNT(DISTINCT receipt_id) AS receipts, COUNT(DISTINCT (is_web, receipt_id)) AS receipts_by_channel\nFROM lines\nWHERE recognition_date BETWEEN DATE '2026-05-04' AND DATE '2026-08-02'\n",
+   "n": 10,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | atv | net | receipts | receipts_by_channel\nFY2026/27 | 56.14 | 4490717.08 | 79988 | 79988\n(1 row)"
+  }
+ ]
+}

@@ -1,0 +1,37 @@
+```json
+{
+  "sql": "WITH p AS (SELECT period_start_date AS a, period_end_date AS b FROM ref_fiscal_calendar WHERE fiscal_year='FY2025/26' AND fiscal_period=2), sales AS (SELECT f.sales_line_id, d.format, f.net_amount FROM fact_sales_line f JOIN dim_store d ON d.store_key=f.store_key, p WHERE f.sale_date BETWEEN p.a AND p.b AND d.store_id &lt; 900 AND NOT f.staff_purchase_flag), sold AS (SELECT format, sum(net_amount) AS sold_net FROM sales GROUP BY 1), returned AS (SELECT s.format, sum(r.refund_net) AS refund_net FROM sales s JOIN fact_return_line r USING(sales_line_id) GROUP BY 1) SELECT sold.format AS store_format, round(100*returned.refund_net/sold.sold_net, 2) AS return_share_pct FROM sold JOIN returned USING(format) ORDER BY CASE sold.format WHEN 'Large' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END",
+  "result": {
+    "columns": ["store_format", "return_share_pct"],
+    "rows": [
+      ["Large", 4.45],
+      ["Medium", 4.56],
+      ["Small", 4.3]
+    ]
+  },
+  "definitions_applied": [
+    "Last year's period 2 = FY2025/26 P02 (2025-05-26 to 2025-06-22) from ref_fiscal_calendar; the current fiscal year is FY2026/27",
+    "Return share = refund_net divided by net_amount (both EUR excluding VAT) on the same sales lines",
+    "Sales lines linked to their returns through sales_line_id",
+    "Store format taken from dim_store via the store_key on the sales line (format is the same across store versions)",
+    "Physical stores only (store_id below 900)",
+    "Staff purchases excluded (staff_purchase_flag = false)"
+  ],
+  "assumptions": [
+    "'Last year' means the last completed fiscal year before the request date (6 Oct 2026), i.e. FY2025/26. Period 2 is the fiscal period, not calendar month 2.",
+    "'What came back' means refunds on lines sold in period 2, whenever the refund was booked. The last refund on these lines was booked on 2025-07-23, so every return window is complete. If the question means refunds booked during period 2 divided by period 2 sales, the figures are Large 4.65, Medium 4.79, Small 4.33.",
+    "The share is by value (EUR excluding VAT). Units were not used.",
+    "The web shop is left out because it is not a store format. Leena is in Store operations and the question asks for a split by store format. The web shop's return share is far higher, at about 12.2%.",
+    "Staff purchases are left out because they are not customer sales and their return rate is much lower (about 2.0 to 2.5%). Including them would move each figure by about 0.01 to 0.03 percentage points."
+  ],
+  "caveats": [
+    "Correction: the 'Training' store (store_id 999) has sales lines in period 2 (about EUR 2,222 net, mostly flagged as staff purchases). These are test data and were excluded. It has no returns.",
+    "Correction: the web shop (store_id 900, format 'Web') was excluded from the store-format split.",
+    "Correction: staff purchases were excluded, as described above.",
+    "The format labels in the warehouse are Large, Medium and Small. The column comment says Hyper, Standard or Express, so the comment is out of date. I used the labels the data holds.",
+    "I found no duplicate sales or return lines for this period. Every return links to an existing sales line and none returns more than was sold.",
+    "Savonlinna (store 129) closed on 2026-01-25. It was open throughout period 2 last year and stays in the Small figure.",
+    "Several Helsinki-area stores changed region on 2025-04-28 and Kouvola changed from East to South. This does not affect a split by format."
+  ]
+}
+```

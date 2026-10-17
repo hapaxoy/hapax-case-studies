@@ -1,0 +1,33 @@
+```json
+{
+  "sql": "WITH cal AS (SELECT min(period_start_date) AS p_start, max(period_end_date) AS p_end FROM ref_fiscal_calendar WHERE fiscal_year = 'FY2026/27' AND fiscal_period BETWEEN 1 AND 3), sales AS (SELECT f.receipt_id, f.net_amount FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key CROSS JOIN cal WHERE f.sale_date BETWEEN cal.p_start AND cal.p_end AND s.store_id <> 999) SELECT round(sum(net_amount) / count(DISTINCT receipt_id), 2) AS atv FROM sales",
+  "result": {
+    "columns": ["atv"],
+    "rows": [[56.05]]
+  },
+  "definitions_applied": [
+    "ATV = net sales (EUR excluding VAT, after line discounts) divided by the number of distinct receipts, the same basis as rpt.v_daily_sales (sum of net_amount over distinct receipts)",
+    "A web order counts as one transaction (receipt_id equals web_order_id), the same as a store receipt",
+    "Fiscal calendar from ref_fiscal_calendar: FY2026/27 periods 1 to 3 run 2026-05-04 to 2026-08-02 (13 weeks, with P3 being 5 weeks)",
+    "Stores joined through the dim_store surrogate key (store_key), as the fact tables require",
+    "Channels identified by channel_id (1 store, 2 web home delivery, 3 click and collect), not by channel_code",
+    "Sales are before returns, so refunds are not deducted from the numerator"
+  ],
+  "assumptions": [
+    "'This year' means the current fiscal year FY2026/27 (the request is dated 2026-10-05, so P1 to P3 are complete and the warehouse marks them fully_loaded). A calendar-year reading would be a different date range.",
+    "ATV is measured on net sales excluding VAT. Including VAT it would be 70.22.",
+    "ATV is measured before returns. The warehouse has no written ATV definition, so this is my reading. Net of returns it would be 53.04 (refunds of 243,627.84 net, which match rpt_daily_store_sales).",
+    "Staff purchases are included, as in the company's own daily sales report. Excluding them gives 56.17.",
+    "Web orders are dated by sale_date, the local date on the sales lines."
+  ],
+  "caveats": [
+    "Correction: the Training store (store_id 999, 174 receipts and 7,805.99 EUR net in the period) was excluded. It is a test location, not real trading, and the warehouse has no flag for it other than its name and format 'Training'.",
+    "Correction: web sales lines in this period have a NULL channel_code, because the code was replaced by channel_id after the web-platform migration. The existing views rpt.v_daily_sales and rpt.v_weekly_store_sales pick web lines up with channel_code = 'WB', so they would drop all web orders from the figure. I used channel_id 2 and 3 instead, giving 12,962 web receipts and 771,031.31 EUR net.",
+    "Cancelled web orders (531 in the period) have no sales lines, so they are not in the figure. Only delivered and collected orders appear.",
+    "Result basis: 80,983 receipts (68,021 in physical stores, 12,962 web) and 4,538,952.58 EUR net sales.",
+    "The physical-store figures match rpt_daily_store_sales exactly, day by day. Store 900 (web) differs because that report books web orders on a different business date, and it also includes some days with nearly no web activity. Its period totals are not a clean basis for ATV, which is why I used the fact table.",
+    "Using the report's own figures (4,295,824.18 net after returns over 81,025 receipts) would give about 53.0, which is a different measure from the 56.05 reported here.",
+    "I checked for duplicate lines, receipts spanning dates or stores, zero or negative lines, and VAT inconsistencies, and found none. Lines loaded into the staging tables are all present in the fact table."
+  ]
+}
+```

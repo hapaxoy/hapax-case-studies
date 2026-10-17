@@ -1,0 +1,31 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, d.fiscal_period AS fiscal_period, s.store_id, s.store_name, cp.subcategory, SUM(f.quantity) AS units_sold FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key JOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current JOIN dim_date d ON d.calendar_date = f.sale_date WHERE s.store_id = 108 AND cp.subcategory = 'Interior Paint' AND cp.category <> 'ZZ Test' AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 3 GROUP BY 1, 2, 3, 4, 5",
+  "result": {
+    "columns": ["fiscal_year", "fiscal_period", "store_id", "store_name", "subcategory", "units_sold"],
+    "rows": [["FY2026/27", 3, 108, "Lahti", "Interior Paint", 194]]
+  },
+  "definitions_applied": [
+    "Fiscal calendar: FY2026/27 period 3 = fiscal weeks 9 to 13, 29 June to 2 August 2026, taken from dim_date",
+    "Units sold = quantity on sales lines, dated by sale_date (Helsinki business date), the same basis as rpt_daily_store_sales.units_sold",
+    "Store scope: physical store 108 Lahti only; web shop (900) is not part of a store figure",
+    "Store 999 and category ZZ Test excluded (no effect on this figure)",
+    "Versioned dimensions: sku and store joined on natural keys with is_current / version keys, no row multiplication",
+    "As-is product hierarchy: current product version decides the subcategory (Interior Paint, category Paint & Decorating)",
+    "Staff purchases included, as in net sales"
+  ],
+  "assumptions": [
+    "Period 3 of FY26/27 read as FY2026/27 P03, the fiscal year named in the request; it is complete in the warehouse (loaded through 4 October 2026)",
+    "Interior Paint read as the dim_product subcategory 'Interior Paint' (category Paint & Decorating); Exterior Paint, Brushes & Rollers and Wallpaper are not included",
+    "Units sold read as units sold at the till, before returns, since the metric dictionary has no definition of net units and the warehouse's own units_sold control measure is gross of returns",
+    "Lahti read as store_id 108 (city Lahti, region South); Tampere Lielahti is a different store"
+  ],
+  "caveats": [
+    "The metric dictionary does not define 'units sold'. I used units before returns; 5 units of Interior Paint were returned at Lahti in the same period (returns dated in P3), so net of returns the figure would be 189.",
+    "Included in the 194 are 4 units from staff purchases (staff purchases count in sales under the company definition).",
+    "Control check: Lahti total units for all products in P3 (3,927) agrees exactly with rpt_daily_store_sales.units_sold for the same 35 days; no duplicate receipt lines were found (142 lines, 142 distinct receipt_id + line_no).",
+    "Two Interior Paint articles (SKUs 100963 and 101047) have two product versions, both in Interior Paint, so the classification is stable and no correction was needed.",
+    "No data problem needed correcting for this request."
+  ]
+}
+```

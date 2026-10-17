@@ -1,0 +1,35 @@
+Based on my analysis of the Tuomimetsä warehouse, I have calculated the like-for-like sales growth by region comparing Q3 FY2024/25 (last fiscal year) to Q3 FY2025/26 (current fiscal year). Here is my response:
+
+```json
+{
+  "sql": "WITH q3_2024_25_stores AS (SELECT DISTINCT ds.store_id FROM fact_sales_line fsl JOIN dim_store ds ON fsl.store_key = ds.store_key WHERE fsl.sale_date BETWEEN '2024-10-28' AND '2025-01-26' AND ds.store_id &lt; 900), q3_sales_2024_25 AS (SELECT ds.region, SUM(fsl.net_amount) as net_sales_2024_25 FROM fact_sales_line fsl JOIN dim_store ds ON fsl.store_key = ds.store_key WHERE fsl.sale_date BETWEEN '2024-10-28' AND '2025-01-26' AND ds.store_id IN (SELECT store_id FROM q3_2024_25_stores) GROUP BY ds.region), q3_sales_2025_26 AS (SELECT ds.region, SUM(fsl.net_amount) as net_sales_2025_26 FROM fact_sales_line fsl JOIN dim_store ds ON fsl.store_key = ds.store_key WHERE fsl.sale_date BETWEEN '2025-10-27' AND '2026-01-25' AND ds.store_id IN (SELECT store_id FROM q3_2024_25_stores) GROUP BY ds.region) SELECT COALESCE(s24.region, s26.region) as region, ROUND(s24.net_sales_2024_25, 2) as net_sales_q3_2024_25, ROUND(s26.net_sales_2025_26, 2) as net_sales_q3_2025_26, ROUND((s26.net_sales_2025_26 - s24.net_sales_2024_25) / s24.net_sales_2024_25 * 100, 2) as lfl_growth_pct FROM q3_sales_2024_25 s24 FULL OUTER JOIN q3_sales_2025_26 s26 ON s24.region = s26.region WHERE s24.region IS NOT NULL ORDER BY region",
+  "result": {
+    "columns": ["region", "lfl_growth_pct"],
+    "rows": [
+      ["East", -9.4],
+      ["North", 6.78],
+      ["South", -37.0],
+      ["West", 5.03]
+    ]
+  },
+  "definitions_applied": [
+    "Like-for-like (LFL): same stores open and selling in both periods",
+    "Net sales: sales excluding VAT",
+    "Q3 fiscal periods: three 4-5 week periods per fiscal quarter",
+    "Store regions: North, South, East, West, Capital Region (regional stores only)"
+  ],
+  "assumptions": [
+    "Request interpreted as year-over-year comparison: Q3 FY2024/25 vs Q3 FY2025/26",
+    "Physical stores only: excluded training store (999) and web shop (900)",
+    "LFL basis: 40 stores with sales in Q3 FY2024/25 (all also had Q3 FY2025/26 sales)",
+    "Capital Region excluded: five stores with no recorded sales in Q3 FY2024/25"
+  ],
+  "caveats": [
+    "Capital Region stores had no sales recorded in Q3 FY2024/25, making YoY comparison impossible; all five Capital Region stores were open before 2024 per master data",
+    "One Capital Region store (Vantaa Tammisto) underwent a refit closure 2024-07-08 to 2024-08-11, ending before Q3; unclear why no sales appear for this or other Capital Region stores in the period",
+    "Data availability: warehouse contains data from 2024-04-29 onwards; Q3 FY2023/24 data is not available for older comparison",
+    "South region shows a -37% decline, which warrants investigation for potential store closures, significant format changes, or data quality issues",
+    "Web shop and training store excluded from regional analysis per standard retail LFL methodology"
+  ]
+}
+```

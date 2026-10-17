@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-Lminus-t10-r1",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T10",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "11c935370f7f50e8ae8a05a3f8a9fefc33610e9e4ee70742dab880402107cf36",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:48",
+   "statement": "SELECT store_key, store_id, store_name, city, region, format, open_date, close_date, valid_from, valid_to, is_current\nFROM dim_store\nWHERE lower(store_name) LIKE '%hyvink%' OR lower(city) LIKE '%hyvink%'\nORDER BY store_id, valid_from\n",
+   "n": 1,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_key | store_id | store_name | city | region | format | open_date | close_date | valid_from | valid_to | is_current\n12 | 107 | Hyvinkää | Hyvinkää | South | Medium | NULL | NULL | 2000-01-01 | 9999-12-31 | true\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:49",
+   "statement": "SELECT category, count(*) AS versions, count(DISTINCT sku) AS skus, sum(CASE WHEN is_current THEN 1 ELSE 0 END) AS current_versions\nFROM dim_product\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "category | versions | skus | current_versions\nBathroom & Plumbing | 279 | 278 | 278\nCleaning & Household | 288 | 285 | 285\nElectrical | 480 | 477 | 477\nFurniture | 241 | 239 | 239\nGarden | 942 | 933 | 868\nHome Textiles & Decor | 375 | 370 | 370\nKitchen & Dining | 321 | 316 | 316\nPaint & Decorating | 388 | 385 | 385\nSeasonal | 259 | 254 | 254\nTools & Hardware | 520 | 516 | 516\nZZ Test | 12 | 12 | 12\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:53",
+   "statement": "SELECT category, subcategory, count(DISTINCT sku) AS skus, bool_or(is_current) AS any_current\nFROM dim_product\nWHERE category = 'Cleaning & Household' OR lower(subcategory) LIKE '%clean%' OR lower(category) LIKE '%clean%'\nGROUP BY 1, 2 ORDER BY 1, 2\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "category | subcategory | skus | any_current\nCleaning & Household | Cleaning Products | 131 | true\nCleaning & Household | Laundry & Ironing | 62 | true\nCleaning & Household | Storage Boxes | 92 | true\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:04:54",
+   "statement": "SELECT fiscal_year, fiscal_period, fiscal_period_label, min(calendar_date) AS d0, max(calendar_date) AS d1, count(*) AS days, sum(CASE WHEN is_trading_day THEN 1 ELSE 0 END) AS trading_days\nFROM dim_date WHERE fiscal_year = 'FY2026/27' AND fiscal_period = 5\nGROUP BY 1,2,3\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | d0 | d1 | days | trading_days\nFY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | 28 | 28\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:05:01",
+   "statement": "WITH lines AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.sale_date, f.quantity, f.staff_purchase_flag, f.etl_loaded_at,\n         p.sku, p.subcategory AS subcat_asof, cp.subcategory AS subcat_current, p.category AS cat_asof, cp.category AS cat_current\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE s.store_id = 107 AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n)\nSELECT\n  count(*) AS line_rows, count(DISTINCT sales_line_id) AS distinct_line_ids, count(DISTINCT (receipt_id, line_no)) AS distinct_receipt_lines,\n  sum(CASE WHEN subcat_current = 'Cleaning Products' THEN quantity END) AS units_current,\n  sum(CASE WHEN subcat_asof = 'Cleaning Products' THEN quantity END) AS units_asof,\n  sum(CASE WHEN subcat_current = 'Cleaning Products' AND staff_purchase_flag THEN quantity END) AS staff_units,\n  sum(CASE WHEN subcat_current = 'Cleaning Products' AND quantity <= 0 THEN 1 END) AS nonpositive_rows,\n  count(CASE WHEN subcat_current = 'Cleaning Products' THEN 1 END) AS cp_rows,\n  count(DISTINCT CASE WHEN subcat_current = 'Cleaning Products' THEN sales_line_id END) AS cp_distinct_ids,\n  min(CASE WHEN subcat_current = 'Cleaning Products' THEN sale_date END) AS first_d, max(CASE WHEN subcat_current = 'Cleaning Products' THEN sale_date END) AS last_d,\n  count(DISTINCT etl_loaded_at) AS load_stamps\nFROM lines\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "line_rows | distinct_line_ids | distinct_receipt_lines | units_current | units_asof | staff_units | nonpositive_rows | cp_rows | cp_distinct_ids | first_d | last_d | load_stamps\n978 | 978 | 978 | 136 | 136 | 4 | NULL | 63 | 63 | 2026-08-31 | 2026-09-27 | 28\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:05:11",
+   "statement": "WITH mine AS (\n  SELECT f.sale_date, count(DISTINCT f.receipt_id) AS receipts, sum(f.quantity) AS units, sum(f.net_amount) AS net_before_returns,\n         min(f.etl_loaded_at) AS first_load, max(f.etl_loaded_at) AS last_load\n  FROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id = 107 AND p.category <> 'ZZ Test' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n  GROUP BY 1\n)\nSELECT c.business_date, c.receipts AS rpt_receipts, m.receipts, c.units_sold AS rpt_units, m.units, c.net_sales_before_returns AS rpt_net, m.net_before_returns, m.first_load, m.last_load\nFROM rpt_daily_store_sales c LEFT JOIN mine m ON m.sale_date = c.business_date\nWHERE c.store_id = 107 AND c.business_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nORDER BY 1\n",
+   "n": 6,
+   "ok": true,
+   "rows": 28,
+   "output_preview": "business_date | rpt_receipts | receipts | rpt_units | units | rpt_net | net_before_returns | first_load | last_load\n2026-08-31 | 9 | 9 | 30 | 30 | 572.31 | 572.31 | 2026-09-01T01:00:00 | 2026-09-01T01:00:00\n2026-09-01 | 13 | 13 | 42 | 42 | 542.19 | 542.19 | 2026-09-02T01:00:00 | 2026-09-02T01:00:00\n2026-09-02 | 14 | 14 | 49 | 49 | 755.05 | 755.05 | 2026-09-03T01:00:00 | 2026-09-03T01:00:00\n2026-09-03 | 17 | 17 | 57 | 57 | 1246.80 | 1246.80 | 2026-09-04T01:00:00 | 2026-09-04T01:00:00\n2026-09-04 | 18 | 18 | 80 | 80 | 1242.61 | 1242.61 | 2026-09-05T01:00:00 | 2026-09-05T01:00:00\n2026-09-05 | 21 | 21 | 73 | 73 | 1226.95 | 1226.95 | 2026-09-06T01:00:00 | 2026-09-06T01:00:00\n2026-09-06 | 13 | 13 | 53 | 53 | 840.94 | 840.94 | 2026-09-07T01:00:00 | 2026-09-07T01:00:00\n2026-09-07 | 16 | 16 | 63 | 63 | 1374.89 | 1374.89 | 2026-09-08T01:00:00 | 2026-09-08T01:00:00\n2026-09-08 | 11 | 11 | 58 | 58 | 720.71 | 720.71 | 2026-09-09T01:00:00 | 2026-09-09T01:00:00\n2026-09-09 | 13 | 13 | 53 | 53 | 794.18 | 794.18 | 2026-09-10T01:00:00 | 2026-09-10T01:00:00\n2026-09-10 | 15 | 15 | 63 | 63 | 870.97 | 870.97 | 2026-09-11T01:00:00 | 2026-09-11T01:00:00\n2026-09-11 | 17 | 17 | 84 | 84 | 1116.46 | 1116.46 | 2026-09-12T01:00:00 | 2026-09-12T01:00:00\n2026-09-12 | 14 | 14 | 50 | 50 | 1047.02 | 1047.02 | 2026-09-13T01:00:00 | 2026-09-13T01:00:00\n2026-09-13 | 8 | 8 | 27 | 27 | 462.49 | 462.49 | 2026-09-14T01:00:00 | 2026-09-14T01:00:00\n2026-09-14 | 13 | 13 | 45 | 45 | 847.13 | 847.13 | 2026-09-15T01:00:00 | 2"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:05:21",
+   "statement": "SELECT 'returns booked at Hyvinkaa in P05' AS what, sum(r.quantity_returned) AS units, count(*) AS rows\nFROM fact_return_line r JOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_product p ON p.product_key = r.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 107 AND cp.subcategory = 'Cleaning Products' AND r.return_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nUNION ALL\nSELECT 'sales-line units sold (final)', sum(f.quantity), count(*)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 107 AND cp.category = 'Cleaning & Household' AND cp.subcategory = 'Cleaning Products' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\nUNION ALL\nSELECT 'whole category Cleaning & Household units', sum(f.quantity), count(*)\nFROM fact_sales_line f JOIN dim_store s ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nWHERE s.store_id = 107 AND cp.category = 'Cleaning & Household' AND f.sale_date BETWEEN DATE '2026-08-31' AND DATE '2026-09-27'\n",
+   "n": 7,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "what | units | rows\nreturns booked at Hyvinkaa in P05 | NULL | 0\nsales-line units sold (final) | 136 | 63\nwhole category Cleaning & Household units | 221 | 116\n(3 rows)"
+  }
+ ]
+}

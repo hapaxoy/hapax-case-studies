@@ -1,0 +1,38 @@
+```json
+{
+  "sql": "WITH cur AS (SELECT store_id, region FROM dim_store WHERE is_current AND store_id &lt; 900), sales AS (SELECT s.store_id, d.fiscal_year, d.fiscal_week, sum(f.net_amount) amt FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_date d ON d.calendar_date=f.sale_date WHERE s.store_id &lt; 900 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND d.fiscal_period &lt;= 5 GROUP BY ALL), rets AS (SELECT s.store_id, d.fiscal_year, d.fiscal_week, sum(r.refund_net) amt FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_date d ON d.calendar_date=r.return_date WHERE s.store_id &lt; 900 AND d.fiscal_year IN ('FY2025/26','FY2026/27') AND d.fiscal_period &lt;= 5 GROUP BY ALL), net AS (SELECT s.store_id, s.fiscal_year, s.fiscal_week, s.amt - coalesce(r.amt,0) net_sales FROM sales s LEFT JOIN rets r USING (store_id, fiscal_year, fiscal_week)), pairs AS (SELECT c.region, n1.store_id, n1.fiscal_week, n0.net_sales ly, n1.net_sales ty FROM net n1 JOIN net n0 ON n0.store_id=n1.store_id AND n0.fiscal_week=n1.fiscal_week AND n0.fiscal_year='FY2025/26' JOIN cur c ON c.store_id=n1.store_id WHERE n1.fiscal_year='FY2026/27' AND n1.store_id NOT IN (136,137)) SELECT rank() OVER (ORDER BY sum(ty)/sum(ly) DESC) AS rank, region, round((sum(ty)/sum(ly)-1)*100,2) AS lfl_net_sales_growth_pct FROM pairs GROUP BY region ORDER BY 1",
+  "result": {
+    "columns": ["rank", "region", "lfl_net_sales_growth_pct"],
+    "rows": [
+      [1, "North", 3.89],
+      [2, "Capital Region", 2.29],
+      [3, "West", 0.68],
+      [4, "South", 0.41],
+      [5, "East", -0.28]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales = store sales lines net_amount (EUR excl. VAT) minus refund_net on return lines, returns taken on the return date, as in rpt_daily_store_sales",
+    "Stores only: store_id below 900, so the web shop (900) and the training store (999) are out",
+    "Fiscal calendar from dim_date: this year is FY2026/27, compared with FY2025/26 on the same fiscal weeks (weeks 1 to 21, periods 1 to 5), so weekdays line up",
+    "Current region of each store (dim_store.is_current) used for both years, which gives five regions: North, Capital Region, West, South, East",
+    "Like-for-like basis: only store-weeks that traded in both years, and stores open for the whole of the base year (stores 136 and 137 opened in Sep and Nov 2024 and are still ramping up)"
+  ],
+  "assumptions": [
+    "'How they are doing this year so far' is read as like-for-like net sales growth against the same fiscal weeks last year, because that is the fair comparison across regions. A plain net sales total would mostly reward region size.",
+    "'This year' is the fiscal year FY2026/27. 'So far' ends at the close of fiscal period 5 (27 Sep 2026), the last period marked fully loaded. Period 6 is partly loaded and is excluded.",
+    "Staff purchases are kept in net sales, as they are in the reporting table.",
+    "Region ranking is by growth percentage, with 1 as the best performer."
+  ],
+  "caveats": [
+    "Correction: the region mapping changed on 28 Apr 2025. The Helsinki-area stores (101 to 105) moved from South to a new Capital Region, and Kouvola (114) moved from East to South. I used each store's current region for both years so the comparison is not distorted. The dim_store column comment still lists only four regions.",
+    "Correction: Kuopio (125, East) was closed for a refit from 15 Jun to 26 Jul 2026 (fiscal weeks 7 to 12). Pori (119, West) was closed for a refit from 8 Sep to 12 Oct 2025, which removes fiscal weeks 20 and 21 of last year from the comparison. I dropped those store-weeks from both years.",
+    "Correction: Savonlinna (129, East) closed on 25 Jan 2026 and has no sales this year, but traded last year. It is excluded from the like-for-like figures. East's raw totals fall 11.8% mainly because of this closure and the Kuopio refit, whereas like-for-like it is -0.28%.",
+    "Correction: stores 136 Tampere Lamminpää (West) and 137 Lohja (South) opened in late 2024. Both grow strongly this year because they are ramping up (about +10% and +28% net-of-returns respectively), so they are excluded as non-comparable. The old temporary like-for-like store lists (tmp_lfl_store_list tables) also leave them out.",
+    "The channel_code column is NULL on the sales lines I looked at (from 4 May 2026), so I did not use it. Stores and the web shop were told apart by store_id on the store key.",
+    "rpt_daily_store_sales matches my fact-table figures except for West in FY2025/26, where its net-before-returns figure is about EUR 10.4k lower than the fact table. I used the fact tables.",
+    "For reference, the unadjusted store net sales for FY2026/27 up to period 5 (all stores, no like-for-like) rank West 1,746,048, South 1,258,389, East 917,436, Capital Region 908,152, North 703,520. This differs from the growth ranking because of region size, the closures and the new stores.",
+    "The last days of the loaded data (3 to 4 Oct 2026) look lighter than the same weekdays in earlier weeks. They are outside the period used here and I did not investigate them."
+  ]
+}
+```

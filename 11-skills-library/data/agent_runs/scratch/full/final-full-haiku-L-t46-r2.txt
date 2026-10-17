@@ -1,0 +1,39 @@
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    -- sales: web on the Helsinki dispatch date\n    SELECT w.dispatch_date AS business_date, s.store_id, p.sku, p.product_name,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    -- returns reduce net sales on the return date\n    SELECT r.return_date, s.store_id, p.sku, p.product_name, -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT p.sku, p.product_name, ROUND(SUM(n.net_sales), 2) AS net_sales\nFROM net_lines n\nJOIN dim_product p ON p.sku = n.sku AND p.is_current\nWHERE n.business_date >= DATE '2025-11-03'\nGROUP BY p.sku, p.product_name\nORDER BY net_sales DESC\nLIMIT 10;",
+  "result": {
+    "columns": ["sku", "product_name", "net_sales"],
+    "rows": [
+      [100955, "Interior Paint Norvik 298", 14499.84],
+      [103774, "Christmas Decorations Poutaranta Home 601", 13300.74],
+      [103390, "Bedroom Peltola 793", 10907.95],
+      [100529, "Garden Furniture Raudikko 536", 10052.48],
+      [103747, "Christmas Decorations Mäntylä 402", 9326.33],
+      [103791, "Christmas Decorations Havu 430", 9209.38],
+      [100573, "Garden Furniture Ahvenisto 564", 7495.15],
+      [100528, "Garden Furniture Norvik 499", 7411.38],
+      [103928, "Sauna & Winter Havu 699", 7130.21],
+      [103415, "Home Office Peltola 918", 6889.60]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales on dispatch date in Helsinki time (not order date)",
+    "Net sales excluding VAT, after returns",
+    "Web shop identified as store_id 900",
+    "Returns reduce net sales on their own return date",
+    "Store 999 and ZZ Test category excluded from all calculations"
+  ],
+  "assumptions": [
+    "Top 10 products ranked by net sales value in EUR",
+    "Web orders counted only when status is 'delivered' or 'collected'",
+    "Product names shown from the current version (is_current = true)",
+    "Request scope is company-wide, all web sales channels combined"
+  ],
+  "caveats": [
+    "Warehouse data loaded through 2026-10-04; request received 2026-10-08",
+    "Returns can arrive up to 30 days after sale; late-November 2025 sales may have incomplete return data as of 2026-10-04",
+    "Total web net sales validation: 2,150,090.07 EUR since 2025-11-03, matches rpt_daily_store_sales control total for store 900",
+    "Platform migration on 2025-11-03 affected channel_code and channel_id columns; identification by store_id 900 is reliable across the migration"
+  ]
+}
+```

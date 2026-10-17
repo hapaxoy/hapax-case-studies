@@ -1,0 +1,103 @@
+{
+ "run_id": "full-haiku-S-t28-r3",
+ "arm": "S",
+ "model": "haiku",
+ "request_id": "REQ-T28",
+ "budget": 12,
+ "used": 10,
+ "refused": 0,
+ "packet_sha256": "f8c960a1c1687a2dd7abd0c9ceba3959ac17e2eff0a4049afd1092b94c97f541",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:42",
+   "statement": "SELECT DISTINCT fiscal_year, fiscal_period, fiscal_period_label, period_start_date, period_end_date, fully_loaded\nFROM ref_fiscal_calendar\nORDER BY fiscal_year DESC, fiscal_period DESC\nLIMIT 5\n",
+   "n": 1,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "fiscal_year | fiscal_period | fiscal_period_label | period_start_date | period_end_date | fully_loaded\nFY2026/27 | 6 | FY2026/27 P06 | 2026-09-28 | 2026-11-01 | false\nFY2026/27 | 5 | FY2026/27 P05 | 2026-08-31 | 2026-09-27 | true\nFY2026/27 | 4 | FY2026/27 P04 | 2026-08-03 | 2026-08-30 | true\nFY2026/27 | 3 | FY2026/27 P03 | 2026-06-29 | 2026-08-02 | true\nFY2026/27 | 2 | FY2026/27 P02 | 2026-06-01 | 2026-06-28 | true\n(5 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:46",
+   "statement": "SELECT COUNT(*) as stock_records\nFROM fact_stock_week\nWHERE week_ending_date = '2026-09-27'\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "stock_records\n27143\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:51",
+   "statement": "SELECT d.fiscal_period, d.fiscal_year, COUNT(*) as sales_records\nFROM fact_sales_line f\nINNER JOIN dim_date d ON f.sale_date = d.calendar_date\nWHERE d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 5\nGROUP BY d.fiscal_period, d.fiscal_year\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "fiscal_period | fiscal_year | sales_records\n5 | FY2026/27 | 46914\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:05:58",
+   "statement": "WITH p05_period AS (\n  SELECT fiscal_period, fiscal_year, period_start_date, period_end_date,\n         COUNT(DISTINCT calendar_date) as days_in_period,\n         weeks_in_period\n  FROM ref_fiscal_calendar\n  WHERE fiscal_year = 'FY2026/27' AND fiscal_period = 5\n),\nstock_by_cat AS (\n  SELECT dp.category, \n         SUM(fsw.closing_units) as closing_units,\n         SUM(fsw.closing_value) as closing_value\n  FROM fact_stock_week fsw\n  INNER JOIN dim_product dp ON fsw.product_key = dp.product_key\n  WHERE fsw.week_ending_date = '2026-09-27'\n  GROUP BY dp.category\n),\nsales_by_cat AS (\n  SELECT dp.category,\n         SUM(fsl.quantity) as total_units_sold\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE dd.fiscal_year = 'FY2026/27' AND dd.fiscal_period = 5\n  GROUP BY dp.category\n)\nSELECT s.category,\n       s.closing_units,\n       sal.total_units_sold,\n       p.weeks_in_period,\n       ROUND(s.closing_units * p.weeks_in_period / NULLIF(sal.total_units_sold, 0), 2) as weeks_of_cover\nFROM stock_by_cat s\nLEFT JOIN sales_by_cat sal ON s.category = sal.category\nCROSS JOIN p05_period p\nORDER BY s.category\n",
+   "n": 4,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Binder Error: Referenced column \"calendar_date\" not found in FROM clause!\nCandidate bindings: \"fiscal_quarter\", \"fiscal_period_label\", \"period_end_date\", \"fiscal_period\", \"fiscal_year\"\n\nLINE 3:          COUNT(DISTINCT calendar_date) as days_in_period,\n                                ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:03",
+   "statement": "WITH p05_period AS (\n  SELECT fiscal_period, fiscal_year, period_start_date, period_end_date, weeks_in_period\n  FROM ref_fiscal_calendar\n  WHERE fiscal_year = 'FY2026/27' AND fiscal_period = 5\n),\nstock_by_cat AS (\n  SELECT dp.category, \n         SUM(fsw.closing_units) as closing_units\n  FROM fact_stock_week fsw\n  INNER JOIN dim_product dp ON fsw.product_key = dp.product_key\n  WHERE fsw.week_ending_date = '2026-09-27'\n  GROUP BY dp.category\n),\nsales_by_cat AS (\n  SELECT dp.category,\n         SUM(fsl.quantity) as total_units_sold\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE dd.fiscal_year = 'FY2026/27' AND dd.fiscal_period = 5\n  GROUP BY dp.category\n)\nSELECT s.category,\n       s.closing_units,\n       sal.total_units_sold,\n       p.weeks_in_period,\n       ROUND(s.closing_units * p.weeks_in_period::FLOAT / NULLIF(sal.total_units_sold, 0), 2) as weeks_of_cover\nFROM stock_by_cat s\nLEFT JOIN sales_by_cat sal ON s.category = sal.category\nCROSS JOIN p05_period p\nORDER BY s.category\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | closing_units | total_units_sold | weeks_in_period | weeks_of_cover\nBathroom & Plumbing | 12237 | 4913 | 4 | 9.960000038146973\nCleaning & Household | 18212 | 11108 | 4 | 6.559999942779541\nElectrical | 23887 | 12983 | 4 | 7.360000133514404\nFurniture | 4963 | 936 | 4 | 21.209999084472656\nGarden | 45196 | 11367 | 4 | 15.899999618530273\nHome Textiles & Decor | 18354 | 7334 | 4 | 10.010000228881836\nKitchen & Dining | 14037 | 4778 | 4 | 11.75\nPaint & Decorating | 18302 | 6315 | 4 | 11.59000015258789\nSeasonal | 25570 | 2805 | 4 | 36.459999084472656\nTools & Hardware | 30399 | 18410 | 4 | 6.599999904632568\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:10",
+   "statement": "WITH stock_by_cat AS (\n  SELECT dp.category, \n         SUM(fsw.closing_units) as closing_units\n  FROM fact_stock_week fsw\n  INNER JOIN dim_product dp ON fsw.product_key = dp.product_key\n  WHERE fsw.week_ending_date = '2026-09-27'\n  GROUP BY dp.category\n),\nsales_by_cat AS (\n  SELECT dp.category,\n         SUM(fsl.quantity) as total_units_sold\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE dd.fiscal_year = 'FY2026/27' AND dd.fiscal_period = 5\n  GROUP BY dp.category\n)\nSELECT s.category,\n       ROUND(s.closing_units * 4.0 / NULLIF(sal.total_units_sold, 0), 2) as weeks_of_cover\nFROM stock_by_cat s\nLEFT JOIN sales_by_cat sal ON s.category = sal.category\nORDER BY s.category\n",
+   "n": 6,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | weeks_of_cover\nBathroom & Plumbing | 9.96\nCleaning & Household | 6.56\nElectrical | 7.36\nFurniture | 21.21\nGarden | 15.9\nHome Textiles & Decor | 10.01\nKitchen & Dining | 11.75\nPaint & Decorating | 11.59\nSeasonal | 36.46\nTools & Hardware | 6.6\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:15",
+   "statement": "WITH stock_categories AS (\n  SELECT DISTINCT dp.category\n  FROM fact_stock_week fsw\n  INNER JOIN dim_product dp ON fsw.product_key = dp.product_key\n  WHERE fsw.week_ending_date = '2026-09-27'\n),\nsales_categories AS (\n  SELECT DISTINCT dp.category\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE dd.fiscal_year = 'FY2026/27' AND dd.fiscal_period = 5\n),\nall_categories AS (\n  SELECT category FROM stock_categories\n  UNION\n  SELECT category FROM sales_categories\n)\nSELECT category, \n       CASE WHEN category IN (SELECT category FROM stock_categories) THEN 'yes' ELSE 'no' END as has_stock,\n       CASE WHEN category IN (SELECT category FROM sales_categories) THEN 'yes' ELSE 'no' END as has_sales\nFROM all_categories\nORDER BY category\n",
+   "n": 7,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "category | has_stock | has_sales\nBathroom & Plumbing | yes | yes\nCleaning & Household | yes | yes\nElectrical | yes | yes\nFurniture | yes | yes\nGarden | yes | yes\nHome Textiles & Decor | yes | yes\nKitchen & Dining | yes | yes\nPaint & Decorating | yes | yes\nSeasonal | yes | yes\nTools & Hardware | yes | yes\nZZ Test | no | yes\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:22",
+   "statement": "SELECT dp.category, \n       SUM(fsl.quantity) as total_units_sold\nFROM fact_sales_line fsl\nINNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\nINNER JOIN dim_product dp ON fsl.product_key = dp.product_key\nWHERE dd.fiscal_year = 'FY2026/27' AND dd.fiscal_period = 5\n  AND dp.category = 'ZZ Test'\nGROUP BY dp.category\n",
+   "n": 8,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "category | total_units_sold\nZZ Test | 28\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:34",
+   "statement": "WITH stock_by_cat AS (\n  SELECT dp.category, \n         SUM(fsw.closing_units) as closing_units\n  FROM fact_stock_week fsw\n  INNER JOIN dim_product dp ON fsw.product_key = dp.product_key\n  WHERE fsw.week_ending_date = '2026-09-27'\n  GROUP BY dp.category\n),\nsales_by_cat AS (\n  SELECT dp.category,\n         SUM(fsl.quantity) as total_units_sold\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE dd.fiscal_year = 'FY2026/27' AND dd.fiscal_period = 5\n  GROUP BY dp.category\n),\ncombined AS (\n  SELECT COALESCE(s.category, sal.category) as category,\n         COALESCE(s.closing_units, 0) as closing_units,\n         COALESCE(sal.total_units_sold, 0) as total_units_sold\n  FROM stock_by_cat s\n  FULL OUTER JOIN sales_by_cat sal ON s.category = sal.category\n)\nSELECT category,\n       CASE \n         WHEN total_units_sold = 0 THEN NULL\n         ELSE ROUND(closing_units * 4.0 / total_units_sold, 2)\n       END as weeks_of_cover\nFROM combined\nWHERE closing_units > 0 OR total_units_sold > 0\nORDER BY category\n",
+   "n": 9,
+   "ok": true,
+   "rows": 11,
+   "output_preview": "category | weeks_of_cover\nBathroom & Plumbing | 9.96\nCleaning & Household | 6.56\nElectrical | 7.36\nFurniture | 21.21\nGarden | 15.9\nHome Textiles & Decor | 10.01\nKitchen & Dining | 11.75\nPaint & Decorating | 11.59\nSeasonal | 36.46\nTools & Hardware | 6.6\nZZ Test | 0.0\n(11 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:06:42",
+   "statement": "WITH stock_by_cat AS (\n  SELECT dp.category, \n         SUM(fsw.closing_units) as closing_units\n  FROM fact_stock_week fsw\n  INNER JOIN dim_product dp ON fsw.product_key = dp.product_key\n  WHERE fsw.week_ending_date = '2026-09-27'\n  GROUP BY dp.category\n),\nsales_by_cat AS (\n  SELECT dp.category,\n         SUM(fsl.quantity) as total_units_sold\n  FROM fact_sales_line fsl\n  INNER JOIN dim_date dd ON fsl.sale_date = dd.calendar_date\n  INNER JOIN dim_product dp ON fsl.product_key = dp.product_key\n  WHERE dd.fiscal_year = 'FY2026/27' AND dd.fiscal_period = 5\n  GROUP BY dp.category\n)\nSELECT s.category,\n       ROUND(s.closing_units * 4.0 / sal.total_units_sold, 2) as weeks_of_cover\nFROM stock_by_cat s\nINNER JOIN sales_by_cat sal ON s.category = sal.category\nORDER BY s.category\n",
+   "n": 10,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | weeks_of_cover\nBathroom & Plumbing | 9.96\nCleaning & Household | 6.56\nElectrical | 7.36\nFurniture | 21.21\nGarden | 15.9\nHome Textiles & Decor | 10.01\nKitchen & Dining | 11.75\nPaint & Decorating | 11.59\nSeasonal | 36.46\nTools & Hardware | 6.6\n(10 rows)"
+  }
+ ]
+}

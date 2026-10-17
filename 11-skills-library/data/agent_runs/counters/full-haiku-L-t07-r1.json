@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t07-r1",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T07",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "fcaae9520453009c0d5bd50413372c6c11204f84cfee9d15239b8e09f573e0d5",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:55:59",
+   "statement": "fiscal-calendar/scripts/fiscal.py Q4 FY2024/25",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: Q4 FY2024/25    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2024/25\n  fiscal_periods                     FY2024/25 P10, FY2024/25 P11, FY2024/25 P12\n  fiscal_weeks                       40-52\n  start_date                         2025-01-27\n  end_date                           2025-04-27\n  weeks                              13\n  days                               91\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2025-04-27\n  sql_filter                         (d.fiscal_year = 'FY2024/25' AND d.fiscal_week BETWEEN 40 AND 52)\n  note: Q1 = P1-P3 (weeks 1-13), Q2 = P4-P6, Q3 = P7-P9, Q4 = P10-P12 (CAL-PERIODS).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:56:20",
+   "statement": "WITH sales_lines AS (\n  -- Sales in Q4 FY2024/25 in South region stores (as-is)\n  SELECT \n    f.sales_line_id,\n    f.sale_date,\n    cp.sku,\n    cp.product_name,\n    f.net_amount,\n    f.standard_cost,\n    cs.store_id,\n    cs.region\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON s.store_key = f.store_key\n  INNER JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  INNER JOIN dim_product p ON p.product_key = f.product_key\n  INNER JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2024/25' \n    AND d.fiscal_week BETWEEN 40 AND 52\n    AND cs.region = 'South'\n    AND cs.store_id < 900\n    AND cp.category != 'ZZ Test'\n),\nreturn_lines AS (\n  -- Returns for these sales\n  SELECT \n    fr.sales_line_id,\n    fr.refund_net,\n    fr.standard_cost_returned\n  FROM fact_return_line fr\n),\nproduct_margins AS (\n  SELECT \n    sl.sku,\n    sl.product_name,\n    SUM(sl.net_amount) as net_sales_before_returns,\n    SUM(sl.standard_cost) as cost_before_returns,\n    COALESCE(SUM(rl.refund_net), 0) as total_refunds,\n    COALESCE(SUM(rl.standard_cost_returned), 0) as cost_of_returns\n  FROM sales_lines sl\n  LEFT JOIN return_lines rl ON sl.sales_line_id = rl.sales_line_id\n  GROUP BY sl.sku, sl.product_name\n)\nSELECT \n  sku,\n  product_name,\n  ROUND(net_sales_before_returns - total_refunds, 2) as net_sales,\n  ROUND(cost_before_returns - cost_of_returns, 2) as cost_of_goods,\n  ROUND(net_sales_before_returns - total_refunds - (cost_before_returns - cost_of_returns), 2) as gross_margin\nFROM product_margins\nORDER BY gross_margin DESC\nLIMIT 10;\n",
+   "n": 2,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "sku | product_name | net_sales | cost_of_goods | gross_margin\n103075 | Cushions & Throws Tuulikki 338 | 5304.73 | 2369.44 | 2935.29\n100955 | Interior Paint Norvik 298 | 6816.15 | 4677.67 | 2138.48\n101763 | Fixings & Fasteners Nordhem 594 | 3427.69 | 1347.14 | 2080.55\n103390 | Bedroom Peltola 793 | 6263.39 | 4269.55 | 1993.84\n100953 | Interior Paint Tuulikki 224 | 4038.36 | 2649.60 | 1388.76\n103062 | Cushions & Throws Kuusela 657 | 2522.98 | 1160.56 | 1362.42\n102468 | Plumbing Parts Ahvenisto 279 | 2317.30 | 974.82 | 1342.48\n102538 | Cookware Nordhem 469 | 3196.78 | 2019.39 | 1177.39\n101398 | Power Tools Havu Pro 689 | 3371.57 | 2275.91 | 1095.66\n101888 | Indoor Lighting Havu 419 | 2340.12 | 1361.28 | 978.84\n(10 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:56:35",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain product --start 2025-01-27 --end 2025-04-27",
+   "n": 3,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 10 rows, 5 columns: sku, product_name, net_sales, cost_of_goods, gross_margin\n\n== Duplicate keys ==\n  [FAIL] Grain column(s) not in the result: product.\n\n== Date coverage ==\n  [INFO] Requested 2025-01-27 to 2025-04-27 (91 days; fiscal: FY2024/25 P12, FY2024/25 P11, FY2024/25 P10).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 8 rows in the range only in Helsinki time, 17 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  sku | product_name | net_sales | cost_of_goods | gross_margin\n  103075 | Cushions & Throws Tuulikki 338 | 5304.73 | 2369.44 | 2935.29\n  100955 | Interior Paint Norvik 298 | 6816.15 | 4677.67 | 2138.48\n  101763 | Fixings & Fasteners Nordhem 594 | 3427.69 | 1347.14 | 2080.55\n  103390 | Bedroom Peltola 793 | 6263.39 | 4269.55 | 1993.84\n  100953 | Interior Paint Tuulikki 224 | 4038.36 | 2649.60 | 1388.76\n  103062 "
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:56:47",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain sku --start 2025-01-27 --end 2025-04-27",
+   "n": 4,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 10 rows, 5 columns: sku, product_name, net_sales, cost_of_goods, gross_margin\n\n== Duplicate keys ==\n  [PASS] Unique at grain (sku): 10 keys.\n\n== Date coverage ==\n  [INFO] Requested 2025-01-27 to 2025-04-27 (91 days; fiscal: FY2024/25 P11, FY2024/25 P10, FY2024/25 P12).\n  [INFO] UTC/Helsinki edge (rows that move if the day boundary is taken at UTC midnight instead of Helsinki midnight, DEF-TIMEZONE): fact_web_order.order_ts_utc: 6 rows in the range only in Helsinki time, 7 only in UTC; fact_sales_line.sale_ts_utc: 8 rows in the range only in Helsinki time, 17 only in UTC.\n  [INFO] No date column in the result; coverage judged from the SQL only. Use --date-col, or add the date to the output while checking.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  sku | product_name | net_sales | cost_of_goods | gross_margin\n  103075 | Cushions & Throws Tuulikki 338 | 5304.73 | 2369.44 | 2935.29\n  100955 | Interior Paint Norvik 298 | 6816.15 | 4677.67 | 2138.48\n  101763 | Fixings & Fasteners Nordhem 594 | 3427.69 | 1347.14 | 2080.55\n  103390 | Bedroom Peltola 793 | 6263.39 | 4269.55 | 1993.84\n  100953 | Interior Paint Tuulikki 224 | 4038.36 | 2649.60 | 1388.76\n  103062 | Cushions &"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:57:00",
+   "statement": "WITH sales_lines AS (\n  SELECT \n    f.sales_line_id,\n    f.sale_date,\n    cp.sku,\n    cp.product_name,\n    f.net_amount,\n    f.standard_cost,\n    cs.region\n  FROM fact_sales_line f\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  INNER JOIN dim_store s ON s.store_key = f.store_key\n  INNER JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  INNER JOIN dim_product p ON p.product_key = f.product_key\n  INNER JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  WHERE d.fiscal_year = 'FY2024/25' \n    AND d.fiscal_week BETWEEN 40 AND 52\n    AND cs.region = 'South'\n    AND cs.store_id < 900\n    AND cp.category != 'ZZ Test'\n),\nreturn_lines AS (\n  SELECT \n    fr.sales_line_id,\n    fr.refund_net,\n    fr.standard_cost_returned\n  FROM fact_return_line fr\n),\nproduct_margins AS (\n  SELECT \n    sl.sku,\n    sl.product_name,\n    SUM(sl.net_amount) as net_sales_before_returns,\n    SUM(sl.standard_cost) as cost_before_returns,\n    COALESCE(SUM(rl.refund_net), 0) as total_refunds,\n    COALESCE(SUM(rl.standard_cost_returned), 0) as cost_of_returns\n  FROM sales_lines sl\n  LEFT JOIN return_lines rl ON sl.sales_line_id = rl.sales_line_id\n  GROUP BY sl.sku, sl.product_name\n)\nSELECT \n  sku,\n  product_name,\n  ROUND(net_sales_before_returns - total_refunds - (cost_before_returns - cost_of_returns), 2) as gross_margin\nFROM product_margins\nORDER BY gross_margin DESC\nLIMIT 10;\n",
+   "n": 5,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "sku | product_name | gross_margin\n103075 | Cushions & Throws Tuulikki 338 | 2935.29\n100955 | Interior Paint Norvik 298 | 2138.48\n101763 | Fixings & Fasteners Nordhem 594 | 2080.55\n103390 | Bedroom Peltola 793 | 1993.84\n100953 | Interior Paint Tuulikki 224 | 1388.76\n103062 | Cushions & Throws Kuusela 657 | 1362.42\n102468 | Plumbing Parts Ahvenisto 279 | 1342.48\n102538 | Cookware Nordhem 469 | 1177.39\n101398 | Power Tools Havu Pro 689 | 1095.66\n101888 | Indoor Lighting Havu 419 | 978.84\n(10 rows)"
+  }
+ ]
+}

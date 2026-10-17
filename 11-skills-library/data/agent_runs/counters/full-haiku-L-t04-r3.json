@@ -1,0 +1,58 @@
+{
+ "run_id": "full-haiku-L-t04-r3",
+ "arm": "L",
+ "model": "haiku",
+ "request_id": "REQ-T04",
+ "budget": 12,
+ "used": 5,
+ "refused": 0,
+ "packet_sha256": "02ad28f48a2455c775d1c03ad297047f091635672698d52e5834d14c7aae4f07",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:04:13",
+   "statement": "fiscal-calendar/scripts/fiscal.py August 2024",
+   "n": 1,
+   "ok": false,
+   "rows": null,
+   "output_preview": "fiscal.py: Could not read 'August 2024'. Try: last period, YTD, this year, same week last year, P5, P5 FY2025/26, Q2, H2 FY2025/26, P1-P3, week 22, FY2024/25, last 4 weeks.\n\n[exit code 2]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:04:20",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           f.gross_amount, f.net_amount\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 AND p.category <> 'ZZ Test'\n)\nSELECT \n    EXTRACT(YEAR FROM business_date) AS year,\n    EXTRACT(MONTH FROM business_date) AS month,\n    SUM(gross_amount) AS sales_incl_vat,\n    SUM(net_amount) AS sales_excl_vat,\n    COUNT(*) AS line_count\nFROM sales_lines\nWHERE EXTRACT(YEAR FROM business_date) = 2024 \n  AND EXTRACT(MONTH FROM business_date) IN (8, 9)\nGROUP BY EXTRACT(YEAR FROM business_date), EXTRACT(MONTH FROM business_date)\nORDER BY year, month\n",
+   "n": 2,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "year | month | sales_incl_vat | sales_excl_vat | line_count\n2024 | 8 | 1538645.88 | 1241886.32 | 47139\n2024 | 9 | 1369219.80 | 1091919.49 | 43531\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:04:25",
+   "statement": "SELECT MIN(sale_date) AS min_sale_date, MAX(sale_date) AS max_sale_date\nFROM fact_sales_line\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "min_sale_date | max_sale_date\n2024-04-29 | 2026-10-04\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:04:36",
+   "statement": "SELECT \n    EXTRACT(YEAR FROM business_date) AS year,\n    EXTRACT(MONTH FROM business_date) AS month,\n    SUM(net_sales_before_returns) AS net_sales_before_returns_from_control\nFROM (\n    SELECT business_date, net_sales + returns_net AS net_sales_before_returns\n    FROM rpt_daily_store_sales\n    WHERE EXTRACT(YEAR FROM business_date) = 2024\n      AND EXTRACT(MONTH FROM business_date) IN (8, 9)\n) control\nGROUP BY EXTRACT(YEAR FROM business_date), EXTRACT(MONTH FROM business_date)\nORDER BY year, month\n",
+   "n": 4,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "year | month | net_sales_before_returns_from_control\n2024 | 8 | 1241886.32\n2024 | 9 | 1091919.49\n(2 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:04:43",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nsales_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date,\n           f.gross_amount\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id <> 999 \n      AND p.category <> 'ZZ Test'\n)\nSELECT \n    EXTRACT(MONTH FROM business_date) AS month,\n    EXTRACT(YEAR FROM business_date) AS year,\n    SUM(gross_amount) AS sales_incl_vat\nFROM sales_lines\nWHERE EXTRACT(YEAR FROM business_date) = 2024 \n  AND EXTRACT(MONTH FROM business_date) IN (8, 9)\nGROUP BY EXTRACT(YEAR FROM business_date), EXTRACT(MONTH FROM business_date)\nORDER BY year, month\n",
+   "n": 5,
+   "ok": true,
+   "rows": 2,
+   "output_preview": "month | year | sales_incl_vat\n8 | 2024 | 1538645.88\n9 | 2024 | 1369219.80\n(2 rows)"
+  }
+ ]
+}

@@ -1,0 +1,35 @@
+Based on my analysis of the warehouse data, I have the answer to Veikko's question about click-and-collect share of web sales.
+
+The click-and-collect share of web sales was:
+- **Period 9 (FY2025/26, 2025-12-22 to 2026-01-25): 29.84%**
+- **Period 10 (FY2025/26, 2026-01-26 to 2026-02-22): 30.44%**
+
+```json
+{
+  "sql": "SELECT d.fiscal_period, f.fulfilment_type, COUNT(f.web_order_id) as order_count, SUM(f.order_total_gross) as total_gross, ROUND(100.0 * SUM(f.order_total_gross) / SUM(SUM(f.order_total_gross)) OVER (PARTITION BY d.fiscal_period), 2) as pct_share FROM fact_web_order f JOIN dim_date d ON CAST(f.order_ts_utc AS DATE) = d.calendar_date WHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period IN (9, 10) AND f.status IN ('delivered', 'collected') GROUP BY d.fiscal_period, f.fulfilment_type ORDER BY d.fiscal_period, f.fulfilment_type",
+  "result": {
+    "columns": ["fiscal_period", "fulfilment_type", "net_share_pct"],
+    "rows": [
+      [9, "click_and_collect", 29.84],
+      [10, "click_and_collect", 30.44]
+    ]
+  },
+  "definitions_applied": [
+    "Web sales measured via fact_web_order table (order_total_gross including VAT)",
+    "Click-and-collect share calculated as percentage of total web order value within each fiscal period",
+    "Completed sales only: status = 'delivered' or 'collected' (excluding cancelled and processing orders)",
+    "Order date determined from order_ts_utc converted to calendar date for fiscal period matching"
+  ],
+  "assumptions": [
+    "Last year = FY2025/26 (the prior fiscal year relative to current FY2026/27)",
+    "Click-and-collect share is measured by gross order value (including VAT), not by order count",
+    "Web sales are tracked exclusively via fact_web_order for this period (fact_sales_line channel_code is NULL)",
+    "Order timestamp (order_ts_utc) was used to assign orders to fiscal periods"
+  ],
+  "caveats": [
+    "fact_sales_line has NULL channel_code values for periods 9 and 10, so web sales values are sourced entirely from fact_web_order table",
+    "Orders with status 'processing' or 'cancelled' are excluded (no processing orders exist in this period; 71 click-and-collect and 205 home-delivery orders were cancelled)",
+    "The warehouse data only extends to 2026-10-04, so this analysis is complete for the full periods 9 and 10"
+  ]
+}
+```

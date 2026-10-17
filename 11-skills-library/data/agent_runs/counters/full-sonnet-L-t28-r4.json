@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-L-t28-r4",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T28",
+ "budget": 30,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "e4ce9f4d5f1df52b73aa308aee577025d06e618e3b10d8633bb33912b7d1048b",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:43:58",
+   "statement": "fiscal-calendar/scripts/fiscal.py last period --as-of 2026-10-07",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: last period    as of: 2026-10-07    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P05\n  fiscal_weeks                       18-21\n  start_date                         2026-08-31\n  end_date                           2026-09-27\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-09-27\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 18 AND 21)\n  note: 'Last period' = the last completed fiscal period (CAL-RELATIVE).\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:04",
+   "statement": "SELECT week_ending_date, count(*) AS n, count(DISTINCT (store_key, product_key)) AS d, sum(closing_units) AS units, min(etl_loaded_at), max(etl_loaded_at)\nFROM fact_stock_week WHERE week_ending_date BETWEEN DATE '2026-08-23' AND DATE '2026-10-11'\nGROUP BY 1 ORDER BY 1\n",
+   "n": 2,
+   "ok": true,
+   "rows": 7,
+   "output_preview": "week_ending_date | n | d | units | min(etl_loaded_at) | max(etl_loaded_at)\n2026-08-23 | 27143 | 27143 | 214218 | 2026-08-24T01:00:00 | 2026-08-24T01:00:00\n2026-08-30 | 27143 | 27143 | 213666 | 2026-08-31T01:00:00 | 2026-08-31T01:00:00\n2026-09-06 | 27143 | 27143 | 212544 | 2026-09-07T01:00:00 | 2026-09-07T01:00:00\n2026-09-13 | 27143 | 27143 | 212352 | 2026-09-14T01:00:00 | 2026-09-14T01:00:00\n2026-09-20 | 27143 | 27143 | 211748 | 2026-09-21T01:00:00 | 2026-09-21T01:00:00\n2026-09-27 | 27143 | 27143 | 211157 | 2026-09-28T01:00:00 | 2026-09-28T01:00:00\n2026-10-04 | 27143 | 27143 | 210323 | 2026-10-05T01:00:00 | 2026-10-05T01:00:00\n(7 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:08",
+   "statement": "SELECT cp.category, cp.subcategory IS NULL AS nosub, count(*) AS n, count(DISTINCT cs.store_id) AS stores, count(DISTINCT cp.sku) AS skus, sum(fs.closing_units) AS units,\n sum(CASE WHEN fs.closing_units<0 THEN 1 ELSE 0 END) AS neg, min(cs.store_id) AS minstore, max(cs.store_id) AS maxstore, sum(CASE WHEN s.store_id>=900 THEN fs.closing_units ELSE 0 END) AS units900\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key=fs.store_key\nJOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\nJOIN dim_product p ON p.product_key=fs.product_key\nJOIN dim_product cp ON cp.sku=p.sku AND cp.is_current\nWHERE fs.week_ending_date=DATE '2026-09-27'\nGROUP BY 1,2 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | nosub | n | stores | skus | units | neg | minstore | maxstore | units900\nBathroom & Plumbing | false | 1741 | 38 | 258 | 12237 | 0 | 101 | 139 | 0\nCleaning & Household | false | 2168 | 38 | 273 | 18212 | 0 | 101 | 139 | 0\nElectrical | false | 3334 | 38 | 441 | 23887 | 0 | 101 | 139 | 0\nFurniture | false | 915 | 38 | 215 | 4963 | 0 | 101 | 139 | 0\nGarden | false | 6015 | 38 | 808 | 45196 | 0 | 101 | 139 | 0\nHome Textiles & Decor | false | 2642 | 38 | 350 | 18354 | 0 | 101 | 139 | 0\nKitchen & Dining | false | 2130 | 38 | 298 | 14037 | 0 | 101 | 139 | 0\nPaint & Decorating | false | 2674 | 38 | 358 | 18302 | 0 | 101 | 139 | 0\nSeasonal | false | 1924 | 38 | 240 | 25570 | 0 | 101 | 139 | 0\nTools & Hardware | false | 3600 | 38 | 485 | 30399 | 0 | 101 | 139 | 0\n(10 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:13",
+   "statement": "SELECT cs.store_id, cs.store_name, cs.close_date, count(*) n, sum(fs.closing_units) units, sum(CASE WHEN fs.closing_units=0 THEN 1 ELSE 0 END) zero_rows\nFROM fact_stock_week fs\nJOIN dim_store s ON s.store_key=fs.store_key\nJOIN dim_store cs ON cs.store_id=s.store_id AND cs.is_current\nWHERE fs.week_ending_date=DATE '2026-09-27'\nGROUP BY ALL ORDER BY units LIMIT 8\n",
+   "n": 4,
+   "ok": true,
+   "rows": 8,
+   "output_preview": "store_id | store_name | close_date | n | units | zero_rows\n105 | Kerava | NULL | 342 | 2512 | 0\n113 | Salo | NULL | 337 | 2554 | 0\n138 | Iisalmi | NULL | 339 | 2592 | 0\n112 | Raisio | NULL | 340 | 2593 | 0\n120 | Rauma | NULL | 361 | 2628 | 0\n135 | Kajaani | NULL | 350 | 2639 | 0\n133 | Kemi | NULL | 352 | 2681 | 0\n106 | Porvoo | NULL | 368 | 2749 | 0\n(8 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:14",
+   "statement": "SELECT sale_date >= DATE '2026-08-24' AS x, count(*) n, count(DISTINCT sales_line_id) d, min(sale_date), max(sale_date), max(etl_loaded_at), sum(quantity) q\nFROM fact_sales_line WHERE sale_date BETWEEN DATE '2026-08-24' AND DATE '2026-10-04' GROUP BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "x | n | d | min(sale_date) | max(sale_date) | max(etl_loaded_at) | q\ntrue | 69758 | 69758 | 2026-08-24 | 2026-10-04 | 2026-10-05T01:00:00 | 120128\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:44:26",
+   "statement": "WITH params AS (SELECT DATE '2026-09-27' AS week_ending),\nclosing AS (\n  SELECT cp.category, SUM(fs.closing_units) AS closing_units\n  FROM fact_stock_week fs\n  JOIN dim_store s ON s.store_key = fs.store_key\n  JOIN dim_product p ON p.product_key = fs.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  CROSS JOIN params\n  WHERE fs.week_ending_date = params.week_ending AND s.store_id < 900 AND p.category <> 'ZZ Test' AND cp.category <> 'ZZ Test'\n  GROUP BY 1),\nsold AS (\n  SELECT cp.category, SUM(f.quantity) AS units_sold_4w\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\n  CROSS JOIN params\n  WHERE f.sale_date BETWEEN params.week_ending - 34 AND params.week_ending - 7\n    AND s.store_id < 900 AND p.category <> 'ZZ Test' AND cp.category <> 'ZZ Test'\n  GROUP BY 1)\nSELECT c.category, c.closing_units, ROUND(s.units_sold_4w / 4.0, 1) AS avg_weekly_units_sold, ROUND(c.closing_units / (s.units_sold_4w / 4.0), 1) AS weeks_of_cover, s.units_sold_4w\nFROM closing c LEFT JOIN sold s USING (category) ORDER BY c.category\n",
+   "n": 6,
+   "ok": true,
+   "rows": 10,
+   "output_preview": "category | closing_units | avg_weekly_units_sold | weeks_of_cover | units_sold_4w\nBathroom & Plumbing | 12237 | 1057.8 | 11.6 | 4231\nCleaning & Household | 18212 | 2393.5 | 7.6 | 9574\nElectrical | 23887 | 2601.3 | 9.2 | 10405\nFurniture | 4963 | 168.0 | 29.5 | 672\nGarden | 45196 | 2751.3 | 16.4 | 11005\nHome Textiles & Decor | 18354 | 1504.3 | 12.2 | 6017\nKitchen & Dining | 14037 | 961.8 | 14.6 | 3847\nPaint & Decorating | 18302 | 1453.8 | 12.6 | 5815\nSeasonal | 25570 | 524.3 | 48.8 | 2097\nTools & Hardware | 30399 | 3943.8 | 7.7 | 15775\n(10 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T21:44:33",
+   "statement": "query-check/scripts/query_check.py --file q.sql --grain category",
+   "n": 7,
+   "ok": true,
+   "rows": null,
+   "output_preview": "\n== Deprecated objects ==\n  [PASS] No deprecated table, view or column referenced.\n\n== House-rule lints ==\n  [PASS] No lint warnings.\n\n== Query ==\n  [PASS] Ran in 0.0 s.\n\n== Row count ==\n  [PASS] 10 rows, 4 columns: category, closing_units, avg_weekly_units_sold, weeks_of_cover\n\n== Duplicate keys ==\n  [PASS] Unique at grain (category): 10 keys.\n\n== Control total (rpt_daily_store_sales) ==\n  [INFO] Not requested. For store-level net sales use --control (TEAM-CONTROL-TOTALS).\n\n== Preview (first 10 rows) ==\n  category | closing_units | avg_weekly_units_sold | weeks_of_cover\n  Bathroom & Plumbing | 12237 | 1057.8 | 11.6\n  Cleaning & Household | 18212 | 2393.5 | 7.6\n  Electrical | 23887 | 2601.3 | 9.2\n  Furniture | 4963 | 168.0 | 29.5\n  Garden | 45196 | 2751.3 | 16.4\n  Home Textiles & Decor | 18354 | 1504.3 | 12.2\n  Kitchen & Dining | 14037 | 961.8 | 14.6\n  Paint & Decorating | 18302 | 1453.8 | 12.6\n  Seasonal | 25570 | 524.3 | 48.8\n  Tools & Hardware | 30399 | 3943.8 | 7.7\n\nResult: no failed checks\n\n[exit code 0]"
+  }
+ ]
+}

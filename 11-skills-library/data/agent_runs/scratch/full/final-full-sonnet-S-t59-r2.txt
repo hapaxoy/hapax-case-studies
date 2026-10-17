@@ -1,0 +1,24 @@
+```json
+{
+  "sql": "SELECT COUNT(DISTINCT web_order_id) AS web_orders_placed FROM fact_web_order WHERE CAST(order_ts_utc AS DATE) = DATE '2025-11-28'",
+  "result": {"columns": ["web_orders_placed"], "rows": [[377]]},
+  "definitions_applied": [
+    "Web order = one row in fact_web_order (web_order_id, which equals receipt_id on the sales lines)",
+    "Placed = order_ts_utc, the time the order was placed",
+    "UTC calendar day, as requested, taken straight from order_ts_utc with no timezone conversion",
+    "Cancelled orders are counted, because they were placed"
+  ],
+  "assumptions": [
+    "Read 'placed' as every order created on the day, whatever its status afterwards (delivered, collected or cancelled).",
+    "Counted both web channels, home delivery and click-and-collect, as web orders; guest and logged-in orders are both included.",
+    "Used fact_web_order as the source of order counts, not the sales lines."
+  ],
+  "caveats": [
+    "20 of the 377 orders were cancelled (16 home delivery, 4 click-and-collect). Excluding them would give 357, which is also the number of distinct web orders with sales lines timestamped on 28 Nov UTC. The carrier's report may count only dispatched orders, in which case 357 would be the figure to compare against.",
+    "Cancelled orders have no sales lines in fact_sales_line. Counting orders from the sales lines would therefore have undercounted by 20.",
+    "fact_sales_line.channel_code is NULL for recent rows, so the old filter channel_code = 'WB' returns nothing for this date. The web channel is now identified by channel_id 2 or 3 (dim_channel). I did not use channel_code.",
+    "No duplicate web_order_id values were found in fact_web_order, so no de-duplication was needed. None of the day's orders appear in stg_web_order_load, which only holds orders from 3-4 Oct 2026.",
+    "Black Friday 2025 is 28 November, which dim_date shows as a trading day, so nothing is missing because stores or the site were shut."
+  ]
+}
+```

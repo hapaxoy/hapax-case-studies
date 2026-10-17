@@ -1,0 +1,67 @@
+{
+ "run_id": "full-sonnet-L-t13-r5",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T13",
+ "budget": 30,
+ "used": 6,
+ "refused": 0,
+ "packet_sha256": "fb6030327bea57459011895b1d1a623478c47ff5f8743611a65998c5b573d1a1",
+ "task_instructions_version": "4",
+ "calls": [
+  {
+   "kind": "script",
+   "at": "2026-10-15T22:02:23",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4 --as-of 2026-10-06",
+   "n": 1,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4    as of: 2026-10-06    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n  note: No year given: read as the most recent completed one, FY2026/27, as the accepted requests did (e.g. REQ-D03, REQ-D06, REQ-D12). Say which year you used.\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:26",
+   "statement": "SELECT store_id, format, region, store_name, min(valid_from) vf, max(valid_to) vt, count(*) n, bool_or(is_current) cur, any_value(open_date) od, any_value(close_date) cd FROM dim_store GROUP BY ALL ORDER BY store_id, vf\n",
+   "n": 2,
+   "ok": true,
+   "rows": 47,
+   "output_preview": "store_id | format | region | store_name | vf | vt | n | cur | od | cd\n101 | Medium | South | Helsinki Vuosaari | 2000-01-01 | 2025-04-27 | 1 | false | NULL | NULL\n101 | Medium | Capital Region | Helsinki Vuosaari | 2025-04-28 | 9999-12-31 | 1 | true | NULL | NULL\n102 | Large | South | Helsinki Pitäjänmäki | 2000-01-01 | 2025-04-27 | 1 | false | NULL | NULL\n102 | Large | Capital Region | Helsinki Pitäjänmäki | 2025-04-28 | 9999-12-31 | 1 | true | NULL | NULL\n103 | Medium | South | Espoo Lommila | 2000-01-01 | 2025-04-27 | 1 | false | NULL | NULL\n103 | Medium | Capital Region | Espoo Lommila | 2025-04-28 | 9999-12-31 | 1 | true | NULL | NULL\n104 | Large | South | Vantaa Tammisto | 2000-01-01 | 2025-04-27 | 1 | false | NULL | NULL\n104 | Large | Capital Region | Vantaa Tammisto | 2025-04-28 | 9999-12-31 | 1 | true | NULL | NULL\n105 | Small | South | Kerava | 2000-01-01 | 2025-04-27 | 1 | false | NULL | NULL\n105 | Small | Capital Region | Kerava | 2025-04-28 | 9999-12-31 | 1 | true | NULL | NULL\n106 | Small | South | Porvoo | 2000-01-01 | 9999-12-31 | 1 | true | NULL | NULL\n107 | Medium | South | Hyvinkää | 2000-01-01 | 9999-12-31 | 1 | true | NULL | NULL\n108 | Large | South | Lahti | 2000-01-01 | 9999-12-31 | 1 | true | NULL | NULL\n109 | Medium | South | Hämeenlinna | 2000-01-01 | 9999-12-31 | 1 | true | NULL | NULL\n110 | Large | South | Turku Kupittaa | 2000-01-01 | 9999-12-31 | 1 | true | NULL | NULL\n111 | Medium | South | Turku Härmälä | 2000-01-01 | 9999-12-31 | 1 | true | NU"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:33",
+   "statement": "WITH src AS (\n SELECT f.* FROM fact_sales_line f WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n)\nSELECT count(*) AS lines, count(DISTINCT sales_line_id) AS dist_line_id, count(DISTINCT (receipt_id, line_no)) AS dist_rcpt_line,\n count(DISTINCT receipt_id) AS receipts, min(sale_date), max(sale_date),\n min(etl_loaded_at), max(etl_loaded_at), count(DISTINCT etl_loaded_at) AS n_loads,\n sum(CASE WHEN channel_code='WB' THEN 1 ELSE 0 END) AS wb_lines,\n sum(CASE WHEN staff_purchase_flag THEN 1 ELSE 0 END) AS staff_lines,\n sum(CASE WHEN net_amount<=0 THEN 1 ELSE 0 END) AS nonpos_net,\n sum(CASE WHEN quantity<=0 THEN 1 ELSE 0 END) AS nonpos_qty\nFROM src\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "lines | dist_line_id | dist_rcpt_line | receipts | min(sale_date) | max(sale_date) | min(etl_loaded_at) | max(etl_loaded_at) | n_loads | wb_lines | staff_lines | nonpos_net | nonpos_qty\n48107 | 48107 | 48107 | 21311 | 2026-08-03 | 2026-08-30 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00 | 28 | 0 | 737 | 0 | 0\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:41",
+   "statement": "WITH src AS (\n SELECT f.*, s.store_id, s.format, p.category FROM fact_sales_line f\n JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n), r AS (\n SELECT receipt_id, count(DISTINCT store_id) n_st, count(DISTINCT staff_purchase_flag) n_staff, count(DISTINCT sale_date) n_dates,\n   bool_or(category='ZZ Test') has_test, bool_and(category='ZZ Test') all_test, min(store_id) st, min(format) fmt\n FROM src GROUP BY receipt_id)\nSELECT 'multi_store' k, count(*) FROM r WHERE n_st>1\nUNION ALL SELECT 'mixed_staff', count(*) FROM r WHERE n_staff>1\nUNION ALL SELECT 'multi_date', count(*) FROM r WHERE n_dates>1\nUNION ALL SELECT 'has_test', count(*) FROM r WHERE has_test\nUNION ALL SELECT 'all_test', count(*) FROM r WHERE all_test\nUNION ALL SELECT 'store900', count(*) FROM r WHERE st=900\nUNION ALL SELECT 'store999', count(*) FROM r WHERE st=999\nUNION ALL SELECT 'fmt_'||fmt, count(*) FROM r GROUP BY fmt\n",
+   "n": 4,
+   "ok": true,
+   "rows": 12,
+   "output_preview": "k | count_star()\nmulti_store | 0\nmixed_staff | 0\nmulti_date | 0\nhas_test | 24\nall_test | 24\nstore900 | 3229\nstore999 | 55\nfmt_Web | 3229\nfmt_Training | 55\nfmt_Small | 2641\nfmt_Medium | 8779\nfmt_Large | 6607\n(12 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:48",
+   "statement": "WITH params AS (\n    SELECT 'FY2026/27' AS fiscal_year, 4 AS fiscal_period\n)\nSELECT s.format,\n       COUNT(DISTINCT f.receipt_id) AS receipts,\n       SUM(f.net_amount) AS net_sales_before_returns,\n       ROUND(SUM(f.net_amount) / COUNT(DISTINCT f.receipt_id), 2) AS atv\nFROM fact_sales_line f\nJOIN dim_store s   ON s.store_key = f.store_key\nJOIN dim_product p ON p.product_key = f.product_key\nJOIN dim_date d    ON d.calendar_date = f.sale_date\nCROSS JOIN params\nWHERE s.store_id < 900\n  AND NOT f.staff_purchase_flag\n  AND p.category <> 'ZZ Test'\n  AND d.fiscal_year = params.fiscal_year\n  AND d.fiscal_period = params.fiscal_period\nGROUP BY 1\nORDER BY 1\n",
+   "n": 5,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | receipts | net_sales_before_returns | atv\nLarge | 6508 | 394865.46 | 60.67\nMedium | 8641 | 520763.45 | 60.27\nSmall | 2598 | 131841.05 | 50.75\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T22:02:56",
+   "statement": "WITH mine AS (\n SELECT s.store_id, f.sale_date AS d, sum(f.net_amount) net, count(DISTINCT f.receipt_id) rc\n FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key\n WHERE f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND s.store_id<900 AND p.category<>'ZZ Test'\n GROUP BY 1,2), c AS (\n SELECT store_id, business_date d, net_sales_before_returns net, receipts rc FROM rpt_daily_store_sales\n WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id<900)\nSELECT count(*) AS storedays, sum(CASE WHEN m.d IS NULL THEN 1 ELSE 0 END) only_ctrl, sum(CASE WHEN c.d IS NULL THEN 1 ELSE 0 END) only_mine,\n sum(CASE WHEN abs(coalesce(m.net,0)-coalesce(c.net,0))>0.01 THEN 1 ELSE 0 END) net_diff_days,\n sum(CASE WHEN coalesce(m.rc,0)<>coalesce(c.rc,0) THEN 1 ELSE 0 END) rc_diff_days,\n sum(m.net) mine_total, sum(c.net) ctrl_total, sum(m.rc) mine_rc, sum(c.rc) ctrl_rc\nFROM mine m FULL OUTER JOIN c ON m.store_id=c.store_id AND m.d=c.d\n",
+   "n": 6,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "storedays | only_ctrl | only_mine | net_diff_days | rc_diff_days | mine_total | ctrl_total | mine_rc | ctrl_rc\n1064 | 0 | 0 | 0 | 0 | 1062266.72 | 1062266.72 | 18027 | 18027\n(1 row)"
+  }
+ ]
+}

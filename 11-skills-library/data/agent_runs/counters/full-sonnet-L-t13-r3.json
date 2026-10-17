@@ -1,0 +1,49 @@
+{
+ "run_id": "full-sonnet-L-t13-r3",
+ "arm": "L",
+ "model": "sonnet",
+ "request_id": "REQ-T13",
+ "budget": 12,
+ "used": 4,
+ "refused": 0,
+ "packet_sha256": "4169844caa889e736bc5461557afc9b64e246c2c2fb42ee6d5db4b60b302dfa9",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:48:03",
+   "statement": "SELECT format, count(*) AS versions, count(DISTINCT store_id) AS stores, min(store_id) AS min_id, max(store_id) AS max_id,\n count(DISTINCT store_id || '-' || format) AS combos\nFROM dim_store GROUP BY 1 ORDER BY 1\n",
+   "n": 1,
+   "ok": true,
+   "rows": 5,
+   "output_preview": "format | versions | stores | min_id | max_id | combos\nLarge | 10 | 8 | 102 | 131 | 8\nMedium | 21 | 18 | 101 | 136 | 18\nSmall | 14 | 13 | 105 | 139 | 13\nTraining | 1 | 1 | 999 | 999 | 1\nWeb | 1 | 1 | 900 | 900 | 1\n(5 rows)"
+  },
+  {
+   "kind": "script",
+   "at": "2026-10-15T20:48:04",
+   "statement": "fiscal-calendar/scripts/fiscal.py P4 FY2026/27",
+   "n": 2,
+   "ok": true,
+   "rows": null,
+   "output_preview": "Phrase: P4 FY2026/27    as of: 2026-10-04    warehouse loaded through: 2026-10-04\n\nRange\n-----\n  fiscal_years                       FY2026/27\n  fiscal_periods                     FY2026/27 P04\n  fiscal_weeks                       14-17\n  start_date                         2026-08-03\n  end_date                           2026-08-30\n  weeks                              4\n  days                               28\n  includes_week_53                   False\n  complete_as_of                     True\n  loaded_through                     2026-08-30\n  sql_filter                         (d.fiscal_year = 'FY2026/27' AND d.fiscal_week BETWEEN 14 AND 17)\n\n[exit code 0]"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:48:09",
+   "statement": "WITH base AS (\n  SELECT f.sales_line_id, f.receipt_id, f.line_no, f.net_amount, f.store_key, f.etl_loaded_at, cs.format\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_store cs ON cs.store_id = s.store_id AND cs.is_current\n  JOIN dim_product p ON p.product_key = f.product_key\n  JOIN dim_date d ON d.calendar_date = f.sale_date\n  WHERE s.store_id < 900 AND NOT f.staff_purchase_flag AND p.category <> 'ZZ Test'\n    AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4\n)\nSELECT format, count(*) AS line_rows, count(DISTINCT sales_line_id) AS dist_line_ids,\n  count(DISTINCT (receipt_id, line_no)) AS dist_receipt_lines,\n  count(DISTINCT receipt_id) AS receipts, sum(net_amount) AS net,\n  round(sum(net_amount)/count(DISTINCT receipt_id),2) AS atv,\n  min(etl_loaded_at) AS min_load, max(etl_loaded_at) AS max_load\nFROM base GROUP BY 1 ORDER BY 1\n",
+   "n": 3,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "format | line_rows | dist_line_ids | dist_receipt_lines | receipts | net | atv | min_load | max_load\nLarge | 14957 | 14957 | 14957 | 6508 | 394865.46 | 60.67 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00\nMedium | 19987 | 19987 | 19987 | 8641 | 520763.45 | 60.27 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00\nSmall | 5911 | 5911 | 5911 | 2598 | 131841.05 | 50.75 | 2026-08-04T01:00:00 | 2026-08-31T01:00:00\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T20:48:15",
+   "statement": "WITH mine AS (\n  SELECT s.store_id, f.sale_date, count(DISTINCT f.receipt_id) AS receipts, sum(f.net_amount) AS net\n  FROM fact_sales_line f\n  JOIN dim_store s ON s.store_key = f.store_key\n  JOIN dim_product p ON p.product_key = f.product_key\n  WHERE s.store_id < 900 AND p.category <> 'ZZ Test' AND f.sale_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30'\n  GROUP BY 1,2\n), ctl AS (\n  SELECT store_id, business_date AS sale_date, receipts, net_sales_before_returns AS net\n  FROM rpt_daily_store_sales WHERE business_date BETWEEN DATE '2026-08-03' AND DATE '2026-08-30' AND store_id < 900\n)\nSELECT count(*) AS store_days, sum(CASE WHEN m.store_id IS NULL THEN 1 ELSE 0 END) AS only_ctl,\n  sum(CASE WHEN c.store_id IS NULL THEN 1 ELSE 0 END) AS only_mine,\n  sum(CASE WHEN m.receipts <> c.receipts THEN 1 ELSE 0 END) AS receipt_mismatch,\n  sum(CASE WHEN abs(m.net - c.net) > 0.01 THEN 1 ELSE 0 END) AS net_mismatch,\n  sum(m.receipts) AS my_receipts, sum(c.receipts) AS ctl_receipts, sum(m.net) AS my_net, sum(c.net) AS ctl_net\nFROM mine m FULL JOIN ctl c ON m.store_id = c.store_id AND m.sale_date = c.sale_date\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_days | only_ctl | only_mine | receipt_mismatch | net_mismatch | my_receipts | ctl_receipts | my_net | ctl_net\n1064 | 0 | 0 | 0 | 0 | 18027 | 18027 | 1062266.72 | 1062266.72\n(1 row)"
+  }
+ ]
+}

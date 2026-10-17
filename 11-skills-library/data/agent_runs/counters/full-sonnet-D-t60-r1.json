@@ -1,0 +1,76 @@
+{
+ "run_id": "full-sonnet-D-t60-r1",
+ "arm": "D",
+ "model": "sonnet",
+ "request_id": "REQ-T60",
+ "budget": 12,
+ "used": 7,
+ "refused": 0,
+ "packet_sha256": "562b3a741f4a5dd713ddcaee67be70ee1332582b674428cad2d8703ded383d3e",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:48:54",
+   "statement": "SELECT fiscal_year, fiscal_period, period_start_date, period_end_date, weeks_in_period, fully_loaded FROM ref_fiscal_calendar WHERE fiscal_year='FY2025/26' AND fiscal_period BETWEEN 4 AND 9 ORDER BY 2\n",
+   "n": 1,
+   "ok": true,
+   "rows": 6,
+   "output_preview": "fiscal_year | fiscal_period | period_start_date | period_end_date | weeks_in_period | fully_loaded\nFY2025/26 | 4 | 2025-07-28 | 2025-08-24 | 4 | true\nFY2025/26 | 5 | 2025-08-25 | 2025-09-21 | 4 | true\nFY2025/26 | 6 | 2025-09-22 | 2025-10-26 | 5 | true\nFY2025/26 | 7 | 2025-10-27 | 2025-11-23 | 4 | true\nFY2025/26 | 8 | 2025-11-24 | 2025-12-21 | 4 | true\nFY2025/26 | 9 | 2025-12-22 | 2026-01-25 | 5 | true\n(6 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:48:57",
+   "statement": "SELECT 'dup_line_id' k, count(*) - count(DISTINCT sales_line_id) v FROM fact_sales_line\nUNION ALL SELECT 'dup_receipt_line', count(*) - count(DISTINCT (receipt_id, line_no)) FROM fact_sales_line\nUNION ALL SELECT 'dup_ret', count(*) - count(DISTINCT return_line_id) FROM fact_return_line\nUNION ALL SELECT 'dup_order', count(*) - count(DISTINCT web_order_id) FROM fact_web_order\nUNION ALL SELECT 'web_lines_no_order', count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key LEFT JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id=900 AND o.web_order_id IS NULL\nUNION ALL SELECT 'web_lines_nonstatus', count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key JOIN fact_web_order o ON o.web_order_id=f.receipt_id WHERE s.store_id=900 AND o.status NOT IN ('delivered','collected')\nUNION ALL SELECT 'delivered_no_dispatch', count(*) FROM fact_web_order WHERE status IN ('delivered','collected') AND dispatch_ts_utc IS NULL\nUNION ALL SELECT 'store900_versions', count(*) FROM dim_store WHERE store_id=900\nUNION ALL SELECT 'web_chan_nonstore900', count(*) FROM fact_sales_line f JOIN dim_store s ON s.store_key=f.store_key WHERE f.channel_code='WB' AND s.store_id<>900\n",
+   "n": 2,
+   "ok": true,
+   "rows": 9,
+   "output_preview": "k | v\ndup_line_id | 0\ndup_receipt_line | 418\ndup_ret | 0\ndup_order | 0\nweb_lines_no_order | 0\nweb_lines_nonstatus | 0\ndelivered_no_dispatch | 0\nstore900_versions | 1\nweb_chan_nonstore900 | 0\n(9 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:01",
+   "statement": "WITH dups AS (SELECT receipt_id, line_no FROM fact_sales_line GROUP BY 1,2 HAVING count(*)>1)\nSELECT f.sales_line_id, f.receipt_id, f.line_no, f.sale_date, f.store_key, f.product_key, f.channel_code, f.channel_id, f.quantity, f.net_amount, f.etl_loaded_at\nFROM fact_sales_line f JOIN dups USING (receipt_id, line_no) ORDER BY f.receipt_id, f.line_no, f.sales_line_id LIMIT 20\n",
+   "n": 3,
+   "ok": true,
+   "rows": 20,
+   "output_preview": "sales_line_id | receipt_id | line_no | sale_date | store_key | product_key | channel_code | channel_id | quantity | net_amount | etl_loaded_at\n841511 | 10326117 | 1 | 2025-09-15 | 22 | 2323 | ST | NULL | 1 | 9.68 | 2025-09-16T01:00:00\n1510224 | 10326117 | 1 | 2025-09-15 | 22 | 2323 | ST | NULL | 1 | 9.68 | 2025-09-23T03:12:00\n841512 | 10326117 | 2 | 2025-09-15 | 22 | 2017 | ST | NULL | 3 | 42.12 | 2025-09-16T01:00:00\n1510225 | 10326117 | 2 | 2025-09-15 | 22 | 2017 | ST | NULL | 3 | 42.12 | 2025-09-23T03:12:00\n841513 | 10326118 | 1 | 2025-09-15 | 22 | 395 | ST | NULL | 1 | 12.37 | 2025-09-16T01:00:00\n1510226 | 10326118 | 1 | 2025-09-15 | 22 | 395 | ST | NULL | 1 | 12.37 | 2025-09-23T03:12:00\n841514 | 10326118 | 2 | 2025-09-15 | 22 | 3763 | ST | NULL | 1 | 20.10 | 2025-09-16T01:00:00\n1510227 | 10326118 | 2 | 2025-09-15 | 22 | 3763 | ST | NULL | 1 | 20.10 | 2025-09-23T03:12:00\n841519 | 10326121 | 1 | 2025-09-15 | 22 | 3014 | ST | NULL | 1 | 22.55 | 2025-09-16T01:00:00\n1510228 | 10326121 | 1 | 2025-09-15 | 22 | 3014 | ST | NULL | 1 | 22.55 | 2025-09-23T03:12:00\n841520 | 10326121 | 2 | 2025-09-15 | 22 | 1446 | ST | NULL | 1 | 81.30 | 2025-09-16T01:00:00\n1510229 | 10326121 | 2 | 2025-09-15 | 22 | 1446 | ST | NULL | 1 | 81.30 | 2025-09-23T03:12:00\n841615 | 10326153 | 1 | 2025-09-15 | 22 | 2167 | ST | NULL | 2 | 6.64 | 2025-09-16T01:00:00\n1510230 | 10326153 | 1 | 2025-09-15 | 22 | 2167 | ST | NULL | 2 | 6.64 | 2025-09-23T03:12:00\n841616 | 10326153 | 2 | 2025-09-15 | 22 | 939 | ST | N"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:03",
+   "statement": "WITH dups AS (SELECT receipt_id, line_no FROM fact_sales_line GROUP BY 1,2 HAVING count(*)>1)\nSELECT s.store_id, min(f.sale_date) mn, max(f.sale_date) mx, count(*) n, count(DISTINCT f.receipt_id) receipts, sum(f.net_amount) net, min(f.etl_loaded_at) l1, max(f.etl_loaded_at) l2\nFROM fact_sales_line f JOIN dups USING (receipt_id, line_no) JOIN dim_store s ON s.store_key=f.store_key GROUP BY 1 ORDER BY 1\n",
+   "n": 4,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "store_id | mn | mx | n | receipts | net | l1 | l2\n116 | 2025-09-15 | 2025-09-21 | 836 | 178 | 20781.06 | 2025-09-16T01:00:00 | 2025-09-23T03:12:00\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:10",
+   "statement": "WITH web_dispatch AS (\n    SELECT web_order_id, CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT w.dispatch_date AS business_date, f.net_amount AS sales, 0 AS refunds\n    FROM fact_sales_line f\n    JOIN dim_store s ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, 0, r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id = 900 AND p.category <> 'ZZ Test'\n)\nSELECT d.fiscal_year, d.fiscal_period, SUM(sales) AS before_returns, SUM(refunds) AS returns, SUM(sales) - SUM(refunds) AS net_sales\nFROM net_lines n JOIN dim_date d ON d.calendar_date = n.business_date\nWHERE d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY 1, 2 ORDER BY 2\n",
+   "n": 5,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_year | fiscal_period | before_returns | returns | net_sales\nFY2025/26 | 5 | 158717.41 | 13090.51 | 145626.90\nFY2025/26 | 6 | 193190.55 | 17601.93 | 175588.62\nFY2025/26 | 7 | 167120.98 | 12143.71 | 154977.27\nFY2025/26 | 8 | 243086.38 | 17821.30 | 225265.08\n(4 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:12",
+   "statement": "SELECT d.fiscal_period, SUM(r.net_sales_before_returns) AS before_returns, SUM(r.returns_net) AS returns, SUM(r.net_sales) AS net_sales, count(*) days\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\nWHERE r.store_id = 900 AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY 1 ORDER BY 1\n",
+   "n": 6,
+   "ok": false,
+   "rows": null,
+   "output_preview": "SQL error: Parser Error: syntax error at or near \"days\"\n\nLINE 1: ...s_net) AS returns, SUM(r.net_sales) AS net_sales, count(*) days\n                                                                      ^"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T19:49:15",
+   "statement": "SELECT d.fiscal_period, SUM(r.net_sales_before_returns) AS before_returns, SUM(r.returns_net) AS returns, SUM(r.net_sales) AS net_sales, count(*) AS n_days\nFROM rpt_daily_store_sales r JOIN dim_date d ON d.calendar_date = r.business_date\nWHERE r.store_id = 900 AND d.fiscal_year = 'FY2025/26' AND d.fiscal_period BETWEEN 5 AND 8\nGROUP BY 1 ORDER BY 1\n",
+   "n": 7,
+   "ok": true,
+   "rows": 4,
+   "output_preview": "fiscal_period | before_returns | returns | net_sales | n_days\n5 | 158717.41 | 13090.51 | 145626.90 | 28\n6 | 193190.55 | 17601.93 | 175588.62 | 35\n7 | 167120.98 | 12143.71 | 154977.27 | 28\n8 | 243086.38 | 17821.30 | 225265.08 | 28\n(4 rows)"
+  }
+ ]
+}

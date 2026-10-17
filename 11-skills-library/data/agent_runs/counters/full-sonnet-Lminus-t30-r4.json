@@ -1,0 +1,40 @@
+{
+ "run_id": "full-sonnet-Lminus-t30-r4",
+ "arm": "L-",
+ "model": "sonnet",
+ "request_id": "REQ-T30",
+ "budget": 12,
+ "used": 3,
+ "refused": 0,
+ "packet_sha256": "022319f8199ecc9b86aca70fc651e90fb6cd85a5332521d0f98a7affb773df7d",
+ "task_instructions_version": "3",
+ "calls": [
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:10:47",
+   "statement": "SELECT tier,\n       COUNT(*) AS rows_current,\n       COUNT(DISTINCT member_id) AS distinct_members,\n       SUM(CASE WHEN valid_to = DATE '9999-12-31' THEN 1 ELSE 0 END) AS open_ended,\n       MIN(valid_from) AS min_from, MAX(valid_from) AS max_from\nFROM dim_member\nWHERE is_current\nGROUP BY tier\nORDER BY tier\n",
+   "n": 1,
+   "ok": true,
+   "rows": 3,
+   "output_preview": "tier | rows_current | distinct_members | open_ended | min_from | max_from\nBasic | 31229 | 31229 | 31229 | 2019-01-01 | 2026-10-04\nGold | 5791 | 5791 | 5791 | 2019-01-02 | 2026-10-04\nSilver | 22980 | 22980 | 22980 | 2019-01-02 | 2026-10-04\n(3 rows)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:10:49",
+   "statement": "SELECT COUNT(*) AS total_rows,\n       COUNT(DISTINCT member_id) AS distinct_members,\n       COUNT(DISTINCT member_key) AS distinct_keys,\n       COUNT(DISTINCT CASE WHEN is_current THEN member_id END) AS members_with_current,\n       SUM(CASE WHEN is_current THEN 1 ELSE 0 END) AS current_rows,\n       SUM(CASE WHEN valid_to = DATE '9999-12-31' THEN 1 ELSE 0 END) AS open_rows,\n       SUM(CASE WHEN is_current <> (valid_to = DATE '9999-12-31') THEN 1 ELSE 0 END) AS flag_mismatch,\n       MAX(valid_from) AS latest_valid_from,\n       COUNT(DISTINCT tier) AS tiers\nFROM dim_member\n",
+   "n": 2,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "total_rows | distinct_members | distinct_keys | members_with_current | current_rows | open_rows | flag_mismatch | latest_valid_from | tiers\n89314 | 60000 | 89314 | 60000 | 60000 | 60000 | 0 | 2026-10-04 | 3\n(1 row)"
+  },
+  {
+   "kind": "sql",
+   "at": "2026-10-15T21:10:55",
+   "statement": "WITH lastday AS (SELECT MAX(sale_date) AS max_sale FROM fact_sales_line),\ngold AS (SELECT member_id FROM dim_member WHERE is_current AND tier = 'Gold'),\nact AS (\n  SELECT DISTINCT m.member_id\n  FROM fact_sales_line f JOIN dim_member m ON m.member_key = f.member_key, lastday\n  WHERE f.sale_date > lastday.max_sale - 364 AND f.sale_date <= lastday.max_sale\n)\nSELECT (SELECT max_sale FROM lastday) AS max_sale_date,\n       (SELECT COUNT(*) FROM gold) AS gold_current,\n       (SELECT COUNT(*) FROM gold WHERE member_id IN (SELECT member_id FROM act)) AS gold_purchased_trailing_364d,\n       (SELECT COUNT(*) FROM dim_member WHERE is_current AND tier='Gold' AND join_date > DATE '2026-10-07') AS gold_future_join,\n       (SELECT MAX(join_date) FROM dim_member) AS max_join_date\n",
+   "n": 3,
+   "ok": true,
+   "rows": 1,
+   "output_preview": "max_sale_date | gold_current | gold_purchased_trailing_364d | gold_future_join | max_join_date\n2026-10-04 | 5791 | 4827 | 0 | 2026-10-04\n(1 row)"
+  }
+ ]
+}

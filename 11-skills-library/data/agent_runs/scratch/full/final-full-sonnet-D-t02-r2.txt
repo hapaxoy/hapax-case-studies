@@ -1,0 +1,29 @@
+```json
+{
+  "sql": "SELECT d.fiscal_year, d.fiscal_period AS period, cp.category, cp.subcategory, SUM(r.quantity_returned) AS units_returned\nFROM fact_return_line r\nJOIN dim_product p ON p.product_key = r.product_key\nJOIN dim_product cp ON cp.sku = p.sku AND cp.is_current\nJOIN dim_store s ON s.store_key = r.store_key\nJOIN dim_date d ON d.calendar_date = r.return_date\nWHERE cp.category = 'Garden' AND cp.subcategory = 'Garden Furniture'\n  AND s.store_id &lt;&gt; 999\n  AND d.fiscal_year = 'FY2026/27' AND d.fiscal_period = 4\nGROUP BY 1, 2, 3, 4;",
+  "result": {
+    "columns": ["fiscal_year", "period", "category", "subcategory", "units_returned"],
+    "rows": [["FY2026/27", 4, "Garden", "Garden Furniture", 92]]
+  },
+  "definitions_applied": [
+    "Returns counted on their own return date (fact_return_line.return_date), not the original sale date",
+    "Fiscal calendar: this year is FY2026/27, and period 4 runs 3 Aug to 30 Aug 2026 (dim_date / ref_fiscal_calendar, fully loaded)",
+    "Units are quantity_returned, summed across stores and the web shop (store 900)",
+    "As-is product hierarchy: category and subcategory taken from the current dim_product version, joined on sku and is_current",
+    "Store 999 and category ZZ Test left out of sales work (neither changed the total)",
+    "Only canonical tables used: no stg_, bak_, tmp_ or old tables, no rpt.v_ views, no channel_code"
+  ],
+  "assumptions": [
+    "'Garden Furniture' means the subcategory Garden Furniture under the Garden category. There is no category of that name, and Furniture is a separate category for indoor furniture.",
+    "'Period 4 this year' means FY2026/27 P4, 3 to 30 Aug 2026. It is a completed period, with the warehouse loaded through 4 Oct 2026.",
+    "'Handed back and booked as returned' means units on return lines booked in the period (the return-date convention), not units sold in the period that were later returned. Every reason code is included (changed mind, defective, damaged in transit, not as described, wrong size or fit).",
+    "Web returns (store 900) count as returned units, since they are booked to the web shop. Of the 92 units, 34 were booked to the web shop and 58 to physical stores."
+  ],
+  "caveats": [
+    "No data problems found, so no corrections were made. I checked the 92 return lines for duplicate return lines, duplicate returns of the same sales line, returns with no matching sales line, returns larger than the quantity sold, returns dated before the sale, product mismatches against the sold line, store 999 and ZZ Test rows. All came back clean.",
+    "One of the 92 units is a return of a sale more than 30 days old. I kept it, because the request asks for units booked as returned in the period.",
+    "The as-was and as-is figures are both 92. No Garden Furniture article changed subcategory, so the hierarchy choice does not matter here.",
+    "If sales-week cohort wording had been meant (goods sold in P4 and returned at any time), the figure would be 90 units, not 92. I did not use it, because you asked for units handed back and booked in the period."
+  ]
+}
+```

@@ -1,0 +1,23 @@
+```json
+{
+  "sql": "WITH period_sales AS (\n  SELECT \n    d.fiscal_year,\n    f.store_key,\n    s.store_id,\n    SUM(f.net_amount) AS net_sales\n  FROM fact_sales_line f\n  INNER JOIN dim_store s ON f.store_key = s.store_key\n  INNER JOIN dim_date d ON f.sale_date = d.calendar_date\n  WHERE d.fiscal_period = 1 \n    AND d.fiscal_year IN ('FY2025/26', 'FY2026/27')\n    AND s.store_id &lt; 900\n  GROUP BY d.fiscal_year, f.store_key, s.store_id\n),\nlfl_stores AS (\n  SELECT store_id\n  FROM period_sales\n  GROUP BY store_id\n  HAVING COUNT(DISTINCT fiscal_year) = 2\n),\nyear_totals AS (\n  SELECT \n    fiscal_year,\n    SUM(net_sales) AS net_sales\n  FROM period_sales\n  WHERE store_id IN (SELECT store_id FROM lfl_stores)\n  GROUP BY fiscal_year\n)\nSELECT \n  ROUND((MAX(CASE WHEN fiscal_year = 'FY2026/27' THEN net_sales END) - \n          MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END)) / \n         MAX(CASE WHEN fiscal_year = 'FY2025/26' THEN net_sales END) * 100, 2) AS lfl_growth_pct\nFROM year_totals",
+  "result": {
+    "columns": ["lfl_growth_pct"],
+    "rows": [[6.63]]
+  },
+  "definitions_applied": [
+    "Like-for-like stores: physical stores (store_id &lt; 900) that generated sales in fiscal period 1 of both the prior year (FY2025/26) and current year (FY2026/27)",
+    "Net sales: line-level net_amount excluding VAT, after discounts",
+    "Period 1: fiscal period 1 (calendar dates vary by year: FY2025/26 P01 = 28 Apr – 25 May 2025; FY2026/27 P01 = 4 May – 31 May 2026)",
+    "Excluded from LFL: web shop (store_id 900), training store (store_id 999), stores with no sales in either period"
+  ],
+  "assumptions": [
+    "Request for 'period 1 this year' interpreted as fiscal period 1 of the current fiscal year FY2026/27 compared to the same period in the prior year FY2025/26",
+    "Like-for-like includes only stores present in both periods; does not require continuity of any particular opening or closing date (e.g., stores 136 and 137 opened in 2024, before both comparison periods, and are included)"
+  ],
+  "caveats": [
+    "All 38 stores in the like-for-like universe remain open as of the latest store master data (no closures between the comparison periods)",
+    "The like-for-like universe includes 38 of 39 physical stores; store 129 (Savonlinna) is excluded because it closed 26 Jan 2026, before FY2026/27 P01 began"
+  ]
+}
+```

@@ -1,0 +1,33 @@
+Perfect! Now I'll prepare the final JSON answer with the required structure:
+
+```json
+{
+  "sql": "WITH web_dispatch AS (\n    SELECT web_order_id,\n           CAST(timezone('Europe/Helsinki', dispatch_ts_utc AT TIME ZONE 'UTC') AS DATE) AS dispatch_date\n    FROM fact_web_order\n    WHERE status IN ('delivered', 'collected')\n),\nnet_lines AS (\n    SELECT COALESCE(w.dispatch_date, f.sale_date) AS business_date, \n           p.category,\n           f.net_amount AS net_sales\n    FROM fact_sales_line f\n    JOIN dim_store s   ON s.store_key = f.store_key\n    JOIN dim_product p ON p.product_key = f.product_key\n    LEFT JOIN web_dispatch w ON w.web_order_id = f.receipt_id\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n    UNION ALL\n    SELECT r.return_date, \n           p.category,\n           -r.refund_net\n    FROM fact_return_line r\n    JOIN dim_store s   ON s.store_key = r.store_key\n    JOIN dim_product p ON p.product_key = r.product_key\n    WHERE s.store_id &lt;&gt; 999 AND p.category &lt;&gt; 'ZZ Test'\n)\nSELECT d.fiscal_period, SUM(n.net_sales) AS net_sales\nFROM net_lines n\nJOIN dim_date d ON d.calendar_date = n.business_date\nWHERE n.category = 'Garden'\n  AND d.fiscal_year = 'FY2024/25'\n  AND d.fiscal_week BETWEEN 27 AND 52\nGROUP BY d.fiscal_period\nORDER BY d.fiscal_period;",
+  "result": {
+    "columns": ["fiscal_period", "net_sales"],
+    "rows": [
+      [7, 56700.48],
+      [8, 56269.57],
+      [9, 63287.96],
+      [10, 59447.43],
+      [11, 108829.54],
+      [12, 308099.58]
+    ]
+  },
+  "definitions_applied": [
+    "Net sales company definition: net amount excluding VAT, after returns, with returns booked on return date",
+    "Store 999 (training store) excluded from all figures",
+    "ZZ Test category excluded from all figures",
+    "Web sales recognised on Helsinki dispatch date, not order date",
+    "As-was reporting: Garden category as it stood on each transaction date (product version valid at sale time)"
+  ],
+  "assumptions": [
+    "Interpreted 'the old way, Garden as it was reported at the time' as as-was reporting using product versions valid on sale dates",
+    "Interpreted 'each period from P7 to P12' as fiscal periods 7 through 12 of FY2024/25",
+    "'Garden' refers to the product category (includes all 8 subcategories: Barbecue &amp; Grills, Edible Plants &amp; Seeds, Garden Furniture, Garden Tools, Outdoor Lighting, Plants &amp; Flowers, Pots &amp; Planters, Soil &amp; Fertiliser)"
+  ],
+  "caveats": [
+    "Garden category includes outdoor lighting products during this period. These products moved from Garden to Electrical in FY2025/26 P7 (27 October 2025), but were part of Garden during FY2024/25 and are correctly included in the as-was figures."
+  ]
+}
+```

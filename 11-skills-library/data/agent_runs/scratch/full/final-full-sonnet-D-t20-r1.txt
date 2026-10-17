@@ -1,0 +1,46 @@
+```json
+{
+  "sql": "WITH sales_dedup AS (SELECT * FROM fact_sales_line QUALIFY row_number() OVER (PARTITION BY receipt_id, line_no ORDER BY sales_line_id) = 1), net_lines AS (SELECT f.sale_date AS business_date, s.store_id, f.net_amount AS net_sales FROM sales_dedup f JOIN dim_store s ON s.store_key=f.store_key JOIN dim_product p ON p.product_key=f.product_key WHERE s.store_id &lt; 900 AND s.store_id&lt;&gt;999 AND p.category&lt;&gt;'ZZ Test' UNION ALL SELECT r.return_date, s.store_id, -r.refund_net FROM fact_return_line r JOIN dim_store s ON s.store_key=r.store_key JOIN dim_product p ON p.product_key=r.product_key WHERE s.store_id &lt; 900 AND s.store_id&lt;&gt;999 AND p.category&lt;&gt;'ZZ Test'), weeks AS (SELECT DISTINCT fiscal_year, fiscal_week, fiscal_week_start_date, fiscal_week_end_date FROM dim_date WHERE fiscal_year IN ('FY2025/26','FY2026/27') AND fiscal_week&lt;=22), store_weeks AS (SELECT st.store_id, w.fiscal_year, w.fiscal_week, (st.open_date IS NULL OR st.open_date &lt;= w.fiscal_week_start_date) AND (st.close_date IS NULL OR st.close_date &gt;= w.fiscal_week_end_date) AND NOT EXISTS (SELECT 1 FROM ref_store_closure c WHERE c.store_id=st.store_id AND c.closure_start_date&lt;=w.fiscal_week_end_date AND c.closure_end_date&gt;=w.fiscal_week_start_date) AS trading FROM dim_store st CROSS JOIN weeks w WHERE st.is_current AND st.store_id&lt;900), lfl AS (SELECT ty.store_id, ty.fiscal_week FROM store_weeks ty JOIN store_weeks ly ON ly.store_id=ty.store_id AND ly.fiscal_week=ty.fiscal_week AND ly.fiscal_year='FY2025/26' JOIN dim_store st ON st.store_id=ty.store_id AND st.is_current WHERE ty.fiscal_year='FY2026/27' AND ty.trading AND ly.trading AND (st.open_date IS NULL OR st.open_date &lt;= DATE '2026-05-04' - 364)), agg AS (SELECT d.fiscal_year, cs.region, SUM(n.net_sales) ns FROM net_lines n JOIN dim_date d ON d.calendar_date=n.business_date JOIN lfl l ON l.store_id=n.store_id AND l.fiscal_week=d.fiscal_week JOIN dim_store cs ON cs.store_id=n.store_id AND cs.is_current WHERE d.fiscal_year IN ('FY2025/26','FY2026/27') AND d.fiscal_week&lt;=22 GROUP BY 1,2) SELECT RANK() OVER (ORDER BY ty.ns/ly.ns DESC) AS rank, ty.region, ty.fiscal_year, ty.ns AS net_sales_this_year, ly.ns AS net_sales_last_year, ROUND(100.0*(ty.ns/ly.ns-1),2) AS lfl_growth_pct FROM agg ty JOIN agg ly ON ly.region=ty.region AND ly.fiscal_year='FY2025/26' WHERE ty.fiscal_year='FY2026/27' ORDER BY rank",
+  "result": {
+    "columns": ["rank", "region", "fiscal_year", "net_sales_this_year", "net_sales_last_year", "lfl_growth_pct"],
+    "rows": [
+      [1, "North", "FY2026/27", 730386.24, 703641.62, 3.80],
+      [2, "Capital Region", "FY2026/27", 948667.50, 923666.53, 2.71],
+      [3, "South", "FY2026/27", 1309213.51, 1282208.20, 2.11],
+      [4, "West", "FY2026/27", 1792157.91, 1758203.59, 1.93],
+      [5, "East", "FY2026/27", 959424.31, 961257.27, -0.19]
+    ]
+  },
+  "definitions_applied": [
+    "This year = current fiscal year FY2026/27",
+    "YTD = fiscal weeks 1 to 22, 4 May to 4 October 2026, the last completed fiscal week (the warehouse is loaded through that date)",
+    "Compared with the same fiscal weeks 1 to 22 of FY2025/26, lined up by fiscal week, not by calendar date",
+    "Like-for-like (LFL) growth, physical stores only, web shop (store 900) excluded",
+    "LFL base: store open at least 364 days before the first day of the range (open_date &lt;= 2026-05-04 minus 364 days)",
+    "LFL store-weeks: only weeks in which the store traded in both years; refit closures from ref_store_closure and closed-store weeks removed for the store in both years",
+    "Net sales = net amount excluding VAT after returns, with returns booked on their return date",
+    "Store 999 and category ZZ Test excluded",
+    "Regions as-is (current dim_store version), including the Capital Region for all history",
+    "Staff purchases included in net sales",
+    "Control total checked against rpt_daily_store_sales, store by store and day by day, for weeks 1 to 22 of both years",
+    "Deprecated objects not used (rpt.v_daily_sales, bak_, stg_, tmp_ and old tables)"
+  ],
+  "assumptions": [
+    "'How they are doing' has no metric in the data dictionary. I read it as like-for-like net sales growth year to date, the company's standard way of comparing stores. LFL stops the ranking being skewed by the two stores opened in 2024, the closed store, and refit closures. Net sales this year and last year are shown so the base is visible.",
+    "'This year so far' = FY2026/27 YTD through the last completed fiscal week (week 22, ended Sunday 4 October 2026). The comparison year is FY2025/26 weeks 1 to 22.",
+    "'Five store regions' = North, South, East, West and Capital Region, as-is. Online and Head office are not included.",
+    "Figures are for the LFL store-weeks only, so they are lower than total regional net sales. The growth percentages are the ranking basis.",
+    "Ranking is by LFL growth percentage, highest first. Ranking by absolute net sales would put West first and North last.",
+    "Opening-rule test uses the start of the whole range, 4 May 2026, as in the accepted LFL queries."
+  ],
+  "caveats": [
+    "Correction: fact_sales_line has 418 duplicated lines (same receipt_id and line_no, different sales_line_id, same amounts and store) all in FY2025/26 week 21 (15 to 21 September 2025), loaded 16 to 23 September 2025. I kept one row per receipt_id and line_no. Without this fix, last year's West is overstated by about 10,000 EUR and West shows 1.33% LFL growth instead of 1.93%. The ranking does not change, but West's growth would be understated. The other regions were not affected (the duplicates fall in West stores in the LFL base).",
+    "After the de-duplication, store-level net sales for weeks 1 to 22 of both years match rpt_daily_store_sales with no differences by store and day, so the figures reconcile to the control total.",
+    "Week-22 LFL for East is slightly negative (-0.19%), so East is the only region below last year. The gap between West (1.93%) and South (2.11%) is small.",
+    "The LFL base drops store-weeks that did not trade in both years. This removes Savonlinna (closed 25 January 2026), Pori's refit weeks in FY2025/26 and Kuopio's refit weeks (15 June to 26 July 2026) for the stores concerned, in both years. Regions with those stores are therefore compared on fewer store-weeks.",
+    "The two stores opened in 2024 (Tampere Lamminpää 136, Lohja 137) are in the base, because both opened more than 364 days before 4 May 2026.",
+    "Part-year, absolute net sales growth would differ from LFL growth, which handles the closed store, the refit stores and week 53 properly. No net sales growth figure that includes non-comparable stores is shown.",
+    "The metric reading is my assumption and should be confirmed with Antti Rautiainen (FP&amp;A) if he meant total net sales growth, gross margin or something else."
+  ]
+}
+```
