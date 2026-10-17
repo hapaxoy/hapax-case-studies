@@ -425,7 +425,7 @@ Accordingly, the undersigned have executed and delivered this Joinder Agreement 
 - detail:   got=True key=False
 - context (+/-300 chars around the best-matching span):
 
-  > aul Street, Suite 4850 Dallas, Texas 75201 Email: jhinkle@beneficient.com; mholland@mhtpartners.com
+  > aul Street, Suite 4850 Dallas, Texas 75201 Email: [email address removed]; [email address removed]
 
 - 5 -
 

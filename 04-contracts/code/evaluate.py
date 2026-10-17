@@ -25,6 +25,7 @@ Run: `python evaluate.py`.
 from __future__ import annotations
 
 import random
+import re
 
 import config
 import pipeline_common as pc
@@ -375,6 +376,9 @@ def _write_row(lines: list[str], paths: pc.Paths, contract: str, category: str, 
     span = _first_span(got) or _first_span(key)
     if span:
         context = locate_context(pc.read_contract_text(paths, contract), span)
+        if context:
+            # Mask personal email addresses quoted from the filings before they reach the worksheet.
+            context = re.sub(r"[\w.%+-]+@[\w-]+(?:\.[\w-]+)+", "[email address removed]", context)
         if context:
             lines.append(f"- context (+/-300 chars around the best-matching span):\n\n  > {context.strip()}\n")
         else:
